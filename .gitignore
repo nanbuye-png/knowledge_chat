@@ -1,0 +1,36 @@
+# 环境变量
+.env
+*.env
+!.env.example
+!.env copy.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 数据库 & 向量存储
+*.db
+chroma_db/
+uploads/
+*.db-journal
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 前端
+frontend/node_modules/
+frontend/dist/
+
+# Docker
+*.log
+
+# OS
+Thumbs.db
+.DS_Store

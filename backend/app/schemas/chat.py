@@ -1,0 +1,40 @@
+from pydantic import BaseModel, Field
+from typing import Optional, Any
+
+
+class ChatMode(BaseModel):
+    mode: str = Field(..., pattern="^(knowledge|chat)$")
+
+
+class QueryRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
+
+
+class SourceReference(BaseModel):
+    document_id: str
+    filename: str
+    chunk_index: int
+    text: str
+
+
+class QueryResponse(BaseModel):
+    answer: str
+    sources: list[SourceReference] = []
+    has_knowledge: bool = True
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000, description="用户消息")
+    history: list[dict] = []
+
+
+class ChatResponse(BaseModel):
+    answer: str
+
+
+class ErrorResponse(BaseModel):
+    error: dict = Field(default_factory=lambda: {"code": "UNKNOWN", "message": "未知错误"})
+
+
+class ModeResponse(BaseModel):
+    mode: str

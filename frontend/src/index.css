@@ -1,0 +1,126 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-slate-200 dark:border-slate-700;
+  }
+
+  body {
+    @apply bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100;
+    font-family: 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.slate.300') transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.slate.300');
+    border-radius: 3px;
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.slate.600');
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.slate.400');
+  }
+
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.slate.500');
+  }
+}
+
+@layer components {
+  /* Markdown content styles */
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4 {
+    @apply font-semibold text-slate-800 dark:text-slate-100 mt-4 mb-2;
+  }
+
+  .markdown-content h1 { @apply text-xl; }
+  .markdown-content h2 { @apply text-lg; }
+  .markdown-content h3 { @apply text-base; }
+
+  .markdown-content p {
+    @apply leading-relaxed mb-2;
+  }
+
+  .markdown-content ul,
+  .markdown-content ol {
+    @apply pl-5 mb-2 space-y-1;
+  }
+
+  .markdown-content ul {
+    @apply list-disc;
+  }
+
+  .markdown-content ol {
+    @apply list-decimal;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-primary-300 dark:border-primary-600 pl-4 py-1 my-2 
+           bg-slate-50 dark:bg-slate-800/50 rounded-r italic text-slate-600 dark:text-slate-400;
+  }
+
+  .markdown-content code:not(pre code) {
+    @apply bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded text-sm font-mono;
+  }
+
+  .markdown-content pre {
+    @apply my-3 rounded-lg overflow-hidden;
+  }
+
+  .markdown-content table {
+    @apply w-full border-collapse my-3;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-left;
+  }
+
+  .markdown-content th {
+    @apply bg-slate-50 dark:bg-slate-800 font-semibold;
+  }
+
+  .markdown-content a {
+    @apply text-primary-600 dark:text-primary-400 hover:underline;
+  }
+
+  .markdown-content img {
+    @apply rounded-lg max-w-full;
+  }
+
+  .markdown-content hr {
+    @apply my-4 border-slate-200 dark:border-slate-700;
+  }
+}
+
+@layer utilities {
+  /* Glass morphism */
+  .glass {
+    @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent;
+  }
+}
