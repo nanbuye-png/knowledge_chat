@@ -18,6 +18,8 @@ interface SidebarProps {
   onCreateKB: (name: string) => Promise<void>
   onRenameKB: (id: number, name: string) => Promise<void>
   onDeleteKB: (id: number) => Promise<void>
+  selectedKbId: number | null
+  onSelectKB: (kb: KnowledgeBase) => void
 }
 
 export default function Sidebar({
@@ -33,6 +35,8 @@ export default function Sidebar({
   onCreateKB,
   onRenameKB,
   onDeleteKB,
+  selectedKbId,
+  onSelectKB,
 }: SidebarProps) {
   return (
     <>
@@ -65,6 +69,8 @@ export default function Sidebar({
             <KnowledgeBaseList
               knowledgeBases={knowledgeBases}
               loading={kbLoading}
+              selectedId={selectedKbId}
+              onSelect={onSelectKB}
               onCreate={onCreateKB}
               onRename={onRenameKB}
               onDelete={onDeleteKB}

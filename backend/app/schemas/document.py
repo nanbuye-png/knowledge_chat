@@ -11,6 +11,7 @@ class DocumentResponse(BaseModel):
     status: str
     chunk_count: int = 0
     error_message: Optional[str] = None
+    knowledge_base_id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

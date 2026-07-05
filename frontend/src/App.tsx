@@ -37,6 +37,7 @@ export default function App() {
   // Knowledge base state
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [kbLoading, setKbLoading] = useState(false)
+  const [currentKnowledgeBase, setCurrentKnowledgeBase] = useState<KnowledgeBase | null>(null)
 
   // Fetch knowledge bases
   const fetchKnowledgeBases = useCallback(async () => {
@@ -44,6 +45,13 @@ export default function App() {
     try {
       const data = await kbApi.listKnowledgeBases()
       setKnowledgeBases(data)
+      // Auto-select first KB if none selected
+      if (data.length > 0) {
+        setCurrentKnowledgeBase((prev) => {
+          if (prev && data.find(kb => kb.id === prev.id)) return prev
+          return data[0]
+        })
+      }
     } catch (err: any) {
       console.error('Failed to fetch knowledge bases:', err)
     } finally {
@@ -54,6 +62,18 @@ export default function App() {
   useEffect(() => {
     fetchKnowledgeBases()
   }, [fetchKnowledgeBases])
+
+  // When currentKnowledgeBase changes, fetch its documents
+  useEffect(() => {
+    if (currentKnowledgeBase) {
+      fetchDocuments(currentKnowledgeBase.id)
+    }
+  }, [currentKnowledgeBase, fetchDocuments])
+
+  // Handle KB selection
+  const handleSelectKB = useCallback((kb: KnowledgeBase) => {
+    setCurrentKnowledgeBase(kb)
+  }, [])
 
   // Knowledge base CRUD handlers
   const handleCreateKB = useCallback(async (name: string) => {
@@ -77,7 +97,17 @@ export default function App() {
   const handleDeleteKB = useCallback(async (id: number) => {
     try {
       await kbApi.deleteKnowledgeBase(id)
-      setKnowledgeBases(prev => prev.filter(kb => kb.id !== id))
+      setKnowledgeBases(prev => {
+        const updated = prev.filter(kb => kb.id !== id)
+        // If deleting the selected KB, switch to first remaining
+        setCurrentKnowledgeBase(current => {
+          if (current?.id === id) {
+            return updated.length > 0 ? updated[0] : null
+          }
+          return current
+        })
+        return updated
+      })
     } catch (err: any) {
       alert(err?.response?.data?.detail || '删除失败')
     }
@@ -87,11 +117,6 @@ export default function App() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Fetch documents on mount
-  useEffect(() => {
-    fetchDocuments()
-  }, [fetchDocuments])
 
   // Poll document status for processing documents
   useEffect(() => {
@@ -211,7 +236,11 @@ export default function App() {
     })
 
     try {
-      const result = await documentsApi.uploadDocument(file)
+      if (!currentKnowledgeBase) {
+        alert('请先选择或创建一个知识库')
+        return
+      }
+      const result = await documentsApi.uploadDocument(file, currentKnowledgeBase.id)
       setUploadProgress({
         filename: file.name,
         progress: 100,
@@ -258,7 +287,7 @@ export default function App() {
       })
       setTimeout(() => setUploadProgress(null), 3000)
     }
-  }, [addDocument, updateDocumentStatus])
+  }, [addDocument, updateDocumentStatus, currentKnowledgeBase])
 
   // Handle delete document
   const handleDelete = useCallback(async (id: string) => {
@@ -305,13 +334,15 @@ export default function App() {
           uploadProgress={uploadProgress}
           isOpen={sidebarOpen}
           onDelete={handleDelete}
-          onRefresh={fetchDocuments}
+          onRefresh={() => currentKnowledgeBase && fetchDocuments(currentKnowledgeBase.id)}
           onUpload={() => fileInputRef.current?.click()}
           knowledgeBases={knowledgeBases}
           kbLoading={kbLoading}
           onCreateKB={handleCreateKB}
           onRenameKB={handleRenameKB}
           onDeleteKB={handleDeleteKB}
+          selectedKbId={currentKnowledgeBase?.id ?? null}
+          onSelectKB={handleSelectKB}
         />
 
         {/* Hidden file input */}

@@ -9,6 +9,7 @@ from fastapi import UploadFile, HTTPException
 
 from ..core.config import settings
 from ..models.document import Document, DocumentStatus
+from ..models.knowledge_base import KnowledgeBase
 from ..schemas.document import DocumentResponse, DocumentListResponse
 from ..utils.file_parser import parse_file
 from ..utils.text_chunker import chunk_text
@@ -21,10 +22,28 @@ class DocumentService:
 
     ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".md", ".txt"}
 
-    async def upload_document(self, file: UploadFile, db: AsyncSession) -> Document:
-        """Upload and process a document."""
+    async def upload_document(self, file: UploadFile, db: AsyncSession, user_id: int, knowledge_base_id: int) -> Document:
+        """Upload and process a document.
+
+        Args:
+            file: The uploaded file.
+            db: Database session.
+            user_id: The current user's ID.
+            knowledge_base_id: The target knowledge base ID (must belong to the user).
+        """
         # Validate file
         await self._validate_file(file)
+
+        # Verify knowledge_base belongs to user
+        result = await db.execute(
+            select(KnowledgeBase).where(
+                KnowledgeBase.id == knowledge_base_id,
+                KnowledgeBase.user_id == user_id,
+            )
+        )
+        kb = result.scalar_one_or_none()
+        if kb is None:
+            raise HTTPException(status_code=403, detail="无权访问该知识库")
 
         # Save file
         file_ext = os.path.splitext(file.filename)[1].lower()
@@ -45,6 +64,7 @@ class DocumentService:
             file_size=file_size,
             file_type=file_ext,
             status=DocumentStatus.PROCESSING.value,
+            knowledge_base_id=knowledge_base_id,
         )
         db.add(doc)
         await db.commit()
@@ -132,10 +152,12 @@ class DocumentService:
                     await session.commit()
             raise
 
-    async def get_documents(self, db: AsyncSession) -> DocumentListResponse:
-        """Get all documents."""
+    async def get_documents(self, db: AsyncSession, knowledge_base_id: int) -> DocumentListResponse:
+        """Get documents for a specific knowledge base."""
         result = await db.execute(
-            select(Document).order_by(Document.created_at.desc())
+            select(Document)
+            .where(Document.knowledge_base_id == knowledge_base_id)
+            .order_by(Document.created_at.desc())
         )
         documents = result.scalars().all()
         items = [DocumentResponse(**doc.to_dict()) for doc in documents]

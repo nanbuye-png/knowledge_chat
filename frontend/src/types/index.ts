@@ -6,6 +6,7 @@ export interface Document {
   status: 'processing' | 'completed' | 'failed'
   chunk_count: number
   error_message?: string | null
+  knowledge_base_id?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -45,7 +46,7 @@ export interface ThemeState {
 export interface DocumentState {
   documents: Document[]
   loading: boolean
-  fetchDocuments: () => Promise<void>
+  fetchDocuments: (knowledgeBaseId: number) => Promise<void>
   addDocument: (doc: Document) => void
   removeDocument: (id: string) => void
   updateDocumentStatus: (id: string, status: Document['status'], chunk_count?: number) => void

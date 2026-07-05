@@ -5,6 +5,7 @@ from ..core.config import settings
 from ..models.document import Base
 from ..models.user import User  # noqa: F401 - register User model for table creation
 from ..models.knowledge_base import KnowledgeBase  # noqa: F401 - register KnowledgeBase model for table creation
+from ..models.document import Document  # noqa: F401 - needed for migration
 import os
 
 
@@ -41,8 +42,60 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified successfully")
 
+    # Migration: add knowledge_base_id to documents (for existing DBs)
+    await _migrate_documents_add_kb_id()
+
+
 
 async def close_db():
     """Dispose engine on shutdown."""
     await engine.dispose()
     logger.info("Database engine disposed")
+
+
+async def _migrate_documents_add_kb_id():
+    """Migrate existing documents: add knowledge_base_id column and assign to default KB."""
+    from sqlalchemy import text
+
+    try:
+        async with engine.begin() as conn:
+            # 1. Add column if it doesn't exist (SQLite safe: try, ignore if exists)
+            if settings.DATABASE_URL.startswith("sqlite"):
+                try:
+                    await conn.execute(text(
+                        "ALTER TABLE documents ADD COLUMN knowledge_base_id INTEGER REFERENCES knowledge_bases(id)"
+                    ))
+                    logger.info("Migration: added knowledge_base_id column to documents")
+                except Exception:
+                    # Column already exists
+                    pass
+            else:
+                # PostgreSQL: add column if not exists
+                try:
+                    await conn.execute(text(
+                        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS knowledge_base_id INTEGER REFERENCES knowledge_bases(id)"
+                    ))
+                except Exception:
+                    pass
+
+            # 2. Assign existing documents with NULL kb_id to each user's default KB
+            # For each user, find their default KB (first one created), then assign orphan docs
+            await conn.execute(text("""
+                UPDATE documents
+                SET knowledge_base_id = (
+                    SELECT kb.id FROM knowledge_bases kb
+                    WHERE kb.user_id = (
+                        SELECT u.id FROM users u
+                        JOIN knowledge_bases kb2 ON kb2.user_id = u.id
+                        -- This is a heuristic: assign to ANY user's default KB
+                        -- Since old docs had no user separation, we use the first KB found
+                        LIMIT 1
+                    )
+                    LIMIT 1
+                )
+                WHERE knowledge_base_id IS NULL
+            """))
+            logger.info("Migration: assigned existing documents to default knowledge bases")
+
+    except Exception as e:
+        logger.warning(f"Migration _migrate_documents_add_kb_id: {e}")

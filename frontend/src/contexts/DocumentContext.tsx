@@ -6,10 +6,10 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   documents: [],
   loading: false,
 
-  fetchDocuments: async () => {
+  fetchDocuments: async (knowledgeBaseId: number) => {
     set({ loading: true })
     try {
-      const docs = await documentsApi.fetchDocuments()
+      const docs = await documentsApi.fetchDocuments(knowledgeBaseId)
       set({ documents: docs, loading: false })
     } catch (error) {
       console.error('Failed to fetch documents:', error)

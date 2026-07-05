@@ -6,6 +6,8 @@ import type { KnowledgeBase } from '../../api/knowledgeBases'
 interface KnowledgeBaseListProps {
   knowledgeBases: KnowledgeBase[]
   loading: boolean
+  selectedId: number | null
+  onSelect: (kb: KnowledgeBase) => void
   onCreate: (name: string) => Promise<void>
   onRename: (id: number, name: string) => Promise<void>
   onDelete: (id: number) => Promise<void>
@@ -14,6 +16,8 @@ interface KnowledgeBaseListProps {
 export default function KnowledgeBaseList({
   knowledgeBases,
   loading,
+  selectedId,
+  onSelect,
   onCreate,
   onRename,
   onDelete,
@@ -125,8 +129,12 @@ export default function KnowledgeBaseList({
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg
-                           hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
+                className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+                           ${kb.id === selectedId
+                             ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
+                             : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'
+                           }`}
+                onClick={() => onSelect(kb)}
               >
                 {editingId === kb.id ? (
                   <>
