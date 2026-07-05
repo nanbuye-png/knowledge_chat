@@ -4,6 +4,7 @@ from loguru import logger
 from ..core.config import settings
 from ..models.document import Base
 from ..models.user import User  # noqa: F401 - register User model for table creation
+from ..models.knowledge_base import KnowledgeBase  # noqa: F401 - register KnowledgeBase model for table creation
 import os
 
 

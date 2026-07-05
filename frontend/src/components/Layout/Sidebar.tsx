@@ -1,7 +1,9 @@
 import { motion } from 'framer-motion'
 import { Upload } from 'lucide-react'
 import type { Document, UploadProgress } from '../../types'
+import type { KnowledgeBase } from '../../api/knowledgeBases'
 import DocumentList from '../Documents/DocumentList'
+import KnowledgeBaseList from '../KnowledgeBase/KnowledgeBaseList'
 
 interface SidebarProps {
   documents: Document[]
@@ -11,9 +13,27 @@ interface SidebarProps {
   onDelete: (id: string) => void
   onRefresh: () => void
   onUpload: () => void
+  knowledgeBases: KnowledgeBase[]
+  kbLoading: boolean
+  onCreateKB: (name: string) => Promise<void>
+  onRenameKB: (id: number, name: string) => Promise<void>
+  onDeleteKB: (id: number) => Promise<void>
 }
 
-export default function Sidebar({ documents, loading, uploadProgress, isOpen, onDelete, onRefresh, onUpload }: SidebarProps) {
+export default function Sidebar({
+  documents,
+  loading,
+  uploadProgress,
+  isOpen,
+  onDelete,
+  onRefresh,
+  onUpload,
+  knowledgeBases,
+  kbLoading,
+  onCreateKB,
+  onRenameKB,
+  onDeleteKB,
+}: SidebarProps) {
   return (
     <>
       {/* Mobile overlay */}
@@ -40,8 +60,22 @@ export default function Sidebar({ documents, loading, uploadProgress, isOpen, on
                    shadow-xl lg:shadow-none overflow-hidden flex-shrink-0"
       >
         <div className="w-[300px] h-full flex flex-col">
-          {/* Upload button */}
+          {/* Knowledge Base section */}
           <div className="px-3 pt-3">
+            <KnowledgeBaseList
+              knowledgeBases={knowledgeBases}
+              loading={kbLoading}
+              onCreate={onCreateKB}
+              onRename={onRenameKB}
+              onDelete={onDeleteKB}
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 dark:border-slate-700 mx-3 my-2" />
+
+          {/* Upload button */}
+          <div className="px-3">
             <button
               onClick={onUpload}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5

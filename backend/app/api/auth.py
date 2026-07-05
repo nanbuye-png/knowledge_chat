@@ -8,6 +8,7 @@ from ..auth.jwt import create_access_token
 from ..auth.security import hash_password, verify_password
 from ..auth.deps import get_current_user
 from ..models.user import User
+from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
@@ -73,6 +74,21 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
         )
+
+    # Auto-create default knowledge base if user has none
+    count_result = await db.execute(
+        select(KnowledgeBase).where(KnowledgeBase.user_id == user.id)
+    )
+    existing_kb = count_result.scalars().first()
+    if existing_kb is None:
+        default_kb = KnowledgeBase(
+            user_id=user.id,
+            name="默认知识库",
+            description="系统自动创建的默认知识库",
+        )
+        db.add(default_kb)
+        await db.commit()
+        logger.info(f"Auto-created default knowledge base for user {user.username} (id={user.id})")
 
     token = create_access_token(user.id)
     logger.info(f"User logged in: {user.username} (id={user.id})")

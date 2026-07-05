@@ -12,6 +12,8 @@ import { useDocumentStore } from './contexts/DocumentContext'
 import { useThemeStore } from './contexts/ThemeContext'
 import * as chatApi from './api/chat'
 import * as documentsApi from './api/documents'
+import * as kbApi from './api/knowledgeBases'
+import type { KnowledgeBase } from './api/knowledgeBases'
 import type { Message, SourceReference, UploadProgress } from './types'
 
 export default function App() {
@@ -31,6 +33,55 @@ export default function App() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Knowledge base state
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
+  const [kbLoading, setKbLoading] = useState(false)
+
+  // Fetch knowledge bases
+  const fetchKnowledgeBases = useCallback(async () => {
+    setKbLoading(true)
+    try {
+      const data = await kbApi.listKnowledgeBases()
+      setKnowledgeBases(data)
+    } catch (err: any) {
+      console.error('Failed to fetch knowledge bases:', err)
+    } finally {
+      setKbLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchKnowledgeBases()
+  }, [fetchKnowledgeBases])
+
+  // Knowledge base CRUD handlers
+  const handleCreateKB = useCallback(async (name: string) => {
+    try {
+      const created = await kbApi.createKnowledgeBase({ name })
+      setKnowledgeBases(prev => [created, ...prev])
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '创建知识库失败')
+    }
+  }, [])
+
+  const handleRenameKB = useCallback(async (id: number, name: string) => {
+    try {
+      const updated = await kbApi.updateKnowledgeBase(id, { name })
+      setKnowledgeBases(prev => prev.map(kb => kb.id === id ? updated : kb))
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '重命名失败')
+    }
+  }, [])
+
+  const handleDeleteKB = useCallback(async (id: number) => {
+    try {
+      await kbApi.deleteKnowledgeBase(id)
+      setKnowledgeBases(prev => prev.filter(kb => kb.id !== id))
+    } catch (err: any) {
+      alert(err?.response?.data?.detail || '删除失败')
+    }
+  }, [])
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -256,6 +307,11 @@ export default function App() {
           onDelete={handleDelete}
           onRefresh={fetchDocuments}
           onUpload={() => fileInputRef.current?.click()}
+          knowledgeBases={knowledgeBases}
+          kbLoading={kbLoading}
+          onCreateKB={handleCreateKB}
+          onRenameKB={handleRenameKB}
+          onDeleteKB={handleDeleteKB}
         />
 
         {/* Hidden file input */}
