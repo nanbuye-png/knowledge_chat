@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trash2, MessageSquare } from 'lucide-react'
 import Navbar from './components/Layout/Navbar'
@@ -14,6 +15,13 @@ import * as documentsApi from './api/documents'
 import type { Message, SourceReference, UploadProgress } from './types'
 
 export default function App() {
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    navigate('/login', { replace: true })
+  }
+
   const { messages, mode, isStreaming, addMessage, updateLastMessage, setMode, setStreaming, clearMessages } = useChatStore()
   const { documents, loading: docsLoading, fetchDocuments, addDocument, removeDocument, updateDocumentStatus } = useDocumentStore()
   const { theme } = useThemeStore()
@@ -234,6 +242,7 @@ export default function App() {
         sidebarOpen={sidebarOpen}
         onToggleMode={handleModeToggle}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        onLogout={handleLogout}
       />
 
       {/* Main content */}

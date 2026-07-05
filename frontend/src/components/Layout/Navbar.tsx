@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Brain, Menu, X } from 'lucide-react'
+import { Brain, Menu, X, LogOut } from 'lucide-react'
 import ThemeToggle from '../UI/ThemeToggle'
 import ModeSwitch from '../UI/ModeSwitch'
 
@@ -8,9 +8,10 @@ interface NavbarProps {
   sidebarOpen: boolean
   onToggleMode: (mode: 'knowledge' | 'chat') => void
   onToggleSidebar: () => void
+  onLogout: () => void
 }
 
-export default function Navbar({ mode, sidebarOpen, onToggleMode, onToggleSidebar }: NavbarProps) {
+export default function Navbar({ mode, sidebarOpen, onToggleMode, onToggleSidebar, onLogout }: NavbarProps) {
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -63,6 +64,16 @@ export default function Navbar({ mode, sidebarOpen, onToggleMode, onToggleSideba
             </span>
           </div>
           <ThemeToggle />
+          {/* Logout button */}
+          <button
+            onClick={onLogout}
+            className="p-2 rounded-xl text-slate-400 hover:text-red-500 
+                       hover:bg-red-50 dark:hover:bg-red-900/20
+                       transition-all duration-200"
+            title="退出登录"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </div>
 

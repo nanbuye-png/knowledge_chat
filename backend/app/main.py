@@ -14,6 +14,7 @@ from .core.logging import setup_logging
 from .api.documents import router as documents_router
 from .api.chat import router as chat_router
 from .api.health import router as health_router
+from .api.auth import router as auth_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
@@ -112,6 +113,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
+app.include_router(auth_router)
 
 
 @app.get("/", tags=["根路径"])

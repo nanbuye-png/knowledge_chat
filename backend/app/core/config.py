@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100
 
+    # JWT Auth
+    SECRET_KEY: str = "knowledge-chat-secret-key-change-in-production"
+    ACCESS_TOKEN_EXPIRE_HOURS: int = 24
+
     # CORS
     CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000", "http://localhost"]
 
