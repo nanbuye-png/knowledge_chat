@@ -168,6 +168,7 @@ export default function App() {
 
         chatApi.createStreamKnowledgeQuery(
           content,
+          currentKnowledgeBase?.id || 0,
           (srcs) => { sources = srcs },
           (token) => {
             fullContent += token
@@ -218,7 +219,7 @@ export default function App() {
       updateLastMessage(`抱歉，处理请求时出错：${error.message || '未知错误'}`)
       setStreaming(false)
     }
-  }, [isStreaming, mode, addMessage, updateLastMessage, setStreaming])
+  }, [isStreaming, mode, addMessage, updateLastMessage, setStreaming, currentKnowledgeBase])
 
   // Handle file upload
   const handleUpload = useCallback(async (file: File) => {

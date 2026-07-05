@@ -121,13 +121,14 @@ class DocumentService:
             logger.info(f"Generating embeddings for {len(chunks)} chunks")
             embeddings = await embedding_service.embed_texts(chunks)
 
-            # 4. Store in vector DB
-            logger.info(f"Storing {len(chunks)} chunks in vector store")
+            # 4. Store in vector DB (with knowledge_base_id for isolation)
+            logger.info(f"Storing {len(chunks)} chunks in vector store (kb={doc.knowledge_base_id})")
             await vector_store.add_document_chunks(
                 document_id=doc.id,
                 filename=doc.filename,
                 chunks=chunks,
                 embeddings=embeddings,
+                knowledge_base_id=doc.knowledge_base_id,
             )
 
             # 5. Update document status

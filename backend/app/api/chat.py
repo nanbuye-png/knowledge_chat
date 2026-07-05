@@ -18,7 +18,7 @@ async def query_knowledge(request: QueryRequest):
     """基于知识库进行问答检索，返回回答和引用来源。"""
     logger.info(f"Knowledge query: {request.question[:100]}...")
     try:
-        result = await chat_service.query_knowledge(request.question)
+        result = await chat_service.query_knowledge(request.question, request.knowledge_base_id)
         return result
     except Exception as e:
         logger.error(f"Query failed: {e}")
@@ -70,7 +70,7 @@ async def stream_query_knowledge(request: QueryRequest):
     logger.info(f"Stream knowledge query: {request.question[:100]}...")
 
     async def generate():
-        async for data in chat_service.stream_query_knowledge(request.question):
+        async for data in chat_service.stream_query_knowledge(request.question, request.knowledge_base_id):
             yield f"data: {json.dumps({'token': data}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 

@@ -57,7 +57,7 @@ class ChatService:
         self._current_mode = mode
         logger.info(f"Chat mode switched to: {mode}")
 
-    async def query_knowledge(self, question: str) -> QueryResponse:
+    async def query_knowledge(self, question: str, knowledge_base_id: int) -> QueryResponse:
         """
         Query knowledge base with RAG.
         
@@ -76,8 +76,8 @@ class ChatService:
                     has_knowledge=False,
                 )
 
-            # 2. Search vector store
-            results = await vector_store.search(query_embedding, top_k=5)
+            # 2. Search vector store (filtered by knowledge_base_id)
+            results = await vector_store.search(query_embedding, top_k=5, knowledge_base_id=knowledge_base_id)
 
             if not results:
                 return QueryResponse(
@@ -185,23 +185,30 @@ class ChatService:
             logger.error(f"Stream chat failed: {e}")
             yield f"抱歉，对话出现错误：{str(e)}"
 
-    async def stream_query_knowledge(self, question: str) -> AsyncGenerator[str, None]:
+    async def stream_query_knowledge(self, question: str, knowledge_base_id: int) -> AsyncGenerator[str, None]:
         """
         Stream knowledge base query response using SSE.
         First sends sources as JSON, then streams the answer.
         """
         try:
+            logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}")
+
             # Generate query embedding
             query_embedding = await embedding_service.embed_query(question)
             if not query_embedding:
                 yield json.dumps({"type": "error", "message": "无法处理请求"}, ensure_ascii=False)
                 return
 
-            # Search vector store
-            results = await vector_store.search(query_embedding, top_k=5)
+            # Search vector store (filtered by knowledge_base_id)
+            results = await vector_store.search(query_embedding, top_k=5, knowledge_base_id=knowledge_base_id)
             relevant_results = [r for r in results if r.get("score", 0) >= 0.3]
 
             if not relevant_results:
+                # Try without filter to confirm data exists
+                logger.warning(f"No results with kb filter (kb={knowledge_base_id}). Trying unfiltered for diagnosis...")
+                unfiltered = await vector_store.search(query_embedding, top_k=5)
+                logger.warning(f"Unfiltered search returned {len(unfiltered)} results. Their kb_ids: {[r.get('id', '?') for r in unfiltered[:3]]}")
+
                 yield json.dumps({
                     "type": "no_result",
                     "message": "抱歉，当前知识库中暂无相关资料。"

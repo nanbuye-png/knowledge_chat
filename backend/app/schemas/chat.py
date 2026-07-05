@@ -8,6 +8,7 @@ class ChatMode(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
+    knowledge_base_id: int = Field(..., description="知识库 ID（用于向量检索隔离）")
 
 
 class SourceReference(BaseModel):

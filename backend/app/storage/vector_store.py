@@ -59,8 +59,16 @@ class VectorStore:
             logger.error(f"Failed to initialize vector store: {e}")
             raise
 
-    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]]):
-        """Add document chunks to vector store."""
+    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]], knowledge_base_id: int = None):
+        """Add document chunks to vector store.
+
+        Args:
+            document_id: Document ID.
+            filename: Original filename.
+            chunks: Text chunks.
+            embeddings: Embedding vectors.
+            knowledge_base_id: Knowledge base ID for isolation.
+        """
         if not self._initialized:
             logger.error("Vector store not initialized")
             return
@@ -73,9 +81,14 @@ class VectorStore:
                     "filename": filename,
                     "chunk_index": i,
                     "text": chunks[i][:500],  # Truncate for metadata
+                    "knowledge_base_id": knowledge_base_id,
                 }
                 for i in range(len(chunks))
             ]
+
+            # ------------------------------------------------
+            # 写入前：确认 Python metadata 中包含 knowledge_base_id
+            logger.info(f"[WRITE CHECK] About to write {len(chunks)} chunks. First metadata (Python): {metadatas[0] if metadatas else 'EMPTY'}")
 
             self.collection.add(
                 ids=ids,
@@ -84,23 +97,53 @@ class VectorStore:
                 documents=chunks,
             )
 
-            logger.info(f"Added {len(chunks)} chunks for document: {filename}")
+            # ------------------------------------------------
+            # 写入后：用 collection.get() 回读，确认 Chroma 真正存储的 metadata
+            verify_ids = ids[:min(3, len(ids))]  # sample first 3
+            verify_result = self.collection.get(ids=verify_ids, include=["metadatas"])
+            if verify_result and verify_result.get("metadatas"):
+                logger.info(f"[CHROMA VERIFY] collection.get() metadatas: {verify_result['metadatas']}")
+            else:
+                logger.warning(f"[CHROMA VERIFY] collection.get() returned NO metadatas for ids={verify_ids}")
+
+            logger.info(f"Added {len(chunks)} chunks for document: {filename} (kb={knowledge_base_id})")
+            logger.info(f"Vector DB count after add: {self.collection.count()}")
         except Exception as e:
             logger.error(f"Failed to add chunks to vector store: {e}")
             raise
 
-    async def search(self, query_embedding: list[float], top_k: int = 5) -> list[dict]:
-        """Search for similar chunks."""
+    async def search(self, query_embedding: list[float], top_k: int = 5, knowledge_base_id: int = None) -> list[dict]:
+        """Search for similar chunks.
+
+        Args:
+            query_embedding: The query vector.
+            top_k: Number of results.
+            knowledge_base_id: Filter by knowledge base (None = no filter).
+        """
         if not self._initialized:
             logger.error("Vector store not initialized")
             return []
 
         try:
+            where_filter = None
+            if knowledge_base_id is not None:
+                where_filter = {"knowledge_base_id": {"$eq": knowledge_base_id}}
+
+            logger.info(f"Vector search: kb_id={knowledge_base_id}, where_filter={where_filter}, total_count={self.collection.count()}")
+
+            # Diagnostic: peek at stored metadata to verify knowledge_base_id is present
+            sample = self.collection.peek(limit=3)
+            if sample and sample.get("metadatas"):
+                logger.info(f"Vector DB sample metadata (first 3): {sample['metadatas']}")
+
             results = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=top_k,
                 include=["metadatas", "documents", "distances"],
+                where=where_filter,
             )
+
+            logger.info(f"Vector search results: {len(results['ids'][0]) if results['ids'] else 0} hits, first metadata={results['metadatas'][0][0] if results['metadatas'] and results['metadatas'][0] else 'N/A'}")
 
             items = []
             if results["ids"][0]:

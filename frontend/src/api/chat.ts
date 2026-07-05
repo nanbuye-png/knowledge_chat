@@ -1,12 +1,12 @@
 import apiClient from './client'
 import type { SourceReference } from '../types'
 
-export async function queryKnowledge(question: string): Promise<{
+export async function queryKnowledge(question: string, knowledgeBaseId: number): Promise<{
   answer: string
   sources: SourceReference[]
   has_knowledge: boolean
 }> {
-  const response = await apiClient.post('/chat/query', { question })
+  const response = await apiClient.post('/chat/query', { question, knowledge_base_id: knowledgeBaseId })
   return response.data
 }
 
@@ -103,6 +103,7 @@ export function createStreamChat(
 // SSE streaming for knowledge query
 export function createStreamKnowledgeQuery(
   question: string,
+  knowledgeBaseId: number,
   onSources: (sources: SourceReference[]) => void,
   onToken: (token: string) => void,
   onDone: () => void,
@@ -113,7 +114,7 @@ export function createStreamKnowledgeQuery(
   fetch('/api/chat/stream/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, knowledge_base_id: knowledgeBaseId }),
     signal: controller.signal,
   })
     .then(async (response) => {
