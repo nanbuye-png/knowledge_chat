@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Upload } from 'lucide-react'
+import { Upload, Search, Plus } from 'lucide-react'
 import type { Document, UploadProgress } from '../../types'
 import type { KnowledgeBase } from '../../api/knowledgeBases'
 import DocumentList from '../Documents/DocumentList'
@@ -20,6 +20,8 @@ interface SidebarProps {
   onDeleteKB: (id: number) => Promise<void>
   selectedKbId: number | null
   onSelectKB: (kb: KnowledgeBase) => void
+  searchKeyword: string
+  onSearchChange: (value: string) => void
 }
 
 export default function Sidebar({
@@ -37,6 +39,8 @@ export default function Sidebar({
   onDeleteKB,
   selectedKbId,
   onSelectKB,
+  searchKeyword,
+  onSearchChange,
 }: SidebarProps) {
   return (
     <>
@@ -75,6 +79,50 @@ export default function Sidebar({
               onRename={onRenameKB}
               onDelete={onDeleteKB}
             />
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-200 dark:border-slate-700 mx-3 my-2" />
+
+          {/* Conversation section: New Chat + Search box */}
+          <div className="px-3 space-y-2">
+            {/* New Chat button */}
+            <button
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5
+                         bg-gradient-to-r from-emerald-500 to-teal-500
+                         text-white text-sm font-medium rounded-xl
+                         shadow-md shadow-emerald-500/25
+                         hover:shadow-lg hover:shadow-emerald-500/30
+                         transition-all duration-200 active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              New Chat
+            </button>
+
+            {/* Search box */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchKeyword}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="搜索会话..."
+                className="w-full pl-9 pr-3 py-2 text-sm
+                           bg-slate-100 dark:bg-slate-800
+                           border border-slate-200 dark:border-slate-700
+                           rounded-xl
+                           text-slate-700 dark:text-slate-200
+                           placeholder-slate-400 dark:placeholder-slate-500
+                           focus:outline-none focus:ring-2 focus:ring-primary-500/30
+                           focus:border-primary-500/50
+                           transition-all duration-200"
+              />
+            </div>
+          </div>
+
+          {/* Conversation list placeholder */}
+          <div className="flex-1 overflow-y-auto px-3 scrollbar-thin">
+            {/* conversationList rendered here in future steps */}
           </div>
 
           {/* Divider */}

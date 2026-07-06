@@ -190,24 +190,40 @@ class ChatService:
         Stream knowledge base query response using SSE.
         First sends sources as JSON, then streams the answer.
         """
+        stream = None
         try:
             logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}")
 
             # Generate query embedding
-            query_embedding = await embedding_service.embed_query(question)
+            try:
+                query_embedding = await embedding_service.embed_query(question)
+            except Exception as embed_err:
+                logger.exception(f"Embedding generation failed for query '{question[:50]}...'")
+                yield json.dumps({"type": "error", "message": "抱歉，生成查询向量时出现错误，请稍后重试。"}, ensure_ascii=False)
+                return
+
             if not query_embedding:
                 yield json.dumps({"type": "error", "message": "无法处理请求"}, ensure_ascii=False)
                 return
 
             # Search vector store (filtered by knowledge_base_id)
-            results = await vector_store.search(query_embedding, top_k=5, knowledge_base_id=knowledge_base_id)
+            try:
+                results = await vector_store.search(query_embedding, top_k=5, knowledge_base_id=knowledge_base_id)
+            except Exception as search_err:
+                logger.exception(f"Vector search failed for kb_id={knowledge_base_id}")
+                yield json.dumps({"type": "error", "message": "抱歉，向量检索时出现错误，请稍后重试。"}, ensure_ascii=False)
+                return
+
             relevant_results = [r for r in results if r.get("score", 0) >= 0.3]
 
             if not relevant_results:
                 # Try without filter to confirm data exists
                 logger.warning(f"No results with kb filter (kb={knowledge_base_id}). Trying unfiltered for diagnosis...")
-                unfiltered = await vector_store.search(query_embedding, top_k=5)
-                logger.warning(f"Unfiltered search returned {len(unfiltered)} results. Their kb_ids: {[r.get('id', '?') for r in unfiltered[:3]]}")
+                try:
+                    unfiltered = await vector_store.search(query_embedding, top_k=5)
+                    logger.warning(f"Unfiltered search returned {len(unfiltered)} results. Their kb_ids: {[r.get('id', '?') for r in unfiltered[:3]]}")
+                except Exception:
+                    logger.warning("Unfiltered diagnostic search also failed, skipping.")
 
                 yield json.dumps({
                     "type": "no_result",
@@ -255,8 +271,21 @@ class ChatService:
                     yield chunk.choices[0].delta.content
 
         except Exception as e:
-            logger.error(f"Stream knowledge query failed: {e}")
-            yield json.dumps({"type": "error", "message": str(e)}, ensure_ascii=False)
+            logger.exception(f"Stream knowledge query failed for kb_id={knowledge_base_id}, question='{question[:50]}...'")
+            try:
+                yield json.dumps({"type": "error", "message": "抱歉，查询过程中出现内部错误，请稍后重试。"}, ensure_ascii=False)
+            except Exception:
+                # If even the error yield fails, generator will simply end
+                pass
+        finally:
+            # Ensure the stream is properly closed to release resources.
+            # Note: OpenAI SDK v1.x AsyncStream.close() is a synchronous method
+            # (it closes the underlying httpx response), so no await is needed.
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
 
     async def _call_llm(self, system_prompt: str = None, user_message: str = None, messages: list = None) -> str:
         """Call DeepSeek LLM."""

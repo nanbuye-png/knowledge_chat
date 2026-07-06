@@ -31,6 +31,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [searchKeyword, setSearchKeyword] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -344,6 +345,8 @@ export default function App() {
           onDeleteKB={handleDeleteKB}
           selectedKbId={currentKnowledgeBase?.id ?? null}
           onSelectKB={handleSelectKB}
+          searchKeyword={searchKeyword}
+          onSearchChange={setSearchKeyword}
         />
 
         {/* Hidden file input */}

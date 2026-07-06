@@ -16,6 +16,7 @@ from .api.chat import router as chat_router
 from .api.health import router as health_router
 from .api.auth import router as auth_router
 from .api.knowledge_bases import router as knowledge_bases_router
+from .api.conversation import router as conversation_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
@@ -116,6 +117,7 @@ app.include_router(documents_router)
 app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(knowledge_bases_router)
+app.include_router(conversation_router)
 
 
 @app.get("/", tags=["根路径"])

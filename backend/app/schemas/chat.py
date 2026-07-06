@@ -9,6 +9,7 @@ class ChatMode(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     knowledge_base_id: int = Field(..., description="知识库 ID（用于向量检索隔离）")
+    conversation_id: Optional[int] = Field(default=None, description="会话 ID（可选，提供时保存用户消息）")
 
 
 class SourceReference(BaseModel):
@@ -39,3 +40,21 @@ class ErrorResponse(BaseModel):
 
 class ModeResponse(BaseModel):
     mode: str
+
+
+class CreateConversationRequest(BaseModel):
+    knowledge_base_id: int = Field(..., description="知识库 ID")
+
+
+class CreateConversationResponse(BaseModel):
+    id: int
+    title: str
+    knowledge_base_id: int
+    created_at: str
+
+
+class ConversationListItem(BaseModel):
+    id: int
+    title: str
+    created_at: str
+    updated_at: str

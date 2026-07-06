@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
 from ..schemas.chat import (
@@ -9,20 +10,42 @@ from ..schemas.chat import (
     ModeResponse, ChatMode,
 )
 from ..services.chat_service import chat_service
+from ..services.message_service import create_user_message, create_assistant_message
+from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/chat", tags=["问答系统"])
 
 
 @router.post("/query", response_model=QueryResponse, summary="知识库问答")
-async def query_knowledge(request: QueryRequest):
+async def query_knowledge(request: QueryRequest, db: AsyncSession = Depends(get_db)):
     """基于知识库进行问答检索，返回回答和引用来源。"""
     logger.info(f"Knowledge query: {request.question[:100]}...")
+
+    # Save user message if conversation_id is provided
+    if request.conversation_id is not None:
+        try:
+            await create_user_message(db, request.conversation_id, request.question)
+        except Exception:
+            logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
+            return QueryResponse(
+                answer="抱歉，消息保存失败，请稍后重试。",
+                has_knowledge=False,
+            )
+
     try:
         result = await chat_service.query_knowledge(request.question, request.knowledge_base_id)
-        return result
     except Exception as e:
         logger.error(f"Query failed: {e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+
+    # Save assistant message if conversation_id is provided
+    if request.conversation_id is not None:
+        try:
+            await create_assistant_message(db, request.conversation_id, result.answer)
+        except Exception:
+            logger.exception(f"Failed to save assistant message for conversation_id={request.conversation_id}")
+
+    return result
 
 
 @router.post("/chat", response_model=ChatResponse, summary="闲聊模式")
