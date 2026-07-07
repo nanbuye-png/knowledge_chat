@@ -19,12 +19,20 @@ export interface SourceReference {
 }
 
 export interface Message {
-  id: string
+  id: number | string
   role: 'user' | 'assistant'
   content: string
   sources?: SourceReference[]
   hasKnowledge?: boolean
   timestamp: number
+}
+
+export interface ConversationMessage {
+  id: number
+  conversation_id: number
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
 }
 
 export interface ChatState {

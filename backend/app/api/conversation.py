@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..schemas.chat import CreateConversationRequest, CreateConversationResponse, ConversationListItem
+from ..schemas.chat import CreateConversationRequest, CreateConversationResponse, ConversationListItem, MessageResponse
 from ..services.conversation_service import create_conversation, get_conversations
+from ..services.message_service import get_messages_by_conversation
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/conversations", tags=["会话管理"])
@@ -42,3 +43,23 @@ async def list_conversations(knowledge_base_id: int, db: AsyncSession = Depends(
     except Exception as e:
         logger.error(f"List conversations failed: {e}")
         raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
+
+
+@router.get("/{conversation_id}/messages", response_model=list[MessageResponse], summary="获取会话消息")
+async def get_conversation_messages(conversation_id: int, db: AsyncSession = Depends(get_db)):
+    """获取指定会话的所有消息，按创建时间升序排列。"""
+    try:
+        messages = await get_messages_by_conversation(db, conversation_id)
+        return [
+            MessageResponse(
+                id=m["id"],
+                conversation_id=m["conversation_id"],
+                role=m["role"],
+                content=m["content"],
+                created_at=m["created_at"],
+            )
+            for m in messages
+        ]
+    except Exception as e:
+        logger.error(f"Get conversation messages failed: {e}")
+        raise HTTPException(status_code=500, detail=f"获取会话消息失败: {str(e)}")

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import update, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.message import Message
@@ -37,3 +37,14 @@ async def create_user_message(db: AsyncSession, conversation_id: int, content: s
 async def create_assistant_message(db: AsyncSession, conversation_id: int, content: str) -> dict:
     """Save an assistant message to the Message table."""
     return await _create_message(db, conversation_id, "assistant", content)
+
+
+async def get_messages_by_conversation(db: AsyncSession, conversation_id: int) -> list[dict]:
+    """Retrieve all messages for a given conversation, ordered by created_at ascending."""
+    result = await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+    )
+    messages = result.scalars().all()
+    return [msg.to_dict() for msg in messages]

@@ -58,3 +58,11 @@ class ConversationListItem(BaseModel):
     title: str
     created_at: str
     updated_at: str
+
+
+class MessageResponse(BaseModel):
+    id: int
+    conversation_id: int
+    role: str
+    content: str
+    created_at: str
