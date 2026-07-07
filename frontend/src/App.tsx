@@ -13,8 +13,9 @@ import { useThemeStore } from './contexts/ThemeContext'
 import * as chatApi from './api/chat'
 import * as documentsApi from './api/documents'
 import * as kbApi from './api/knowledgeBases'
+import * as conversationsApi from './api/conversations'
 import type { KnowledgeBase } from './api/knowledgeBases'
-import type { Message, SourceReference, UploadProgress } from './types'
+import type { Message, SourceReference, UploadProgress, Conversation } from './types'
 
 export default function App() {
   const navigate = useNavigate()
@@ -24,7 +25,7 @@ export default function App() {
     navigate('/login', { replace: true })
   }
 
-  const { messages, mode, isStreaming, addMessage, updateLastMessage, setMode, setStreaming, clearMessages } = useChatStore()
+  const { messages, mode, isStreaming, addMessage, updateLastMessage, setMode, setStreaming, clearMessages, setCurrentConversationId, currentConversationId, conversationList, setConversationList } = useChatStore()
   const { documents, loading: docsLoading, fetchDocuments, addDocument, removeDocument, updateDocumentStatus } = useDocumentStore()
   const { theme } = useThemeStore()
 
@@ -39,6 +40,20 @@ export default function App() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [kbLoading, setKbLoading] = useState(false)
   const [currentKnowledgeBase, setCurrentKnowledgeBase] = useState<KnowledgeBase | null>(null)
+
+  // Handle new chat
+  const handleNewChat = useCallback(async () => {
+    if (!currentKnowledgeBase) return
+    try {
+      const conv = await conversationsApi.createConversation(currentKnowledgeBase.id)
+      setCurrentConversationId(conv.id)
+      const data = await conversationsApi.listConversations(currentKnowledgeBase.id)
+      setConversationList(data)
+      clearMessages()
+    } catch (err: any) {
+      console.error('Failed to create conversation:', err)
+    }
+  }, [currentKnowledgeBase, setCurrentConversationId, clearMessages])
 
   // Fetch knowledge bases
   const fetchKnowledgeBases = useCallback(async () => {
@@ -71,6 +86,17 @@ export default function App() {
     }
   }, [currentKnowledgeBase, fetchDocuments])
 
+  // When currentKnowledgeBase changes, fetch conversations
+  useEffect(() => {
+    if (currentKnowledgeBase) {
+      conversationsApi.listConversations(currentKnowledgeBase.id)
+        .then(data => setConversationList(data))
+        .catch((err: any) => console.error('Failed to fetch conversations:', err))
+    } else {
+      setConversationList([])
+    }
+  }, [currentKnowledgeBase])
+
   // Handle KB selection
   const handleSelectKB = useCallback((kb: KnowledgeBase) => {
     setCurrentKnowledgeBase(kb)
@@ -100,7 +126,6 @@ export default function App() {
       await kbApi.deleteKnowledgeBase(id)
       setKnowledgeBases(prev => {
         const updated = prev.filter(kb => kb.id !== id)
-        // If deleting the selected KB, switch to first remaining
         setCurrentKnowledgeBase(current => {
           if (current?.id === id) {
             return updated.length > 0 ? updated[0] : null
@@ -142,7 +167,6 @@ export default function App() {
   const handleSend = useCallback(async (content: string) => {
     if (!content.trim() || isStreaming) return
 
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -151,7 +175,6 @@ export default function App() {
     }
     addMessage(userMessage)
 
-    // Add placeholder for assistant
     const assistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       role: 'assistant',
@@ -163,7 +186,6 @@ export default function App() {
 
     try {
       if (mode === 'knowledge') {
-        // Knowledge mode with streaming
         let sources: SourceReference[] = []
         let fullContent = ''
 
@@ -176,7 +198,6 @@ export default function App() {
             updateLastMessage(fullContent)
           },
           () => {
-            // Update message with sources
             const state = useChatStore.getState()
             const msg = state.messages
             const lastMsg = msg[msg.length - 1]
@@ -190,10 +211,10 @@ export default function App() {
           (error) => {
             updateLastMessage(`抱歉，查询出错：${error}`)
             setStreaming(false)
-          }
+          },
+          currentConversationId ?? undefined,
         )
       } else {
-        // Chat mode with streaming - use only current mode's messages for history
         const state = useChatStore.getState()
         const currentModeMessages = state.messagesByMode[mode] || []
         const history = currentModeMessages.slice(-10).map(m => ({
@@ -220,7 +241,7 @@ export default function App() {
       updateLastMessage(`抱歉，处理请求时出错：${error.message || '未知错误'}`)
       setStreaming(false)
     }
-  }, [isStreaming, mode, addMessage, updateLastMessage, setStreaming, currentKnowledgeBase])
+  }, [isStreaming, mode, addMessage, updateLastMessage, setStreaming, currentKnowledgeBase, currentConversationId])
 
   // Handle file upload
   const handleUpload = useCallback(async (file: File) => {
@@ -249,7 +270,6 @@ export default function App() {
         status: 'processing',
       })
 
-      // Add to document list
       addDocument({
         id: result.document_id,
         filename: result.filename,
@@ -260,7 +280,6 @@ export default function App() {
         created_at: new Date().toISOString(),
       })
 
-      // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
           const updated = await documentsApi.getDocumentStatus(result.document_id)
@@ -291,7 +310,6 @@ export default function App() {
     }
   }, [addDocument, updateDocumentStatus, currentKnowledgeBase])
 
-  // Handle delete document
   const handleDelete = useCallback(async (id: string) => {
     try {
       await documentsApi.deleteDocument(id)
@@ -301,7 +319,6 @@ export default function App() {
     }
   }, [removeDocument])
 
-  // Handle mode toggle
   const handleModeToggle = useCallback(async (newMode: 'knowledge' | 'chat') => {
     setMode(newMode)
     try {
@@ -309,7 +326,6 @@ export default function App() {
     } catch {}
   }, [setMode])
 
-  // Handle clear messages
   const handleClearMessages = () => {
     clearMessages()
     setShowClearConfirm(false)
@@ -318,7 +334,6 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
                     dark:from-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100">
-      {/* Navbar */}
       <Navbar
         mode={mode}
         sidebarOpen={sidebarOpen}
@@ -327,9 +342,7 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         <Sidebar
           documents={documents}
           loading={docsLoading}
@@ -347,9 +360,10 @@ export default function App() {
           onSelectKB={handleSelectKB}
           searchKeyword={searchKeyword}
           onSearchChange={setSearchKeyword}
+          conversationList={conversationList}
+          onNewChat={handleNewChat}
         />
 
-        {/* Hidden file input */}
         <input
           ref={fileInputRef}
           type="file"
@@ -362,9 +376,7 @@ export default function App() {
           }}
         />
 
-        {/* Chat area */}
         <main className="flex-1 flex flex-col min-w-0">
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin">
             <div className="max-w-4xl mx-auto">
               <AnimatePresence mode="popLayout">
@@ -418,12 +430,10 @@ export default function App() {
             </div>
           </div>
 
-          {/* Input area */}
           <div className="flex-shrink-0 border-t border-slate-200 dark:border-slate-700 
                           bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl">
             <div className="max-w-4xl mx-auto px-4 py-4">
               <div className="flex items-center gap-2 mb-2">
-                {/* Clear chat button */}
                 {messages.length > 0 && (
                   <button
                     onClick={() => setShowClearConfirm(true)}
@@ -456,7 +466,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* Clear confirmation dialog */}
       <AnimatePresence>
         {showClearConfirm && (
           <motion.div

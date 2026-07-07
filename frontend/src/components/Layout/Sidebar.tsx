@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import { Upload, Search, Plus } from 'lucide-react'
-import type { Document, UploadProgress } from '../../types'
+import type { Document, UploadProgress, Conversation } from '../../types'
 import type { KnowledgeBase } from '../../api/knowledgeBases'
 import DocumentList from '../Documents/DocumentList'
 import KnowledgeBaseList from '../KnowledgeBase/KnowledgeBaseList'
+import ConversationList from '../Conversation/ConversationList'
 
 interface SidebarProps {
   documents: Document[]
@@ -22,6 +23,8 @@ interface SidebarProps {
   onSelectKB: (kb: KnowledgeBase) => void
   searchKeyword: string
   onSearchChange: (value: string) => void
+  conversationList: Conversation[]
+  onNewChat: () => void
 }
 
 export default function Sidebar({
@@ -41,6 +44,8 @@ export default function Sidebar({
   onSelectKB,
   searchKeyword,
   onSearchChange,
+  conversationList,
+  onNewChat,
 }: SidebarProps) {
   return (
     <>
@@ -88,6 +93,7 @@ export default function Sidebar({
           <div className="px-3 space-y-2">
             {/* New Chat button */}
             <button
+              onClick={onNewChat}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5
                          bg-gradient-to-r from-emerald-500 to-teal-500
                          text-white text-sm font-medium rounded-xl
@@ -120,9 +126,12 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* Conversation list placeholder */}
+          {/* Conversation list */}
           <div className="flex-1 overflow-y-auto px-3 scrollbar-thin">
-            {/* conversationList rendered here in future steps */}
+            <ConversationList
+              conversationList={conversationList}
+              searchKeyword={searchKeyword}
+            />
           </div>
 
           {/* Divider */}

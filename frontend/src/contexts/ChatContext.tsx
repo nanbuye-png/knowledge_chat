@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChatState, Message } from '../types'
+import type { ChatState, Message, Conversation } from '../types'
 
 type MessagesByMode = {
   knowledge: Message[]
@@ -9,6 +9,10 @@ type MessagesByMode = {
 
 interface ChatStore extends ChatState {
   messagesByMode: MessagesByMode
+  conversationList: Conversation[]
+  currentConversationId: number | null
+  setConversationList: (list: Conversation[]) => void
+  setCurrentConversationId: (id: number | null) => void
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -21,6 +25,8 @@ export const useChatStore = create<ChatStore>()(
       messages: [],
       mode: 'knowledge',
       isStreaming: false,
+      conversationList: [],
+      currentConversationId: null,
 
       addMessage: (message: Message) =>
         set((state) => {
@@ -69,6 +75,11 @@ export const useChatStore = create<ChatStore>()(
           },
           messages: [],
         })),
+
+      setConversationList: (list: Conversation[]) => set({ conversationList: list }),
+
+      setCurrentConversationId: (id: number | null) =>
+        set({ currentConversationId: id }),
     }),
     {
       name: 'chat-storage',

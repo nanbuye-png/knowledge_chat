@@ -107,14 +107,15 @@ export function createStreamKnowledgeQuery(
   onSources: (sources: SourceReference[]) => void,
   onToken: (token: string) => void,
   onDone: () => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
+  conversationId?: number,
 ): AbortController {
   const controller = new AbortController()
 
   fetch('/api/chat/stream/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, knowledge_base_id: knowledgeBaseId }),
+    body: JSON.stringify({ question, knowledge_base_id: knowledgeBaseId, conversation_id: conversationId }),
     signal: controller.signal,
   })
     .then(async (response) => {

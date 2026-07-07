@@ -52,6 +52,13 @@ export interface DocumentState {
   updateDocumentStatus: (id: string, status: Document['status'], chunk_count?: number) => void
 }
 
+export interface Conversation {
+  id: number
+  title: string
+  created_at: string
+  updated_at: string
+}
+
 export interface UploadProgress {
   filename: string
   progress: number
