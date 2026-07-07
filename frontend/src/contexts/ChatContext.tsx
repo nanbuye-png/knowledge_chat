@@ -13,6 +13,7 @@ interface ChatStore extends ChatState {
   currentConversationId: number | null
   setConversationList: (list: Conversation[]) => void
   setCurrentConversationId: (id: number | null) => void
+  loadMessages: (messages: Message[]) => void
 }
 
 export const useChatStore = create<ChatStore>()(
@@ -80,6 +81,15 @@ export const useChatStore = create<ChatStore>()(
 
       setCurrentConversationId: (id: number | null) =>
         set({ currentConversationId: id }),
+
+      loadMessages: (messages: Message[]) =>
+        set((state) => ({
+          messagesByMode: {
+            ...state.messagesByMode,
+            [state.mode]: messages,
+          },
+          messages,
+        })),
     }),
     {
       name: 'chat-storage',
