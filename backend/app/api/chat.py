@@ -11,7 +11,7 @@ from ..schemas.chat import (
 )
 from ..services.chat_service import chat_service
 from ..services.message_service import create_user_message, create_assistant_message
-from ..storage.database import get_db
+from ..storage.database import get_db, async_session
 
 router = APIRouter(prefix="/api/chat", tags=["问答系统"])
 
@@ -89,13 +89,66 @@ async def stream_query_knowledge(request: QueryRequest):
     """
     SSE 流式知识库问答接口。
     先返回引用来源（JSON），再逐 token 返回回答。
+    若提供 conversation_id，会在流开始前保存用户消息，流结束后保存完整的助理回复。
     """
     logger.info(f"Stream knowledge query: {request.question[:100]}...")
 
     async def generate():
-        async for data in chat_service.stream_query_knowledge(request.question, request.knowledge_base_id):
-            yield f"data: {json.dumps({'token': data}, ensure_ascii=False)}\n\n"
-        yield "data: [DONE]\n\n"
+        # Manually manage DB session for StreamingResponse generator lifetime.
+        # Depends(get_db) is not suitable here because the session would be closed
+        # before the async generator finishes.
+        async with async_session() as db:
+            full_answer = ""
+            user_msg_saved = False
+
+            # ---- Before streaming: save user message ----
+            if request.conversation_id is not None:
+                try:
+                    await create_user_message(db, request.conversation_id, request.question)
+                    user_msg_saved = True
+                except Exception:
+                    logger.exception(
+                        f"Failed to save user message for conversation_id={request.conversation_id}"
+                    )
+                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '消息保存失败，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                    return
+
+            # ---- During streaming: accumulate assistant content ----
+            try:
+                async for data in chat_service.stream_query_knowledge(
+                    request.question, request.knowledge_base_id
+                ):
+                    # Distinguish plain-text tokens from control JSON messages
+                    # (sources / error / no_result).  Control messages must not be
+                    # included in the persisted assistant content.
+                    is_control = False
+                    try:
+                        parsed = json.loads(data.strip())
+                        if isinstance(parsed, dict) and "type" in parsed:
+                            is_control = True
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+                    if not is_control:
+                        full_answer += data
+
+                    yield f"data: {json.dumps({'token': data}, ensure_ascii=False)}\n\n"
+
+            except Exception:
+                logger.exception("Stream query generator failed")
+                yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '查询过程中出现内部错误，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                return
+
+            # ---- Before [DONE]: save assistant message ----
+            if request.conversation_id is not None and user_msg_saved and full_answer.strip():
+                try:
+                    await create_assistant_message(db, request.conversation_id, full_answer)
+                except Exception:
+                    logger.exception(
+                        f"Failed to save assistant message for conversation_id={request.conversation_id}"
+                    )
+
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),
