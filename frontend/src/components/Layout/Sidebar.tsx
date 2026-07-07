@@ -25,6 +25,8 @@ interface SidebarProps {
   onSearchChange: (value: string) => void
   conversationList: Conversation[]
   onNewChat: () => void
+  onSelectConversation: (conversation: Conversation) => void
+  currentConversationId: number | null
 }
 
 export default function Sidebar({
@@ -46,6 +48,8 @@ export default function Sidebar({
   onSearchChange,
   conversationList,
   onNewChat,
+  onSelectConversation,
+  currentConversationId,
 }: SidebarProps) {
   return (
     <>
@@ -131,6 +135,8 @@ export default function Sidebar({
             <ConversationList
               conversationList={conversationList}
               searchKeyword={searchKeyword}
+              onSelectConversation={onSelectConversation}
+              currentConversationId={currentConversationId}
             />
           </div>
 

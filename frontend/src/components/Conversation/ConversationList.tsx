@@ -4,11 +4,15 @@ import type { Conversation } from '../../types'
 interface ConversationListProps {
   conversationList: Conversation[]
   searchKeyword: string
+  onSelectConversation: (conversation: Conversation) => void
+  currentConversationId: number | null
 }
 
 export default function ConversationList({
   conversationList,
   searchKeyword,
+  onSelectConversation,
+  currentConversationId,
 }: ConversationListProps) {
   const filteredConversation = useMemo(() => {
     const keyword = searchKeyword.trim().toLowerCase()
@@ -33,9 +37,12 @@ export default function ConversationList({
       {filteredConversation.map((conv) => (
         <div
           key={conv.id}
-          className="px-3 py-2 rounded-lg text-sm text-slate-700 dark:text-slate-300
-                     hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer
-                     transition-colors truncate"
+          onClick={() => onSelectConversation(conv)}
+          className={`px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors truncate ${
+            conv.id === currentConversationId
+              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-medium'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
         >
           {conv.title || '新会话'}
         </div>

@@ -25,7 +25,7 @@ export default function App() {
     navigate('/login', { replace: true })
   }
 
-  const { messages, mode, isStreaming, addMessage, updateLastMessage, setMode, setStreaming, clearMessages, setCurrentConversationId, currentConversationId, conversationList, setConversationList } = useChatStore()
+  const { messages, mode, isStreaming, addMessage, updateLastMessage, setMode, setStreaming, clearMessages, setCurrentConversationId, currentConversationId, conversationList, setConversationList, loadMessages } = useChatStore()
   const { documents, loading: docsLoading, fetchDocuments, addDocument, removeDocument, updateDocumentStatus } = useDocumentStore()
   const { theme } = useThemeStore()
 
@@ -331,6 +331,23 @@ export default function App() {
     setShowClearConfirm(false)
   }
 
+  // Handle selecting a conversation from history
+  const handleSelectConversation = useCallback(async (conv: Conversation) => {
+    setCurrentConversationId(conv.id)
+    try {
+      const serverMessages = await conversationsApi.getConversationMessages(conv.id)
+      const converted: Message[] = serverMessages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime(),
+      }))
+      loadMessages(converted)
+    } catch (err: any) {
+      console.error('Failed to load conversation messages:', err)
+    }
+  }, [setCurrentConversationId, loadMessages])
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
                     dark:from-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100">
@@ -362,6 +379,8 @@ export default function App() {
           onSearchChange={setSearchKeyword}
           conversationList={conversationList}
           onNewChat={handleNewChat}
+          onSelectConversation={handleSelectConversation}
+          currentConversationId={currentConversationId}
         />
 
         <input
