@@ -32,6 +32,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<Conversation | null>(null)
   const [searchKeyword, setSearchKeyword] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -356,7 +357,13 @@ export default function App() {
 
   // Handle deleting a conversation
   const handleDeleteConversation = useCallback(async (conv: Conversation) => {
-    if (!window.confirm(`确定要删除会话「${conv.title}」吗？此操作不可撤销。`)) return
+    setShowDeleteConfirm(conv)
+  }, [])
+
+  const confirmDeleteConversation = useCallback(async () => {
+    if (!showDeleteConfirm) return
+    const conv = showDeleteConfirm
+    setShowDeleteConfirm(null)
     try {
       await conversationsApi.deleteConversation(conv.id)
       // Refresh list
@@ -373,14 +380,12 @@ export default function App() {
       console.error('Failed to delete conversation:', err)
       alert(err?.response?.data?.detail || '删除失败')
     }
-  }, [currentKnowledgeBase, currentConversationId, setCurrentConversationId, clearMessages])
+  }, [showDeleteConfirm, currentKnowledgeBase, currentConversationId, setCurrentConversationId, clearMessages])
 
   // Handle renaming a conversation
-  const handleRenameConversation = useCallback(async (conv: Conversation) => {
-    const newTitle = window.prompt('请输入新标题', conv.title)
-    if (!newTitle || newTitle.trim() === '') return
+  const handleRenameConversation = useCallback(async (id: number, title: string) => {
     try {
-      await conversationsApi.renameConversation(conv.id, newTitle.trim())
+      await conversationsApi.renameConversation(id, title)
       // Refresh list
       if (currentKnowledgeBase) {
         const data = await conversationsApi.listConversations(currentKnowledgeBase.id)
@@ -566,6 +571,46 @@ export default function App() {
                              bg-red-500 text-white hover:bg-red-600 transition-colors"
                 >
                   确认清空
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center"
+            onClick={() => setShowDeleteConfirm(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-800 rounded-2xl p-6 shadow-2xl max-w-sm mx-4"
+            >
+              <h3 className="text-lg font-semibold mb-2">删除会话</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                确定删除该会话吗？
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowDeleteConfirm(null)}
+                  className="px-4 py-2 rounded-xl text-sm font-medium
+                             text-slate-600 dark:text-slate-300
+                             hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmDeleteConversation}
+                  className="px-4 py-2 rounded-xl text-sm font-medium
+                             bg-red-500 text-white hover:bg-red-600 transition-colors"
+                >
+                  删除
                 </button>
               </div>
             </motion.div>

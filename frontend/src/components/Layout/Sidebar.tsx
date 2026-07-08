@@ -28,7 +28,7 @@ interface SidebarProps {
   onSelectConversation: (conversation: Conversation) => void
   currentConversationId: number | null
   onDeleteConversation: (conversation: Conversation) => void
-  onRenameConversation: (conversation: Conversation) => void
+  onRenameConversation: (id: number, title: string) => Promise<void>
 }
 
 export default function Sidebar({
@@ -143,6 +143,7 @@ export default function Sidebar({
               currentConversationId={currentConversationId}
               onDeleteConversation={onDeleteConversation}
               onRenameConversation={onRenameConversation}
+              onNewChat={onNewChat}
             />
           </div>
 
