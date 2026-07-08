@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=100)
+    email: str | None = None
     password: str = Field(..., min_length=6, max_length=100)
 
 
@@ -34,6 +35,7 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: int
     username: str
+    email: str | None = None
     created_at: str | None = None
 
 
@@ -53,6 +55,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
 
     user = User(
         username=request.username,
+        email=request.email,
         password_hash=hash_password(request.password),
     )
     db.add(user)

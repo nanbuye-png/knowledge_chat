@@ -7,6 +7,7 @@ export interface LoginRequest {
 
 export interface RegisterRequest {
   username: string
+  email?: string | null
   password: string
 }
 
@@ -18,6 +19,7 @@ export interface TokenResponse {
 export interface UserInfo {
   id: number
   username: string
+  email: string | null
   created_at: string | null
 }
 
@@ -32,6 +34,7 @@ export async function login(data: LoginRequest): Promise<TokenResponse> {
 export async function register(data: RegisterRequest): Promise<UserInfo> {
   const response = await apiClient.post('/auth/register', {
     username: data.username,
+    email: data.email,
     password: data.password,
   })
   return response.data

@@ -47,12 +47,38 @@ async def init_db():
     # Migration: add knowledge_base_id to documents (for existing DBs)
     await _migrate_documents_add_kb_id()
 
+    # Migration: add email column to users
+    await _migrate_users_add_email()
+
 
 
 async def close_db():
     """Dispose engine on shutdown."""
     await engine.dispose()
     logger.info("Database engine disposed")
+
+
+async def _migrate_users_add_email():
+    """Migrate existing users: add email column if missing."""
+    from sqlalchemy import text
+
+    try:
+        async with engine.begin() as conn:
+            if settings.DATABASE_URL.startswith("sqlite"):
+                try:
+                    await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
+                    logger.info("Migration: added email column to users")
+                except Exception:
+                    pass  # Column already exists
+            else:
+                try:
+                    await conn.execute(text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"
+                    ))
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Migration _migrate_users_add_email: {e}")
 
 
 async def _migrate_documents_add_kb_id():

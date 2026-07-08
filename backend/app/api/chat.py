@@ -11,9 +11,11 @@ from ..schemas.chat import (
 )
 from ..services.chat_service import chat_service
 from ..services.message_service import create_user_message, create_assistant_message
-from ..services.conversation_service import update_conversation_title
+from ..services.conversation_service import update_conversation_title, _verify_conversation_ownership
 from ..models.conversation import Conversation
 from ..storage.database import get_db, async_session
+from ..auth.deps import get_current_user
+from ..models.user import User
 from sqlalchemy import select
 
 router = APIRouter(prefix="/api/chat", tags=["问答系统"])
@@ -44,15 +46,23 @@ async def _auto_update_title(db: AsyncSession, conversation_id: int, text: str):
 
 
 @router.post("/query", response_model=QueryResponse, summary="知识库问答")
-async def query_knowledge(request: QueryRequest, db: AsyncSession = Depends(get_db)):
+async def query_knowledge(
+    request: QueryRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """基于知识库进行问答检索，返回回答和引用来源。"""
     logger.info(f"Knowledge query: {request.question[:100]}...")
 
     # Save user message if conversation_id is provided
     if request.conversation_id is not None:
         try:
+            # Verify conversation ownership before saving
+            await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
             await create_user_message(db, request.conversation_id, request.question)
             await _auto_update_title(db, request.conversation_id, request.question)
+        except ValueError:
+            raise HTTPException(status_code=403, detail="无权访问该会话")
         except Exception:
             logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
             return QueryResponse(
@@ -113,7 +123,10 @@ async def stream_chat(request: ChatRequest):
 
 
 @router.post("/stream/query", summary="流式知识库问答（SSE）")
-async def stream_query_knowledge(request: QueryRequest):
+async def stream_query_knowledge(
+    request: QueryRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     SSE 流式知识库问答接口。
     先返回引用来源（JSON），再逐 token 返回回答。
@@ -132,9 +145,14 @@ async def stream_query_knowledge(request: QueryRequest):
             # ---- Before streaming: save user message ----
             if request.conversation_id is not None:
                 try:
+                    # Verify conversation ownership before saving
+                    await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
                     await create_user_message(db, request.conversation_id, request.question)
                     await _auto_update_title(db, request.conversation_id, request.question)
                     user_msg_saved = True
+                except ValueError:
+                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该会话'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                    return
                 except Exception:
                     logger.exception(
                         f"Failed to save user message for conversation_id={request.conversation_id}"
