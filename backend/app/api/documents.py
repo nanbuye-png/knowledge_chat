@@ -57,7 +57,7 @@ async def list_documents(
 ):
     """获取指定知识库的文档列表。"""
     try:
-        result = await document_service.get_documents(db, knowledge_base_id=knowledge_base_id)
+        result = await document_service.get_documents(db, knowledge_base_id=knowledge_base_id, user_id=current_user.id)
         return result
     except Exception as e:
         logger.error(f"List documents failed: {e}")
@@ -72,7 +72,7 @@ async def delete_document(
 ):
     """删除指定文档及其向量数据。"""
     try:
-        result = await document_service.delete_document(document_id, db)
+        result = await document_service.delete_document(document_id, db, user_id=current_user.id)
         return result
     except HTTPException:
         raise
@@ -89,7 +89,7 @@ async def get_document_status(
 ):
     """获取单个文档的处理状态。"""
     try:
-        return await document_service.get_document_status(document_id, db)
+        return await document_service.get_document_status(document_id, db, user_id=current_user.id)
     except HTTPException:
         raise
     except Exception as e:

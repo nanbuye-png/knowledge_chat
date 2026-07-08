@@ -14,6 +14,7 @@ import * as chatApi from './api/chat'
 import * as documentsApi from './api/documents'
 import * as kbApi from './api/knowledgeBases'
 import * as conversationsApi from './api/conversations'
+import * as authApi from './api/auth'
 import type { KnowledgeBase } from './api/knowledgeBases'
 import type { Message, SourceReference, UploadProgress, Conversation } from './types'
 
@@ -34,6 +35,7 @@ export default function App() {
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Conversation | null>(null)
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [currentUsername, setCurrentUsername] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -41,6 +43,13 @@ export default function App() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [kbLoading, setKbLoading] = useState(false)
   const [currentKnowledgeBase, setCurrentKnowledgeBase] = useState<KnowledgeBase | null>(null)
+
+  // Fetch current user info on mount
+  useEffect(() => {
+    authApi.getMe()
+      .then(user => setCurrentUsername(user.username))
+      .catch(() => setCurrentUsername(null))
+  }, [])
 
   // Handle new chat
   const handleNewChat = useCallback(async () => {
@@ -406,6 +415,7 @@ export default function App() {
         onToggleMode={handleModeToggle}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         onLogout={handleLogout}
+        username={currentUsername}
       />
 
       <div className="flex flex-1 overflow-hidden">

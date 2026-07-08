@@ -121,14 +121,23 @@ class DocumentService:
             logger.info(f"Generating embeddings for {len(chunks)} chunks")
             embeddings = await embedding_service.embed_texts(chunks)
 
-            # 4. Store in vector DB (with knowledge_base_id for isolation)
+            # 4. Store in vector DB (with knowledge_base_id and user_id for isolation)
             logger.info(f"Storing {len(chunks)} chunks in vector store (kb={doc.knowledge_base_id})")
+            # Look up user_id from KB
+            async with async_session() as session:
+                kb_result = await session.execute(
+                    select(KnowledgeBase).where(KnowledgeBase.id == doc.knowledge_base_id)
+                )
+                kb = kb_result.scalar_one_or_none()
+                user_id = kb.user_id if kb else None
+
             await vector_store.add_document_chunks(
                 document_id=doc.id,
                 filename=doc.filename,
                 chunks=chunks,
                 embeddings=embeddings,
                 knowledge_base_id=doc.knowledge_base_id,
+                user_id=user_id,
             )
 
             # 5. Update document status
@@ -153,8 +162,19 @@ class DocumentService:
                     await session.commit()
             raise
 
-    async def get_documents(self, db: AsyncSession, knowledge_base_id: int) -> DocumentListResponse:
-        """Get documents for a specific knowledge base."""
+    async def get_documents(self, db: AsyncSession, knowledge_base_id: int, user_id: int) -> DocumentListResponse:
+        """Get documents for a specific knowledge base (must belong to user)."""
+        # Verify KB ownership
+        result = await db.execute(
+            select(KnowledgeBase).where(
+                KnowledgeBase.id == knowledge_base_id,
+                KnowledgeBase.user_id == user_id,
+            )
+        )
+        kb = result.scalar_one_or_none()
+        if kb is None:
+            raise HTTPException(status_code=403, detail="无权访问该知识库")
+
         result = await db.execute(
             select(Document)
             .where(Document.knowledge_base_id == knowledge_base_id)
@@ -164,10 +184,17 @@ class DocumentService:
         items = [DocumentResponse(**doc.to_dict()) for doc in documents]
         return DocumentListResponse(documents=items, total=len(items))
 
-    async def delete_document(self, document_id: str, db: AsyncSession):
-        """Delete a document and its vector data."""
-        # Get document
-        result = await db.execute(select(Document).where(Document.id == document_id))
+    async def delete_document(self, document_id: str, db: AsyncSession, user_id: int):
+        """Delete a document and its vector data (must belong to user)."""
+        # Get document with KB ownership verification
+        result = await db.execute(
+            select(Document)
+            .join(KnowledgeBase, Document.knowledge_base_id == KnowledgeBase.id)
+            .where(
+                Document.id == document_id,
+                KnowledgeBase.user_id == user_id,
+            )
+        )
         doc = result.scalar_one_or_none()
 
         if not doc:
@@ -193,9 +220,16 @@ class DocumentService:
         logger.info(f"Document deleted: {doc.filename} ({document_id})")
         return {"message": "文档已删除", "document_id": document_id}
 
-    async def get_document_status(self, document_id: str, db: AsyncSession) -> DocumentResponse:
-        """Get document status."""
-        result = await db.execute(select(Document).where(Document.id == document_id))
+    async def get_document_status(self, document_id: str, db: AsyncSession, user_id: int) -> DocumentResponse:
+        """Get document status (must belong to user)."""
+        result = await db.execute(
+            select(Document)
+            .join(KnowledgeBase, Document.knowledge_base_id == KnowledgeBase.id)
+            .where(
+                Document.id == document_id,
+                KnowledgeBase.user_id == user_id,
+            )
+        )
         doc = result.scalar_one_or_none()
         if not doc:
             raise HTTPException(status_code=404, detail="文档不存在")

@@ -59,7 +59,7 @@ class VectorStore:
             logger.error(f"Failed to initialize vector store: {e}")
             raise
 
-    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]], knowledge_base_id: int = None):
+    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]], knowledge_base_id: int = None, user_id: int = None):
         """Add document chunks to vector store.
 
         Args:
@@ -68,6 +68,7 @@ class VectorStore:
             chunks: Text chunks.
             embeddings: Embedding vectors.
             knowledge_base_id: Knowledge base ID for isolation.
+            user_id: User ID for isolation.
         """
         if not self._initialized:
             logger.error("Vector store not initialized")
@@ -82,6 +83,7 @@ class VectorStore:
                     "chunk_index": i,
                     "text": chunks[i][:500],  # Truncate for metadata
                     "knowledge_base_id": knowledge_base_id,
+                    "user_id": user_id,
                 }
                 for i in range(len(chunks))
             ]
@@ -106,7 +108,7 @@ class VectorStore:
             else:
                 logger.warning(f"[CHROMA VERIFY] collection.get() returned NO metadatas for ids={verify_ids}")
 
-            logger.info(f"Added {len(chunks)} chunks for document: {filename} (kb={knowledge_base_id})")
+            logger.info(f"Added {len(chunks)} chunks for document: {filename} (kb={knowledge_base_id}, user={user_id})")
             logger.info(f"Vector DB count after add: {self.collection.count()}")
         except Exception as e:
             logger.error(f"Failed to add chunks to vector store: {e}")
