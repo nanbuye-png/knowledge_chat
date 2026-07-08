@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy.orm import relationship
 
 from .document import Base
 
@@ -12,6 +13,16 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    knowledge_bases = relationship(
+        "KnowledgeBase",
+        back_populates="user"
+    )
+
+    conversations = relationship(
+        "Conversation",
+        back_populates="user"
+    )
 
     def to_dict(self):
         return {

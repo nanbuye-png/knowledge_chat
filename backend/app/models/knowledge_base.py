@@ -15,7 +15,7 @@ class KnowledgeBase(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    user = relationship("User", backref="knowledge_bases")
+    user = relationship("User", back_populates="knowledge_bases")
 
     def to_dict(self):
         return {
