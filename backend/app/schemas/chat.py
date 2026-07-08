@@ -60,6 +60,14 @@ class ConversationListItem(BaseModel):
     updated_at: str
 
 
+class RenameConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100, description="新标题")
+
+
+class DeleteResponse(BaseModel):
+    success: bool
+
+
 class MessageResponse(BaseModel):
     id: int
     conversation_id: int

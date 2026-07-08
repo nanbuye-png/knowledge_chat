@@ -354,6 +354,44 @@ export default function App() {
     }
   }, [setCurrentConversationId, loadMessages])
 
+  // Handle deleting a conversation
+  const handleDeleteConversation = useCallback(async (conv: Conversation) => {
+    if (!window.confirm(`确定要删除会话「${conv.title}」吗？此操作不可撤销。`)) return
+    try {
+      await conversationsApi.deleteConversation(conv.id)
+      // Refresh list
+      if (currentKnowledgeBase) {
+        const data = await conversationsApi.listConversations(currentKnowledgeBase.id)
+        setConversationList(data)
+      }
+      // If deleting the current conversation, reset to welcome state
+      if (conv.id === currentConversationId) {
+        setCurrentConversationId(null)
+        clearMessages()
+      }
+    } catch (err: any) {
+      console.error('Failed to delete conversation:', err)
+      alert(err?.response?.data?.detail || '删除失败')
+    }
+  }, [currentKnowledgeBase, currentConversationId, setCurrentConversationId, clearMessages])
+
+  // Handle renaming a conversation
+  const handleRenameConversation = useCallback(async (conv: Conversation) => {
+    const newTitle = window.prompt('请输入新标题', conv.title)
+    if (!newTitle || newTitle.trim() === '') return
+    try {
+      await conversationsApi.renameConversation(conv.id, newTitle.trim())
+      // Refresh list
+      if (currentKnowledgeBase) {
+        const data = await conversationsApi.listConversations(currentKnowledgeBase.id)
+        setConversationList(data)
+      }
+    } catch (err: any) {
+      console.error('Failed to rename conversation:', err)
+      alert(err?.response?.data?.detail || '重命名失败')
+    }
+  }, [currentKnowledgeBase])
+
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
                     dark:from-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100">
@@ -387,6 +425,8 @@ export default function App() {
           onNewChat={handleNewChat}
           onSelectConversation={handleSelectConversation}
           currentConversationId={currentConversationId}
+          onDeleteConversation={handleDeleteConversation}
+          onRenameConversation={handleRenameConversation}
         />
 
         <input

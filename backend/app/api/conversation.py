@@ -2,8 +2,15 @@ from fastapi import APIRouter, HTTPException, Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..schemas.chat import CreateConversationRequest, CreateConversationResponse, ConversationListItem, MessageResponse
-from ..services.conversation_service import create_conversation, get_conversations
+from ..schemas.chat import (
+    CreateConversationRequest, CreateConversationResponse,
+    ConversationListItem, MessageResponse,
+    RenameConversationRequest, DeleteResponse,
+)
+from ..services.conversation_service import (
+    create_conversation, get_conversations,
+    delete_conversation, rename_conversation,
+)
 from ..services.message_service import get_messages_by_conversation
 from ..storage.database import get_db
 
@@ -63,3 +70,40 @@ async def get_conversation_messages(conversation_id: int, db: AsyncSession = Dep
     except Exception as e:
         logger.error(f"Get conversation messages failed: {e}")
         raise HTTPException(status_code=500, detail=f"获取会话消息失败: {str(e)}")
+
+
+@router.delete("/{conversation_id}", response_model=DeleteResponse, summary="删除会话")
+async def delete_conversation_endpoint(conversation_id: int, db: AsyncSession = Depends(get_db)):
+    """删除指定会话。"""
+    try:
+        deleted = await delete_conversation(db, conversation_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        return DeleteResponse(success=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Delete conversation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
+
+
+@router.patch("/{conversation_id}", response_model=ConversationListItem, summary="重命名会话")
+async def rename_conversation_endpoint(
+    conversation_id: int,
+    request: RenameConversationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """重命名指定会话。"""
+    try:
+        conv = await rename_conversation(db, conversation_id, request.title)
+        return ConversationListItem(
+            id=conv["id"],
+            title=conv["title"],
+            created_at=conv["created_at"],
+            updated_at=conv["updated_at"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Rename conversation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"重命名会话失败: {str(e)}")

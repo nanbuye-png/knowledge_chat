@@ -27,6 +27,8 @@ interface SidebarProps {
   onNewChat: () => void
   onSelectConversation: (conversation: Conversation) => void
   currentConversationId: number | null
+  onDeleteConversation: (conversation: Conversation) => void
+  onRenameConversation: (conversation: Conversation) => void
 }
 
 export default function Sidebar({
@@ -50,6 +52,8 @@ export default function Sidebar({
   onNewChat,
   onSelectConversation,
   currentConversationId,
+  onDeleteConversation,
+  onRenameConversation,
 }: SidebarProps) {
   return (
     <>
@@ -137,6 +141,8 @@ export default function Sidebar({
               searchKeyword={searchKeyword}
               onSelectConversation={onSelectConversation}
               currentConversationId={currentConversationId}
+              onDeleteConversation={onDeleteConversation}
+              onRenameConversation={onRenameConversation}
             />
           </div>
 

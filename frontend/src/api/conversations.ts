@@ -17,3 +17,12 @@ export async function getConversationMessages(conversationId: number): Promise<C
   const response = await apiClient.get(`/conversations/${conversationId}/messages`)
   return response.data
 }
+
+export async function deleteConversation(conversationId: number): Promise<void> {
+  await apiClient.delete(`/conversations/${conversationId}`)
+}
+
+export async function renameConversation(conversationId: number, title: string): Promise<Conversation> {
+  const response = await apiClient.patch(`/conversations/${conversationId}`, { title })
+  return response.data
+}
