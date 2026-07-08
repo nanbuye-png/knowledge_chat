@@ -71,7 +71,7 @@ async def query_knowledge(
             )
 
     try:
-        result = await chat_service.query_knowledge(request.question, request.knowledge_base_id)
+        result = await chat_service.query_knowledge(request.question, request.knowledge_base_id, request.history)
     except Exception as e:
         logger.error(f"Query failed: {e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
@@ -163,7 +163,7 @@ async def stream_query_knowledge(
             # ---- During streaming: accumulate assistant content ----
             try:
                 async for data in chat_service.stream_query_knowledge(
-                    request.question, request.knowledge_base_id
+                    request.question, request.knowledge_base_id, request.history
                 ):
                     # Distinguish plain-text tokens from control JSON messages
                     # (sources / error / no_result).  Control messages must not be

@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from .core.config import settings
 from .core.logging import setup_logging
+from .core.exceptions import AppError, app_error_handler, http_exception_handler
 from .api.documents import router as documents_router
 from .api.chat import router as chat_router
 from .api.health import router as health_router
@@ -94,7 +95,10 @@ app.add_middleware(
 )
 
 
-# Global exception handler
+# Global exception handlers
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler for unhandled errors."""
@@ -102,11 +106,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={
-            "error": {
-                "code": "INTERNAL_ERROR",
-                "message": "服务器内部错误",
-                "details": str(exc) if settings.LOG_LEVEL == "DEBUG" else None,
-            }
+            "code": "INTERNAL_ERROR",
+            "message": "服务器内部错误",
         },
     )
 

@@ -1,4 +1,5 @@
 import json
+import time
 from loguru import logger
 from typing import AsyncGenerator, Optional
 from openai import AsyncOpenAI
@@ -57,19 +58,23 @@ class ChatService:
         self._current_mode = mode
         logger.info(f"Chat mode switched to: {mode}")
 
-    async def query_knowledge(self, question: str, knowledge_base_id: int) -> QueryResponse:
+    async def query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None) -> QueryResponse:
         """
-        Query knowledge base with RAG.
+        Query knowledge base with RAG and multi-turn context.
         
         1. Embed question
         2. Search vector store
         3. Build context from results
-        4. Call LLM with context
-        5. Return answer with sources
+        4. Build messages with conversation history
+        5. Call LLM with context + history
+        6. Return answer with sources
         """
+        t0 = time.monotonic()
         try:
             # 1. Generate query embedding
+            t_embed_start = time.monotonic()
             query_embedding = await embedding_service.embed_query(question)
+            logger.info(f"[TIMING] Embedding: {time.monotonic() - t_embed_start:.2f}s")
             if not query_embedding:
                 return QueryResponse(
                     answer="抱歉，当前无法处理您的请求，请稍后再试。",
@@ -77,7 +82,9 @@ class ChatService:
                 )
 
             # 2. Search vector store (filtered by knowledge_base_id)
+            t_search_start = time.monotonic()
             results = await vector_store.search(query_embedding, top_k=5, knowledge_base_id=knowledge_base_id)
+            logger.info(f"[TIMING] Vector search: {time.monotonic() - t_search_start:.2f}s, results={len(results)}")
 
             if not results:
                 return QueryResponse(
@@ -114,8 +121,21 @@ class ChatService:
             context = "\n\n".join(context_parts)
             system_prompt = SYSTEM_PROMPT_KNOWLEDGE.format(context=context)
 
-            # 4. Call LLM
-            answer = await self._call_llm(system_prompt, question)
+            # 4. Build messages with conversation history for multi-turn context
+            messages = [{"role": "system", "content": system_prompt}]
+            if history:
+                for h in history[-10:]:  # Keep last 10 history messages
+                    messages.append({
+                        "role": h.get("role", "user"),
+                        "content": h.get("content", ""),
+                    })
+            messages.append({"role": "user", "content": question})
+
+            # 5. Call LLM
+            t_llm_start = time.monotonic()
+            answer = await self._call_llm(messages=messages)
+            logger.info(f"[TIMING] LLM call: {time.monotonic() - t_llm_start:.2f}s")
+            logger.info(f"[TIMING] Total query_knowledge: {time.monotonic() - t0:.2f}s")
 
             return QueryResponse(answer=answer, sources=sources, has_knowledge=True)
 
@@ -185,14 +205,16 @@ class ChatService:
             logger.error(f"Stream chat failed: {e}")
             yield f"抱歉，对话出现错误：{str(e)}"
 
-    async def stream_query_knowledge(self, question: str, knowledge_base_id: int) -> AsyncGenerator[str, None]:
+    async def stream_query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None) -> AsyncGenerator[str, None]:
         """
         Stream knowledge base query response using SSE.
         First sends sources as JSON, then streams the answer.
+        Uses conversation history for multi-turn context.
         """
         stream = None
+        t0 = time.monotonic()
         try:
-            logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}")
+            logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}, history_len={len(history) if history else 0}")
 
             # Generate query embedding
             try:
@@ -253,22 +275,33 @@ class ChatService:
             context = "\n\n".join(context_parts)
             system_prompt = SYSTEM_PROMPT_KNOWLEDGE.format(context=context)
 
+            # Build messages with conversation history for multi-turn context
+            messages = [{"role": "system", "content": system_prompt}]
+            if history:
+                for h in history[-10:]:
+                    messages.append({
+                        "role": h.get("role", "user"),
+                        "content": h.get("content", ""),
+                    })
+            messages.append({"role": "user", "content": question})
+
             # Stream LLM response
+            t_llm_start = time.monotonic()
             client = self._get_client()
             stream = await client.chat.completions.create(
                 model=settings.LLM_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": question},
-                ],
+                messages=messages,
                 temperature=0.3,
                 max_tokens=2000,
                 stream=True,
             )
+            logger.info(f"[TIMING] LLM stream started in {time.monotonic() - t_llm_start:.2f}s")
 
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
+
+            logger.info(f"[TIMING] Total stream_query_knowledge: {time.monotonic() - t0:.2f}s")
 
         except Exception as e:
             logger.exception(f"Stream knowledge query failed for kb_id={knowledge_base_id}, question='{question[:50]}...'")

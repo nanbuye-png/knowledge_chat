@@ -10,6 +10,7 @@ class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=2000, description="用户问题")
     knowledge_base_id: int = Field(..., description="知识库 ID（用于向量检索隔离）")
     conversation_id: Optional[int] = Field(default=None, description="会话 ID（可选，提供时保存用户消息）")
+    history: list[dict] = Field(default=[], description="对话历史（用于多轮上下文）")
 
 
 class SourceReference(BaseModel):
