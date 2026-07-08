@@ -5,6 +5,7 @@ export interface KnowledgeBase {
   user_id: number
   name: string
   description: string | null
+  document_count: number
   created_at: string | null
   updated_at: string | null
 }

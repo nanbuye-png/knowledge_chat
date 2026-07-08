@@ -1,7 +1,20 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BookOpen, Plus, Pencil, Trash2, X, Check } from 'lucide-react'
+import { BookOpen, Plus, Pencil, Trash2, X, Check, FileText, Clock } from 'lucide-react'
 import type { KnowledgeBase } from '../../api/knowledgeBases'
+
+function formatTimeAgo(dateStr?: string): string {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - date.getTime()
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  if (hours < 1) return '刚刚'
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}天前`
+  return date.toLocaleDateString('zh-CN')
+}
 
 interface KnowledgeBaseListProps {
   knowledgeBases: KnowledgeBase[]
@@ -134,70 +147,82 @@ export default function KnowledgeBaseList({
                              ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
                              : 'hover:bg-slate-100 dark:hover:bg-slate-800/50'
                            }`}
-                onClick={() => onSelect(kb)}
-              >
-                {editingId === kb.id ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleRename(kb.id)
-                        if (e.key === 'Escape') { setEditingId(null); setEditingName('') }
-                      }}
-                      autoFocus
-                      className="flex-1 px-2 py-0.5 text-xs border border-primary-200 dark:border-primary-700
-                                 rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200
-                                 focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    />
-                    <button
-                      onClick={() => handleRename(kb.id)}
-                      disabled={!editingName.trim()}
-                      className="p-0.5 rounded text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
-                                 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => { setEditingId(null); setEditingName('') }}
-                      className="p-0.5 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-xs text-slate-700 dark:text-slate-300 truncate">
-                      {kb.name}
-                    </span>
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setEditingId(kb.id)
-                          setEditingName(kb.name)
+                  onClick={() => onSelect(kb)}
+                >
+                  {editingId === kb.id ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRename(kb.id)
+                          if (e.key === 'Escape') { setEditingId(null); setEditingName('') }
                         }}
-                        className="p-0.5 rounded text-slate-400 hover:text-primary-500 hover:bg-primary-50 
-                                   dark:hover:bg-primary-900/20 transition-all"
-                        title="重命名"
+                        autoFocus
+                        className="flex-1 px-2 py-0.5 text-xs border border-primary-200 dark:border-primary-700
+                                   rounded bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200
+                                   focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                      <button
+                        onClick={() => handleRename(kb.id)}
+                        disabled={!editingName.trim()}
+                        className="p-0.5 rounded text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Pencil className="w-3 h-3" />
+                        <Check className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDeleteConfirmId(kb.id)
-                        }}
-                        className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 
-                                   dark:hover:bg-red-900/20 transition-all"
-                        title="删除"
+                        onClick={() => { setEditingId(null); setEditingName('') }}
+                        className="p-0.5 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
+                    </>
+                  ) : (
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-xs text-slate-700 dark:text-slate-300 truncate">
+                        {kb.name}
+                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
+                          <FileText className="w-3 h-3" />
+                          {kb.document_count ?? 0} 文档
+                        </span>
+                        {kb.updated_at && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
+                            <Clock className="w-3 h-3" />
+                            {formatTimeAgo(kb.updated_at)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingId(kb.id)
+                            setEditingName(kb.name)
+                          }}
+                          className="p-0.5 rounded text-slate-400 hover:text-primary-500 hover:bg-primary-50 
+                                     dark:hover:bg-primary-900/20 transition-all"
+                          title="重命名"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteConfirmId(kb.id)
+                          }}
+                          className="p-0.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 
+                                     dark:hover:bg-red-900/20 transition-all"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                  </>
-                )}
+                  )}
               </motion.div>
             ))}
           </AnimatePresence>

@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
 from loguru import logger
 
 from ..auth.deps import get_current_user
 from ..models.user import User
 from ..models.knowledge_base import KnowledgeBase
+from ..models.document import Document
+from ..models.conversation import Conversation
 from ..storage.database import get_db
+from ..storage.vector_store import vector_store
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["知识库"])
 
@@ -29,6 +32,7 @@ class KnowledgeBaseResponse(BaseModel):
     user_id: int
     name: str
     description: str | None = None
+    document_count: int = 0
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -42,12 +46,25 @@ async def list_knowledge_bases(
 ):
     """Return all knowledge bases for the authenticated user."""
     result = await db.execute(
-        select(KnowledgeBase)
+        select(KnowledgeBase, func.count(Document.id).label('doc_count'))
+        .outerjoin(Document, Document.knowledge_base_id == KnowledgeBase.id)
         .where(KnowledgeBase.user_id == current_user.id)
-        .order_by(KnowledgeBase.created_at.desc())
+        .group_by(KnowledgeBase.id)
+        .order_by(KnowledgeBase.updated_at.desc())
     )
-    kbs = result.scalars().all()
-    return [KnowledgeBaseResponse(**kb.to_dict()) for kb in kbs]
+    rows = result.all()
+    return [
+        KnowledgeBaseResponse(
+            id=kb.id,
+            user_id=kb.user_id,
+            name=kb.name,
+            description=kb.description,
+            document_count=doc_count,
+            created_at=kb.created_at.isoformat() if kb.created_at else None,
+            updated_at=kb.updated_at.isoformat() if kb.updated_at else None,
+        )
+        for kb, doc_count in rows
+    ]
 
 
 @router.post("", response_model=KnowledgeBaseResponse, status_code=status.HTTP_201_CREATED, summary="创建知识库")
@@ -107,7 +124,7 @@ async def delete_knowledge_base(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a knowledge base belonging to the authenticated user."""
+    """Delete a knowledge base and all associated resources (documents, conversations, messages)."""
     result = await db.execute(
         select(KnowledgeBase).where(
             KnowledgeBase.id == kb_id,
@@ -121,6 +138,24 @@ async def delete_knowledge_base(
             detail="知识库不存在",
         )
 
+    # 1. Delete ChromaDB vectors for all documents in this KB
+    doc_result = await db.execute(
+        select(Document.id).where(Document.knowledge_base_id == kb_id)
+    )
+    doc_ids = [row[0] for row in doc_result.all()]
+    for doc_id in doc_ids:
+        try:
+            await vector_store.delete_document(doc_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete vectors for document {doc_id}: {e}")
+
+    # 2. Delete all conversations under this KB (cascades to messages via DB FK)
+    await db.execute(sa_delete(Conversation).where(Conversation.knowledge_base_id == kb_id))
+
+    # 3. Delete all documents
+    await db.execute(sa_delete(Document).where(Document.knowledge_base_id == kb_id))
+
+    # 4. Delete the KB itself
     await db.delete(kb)
     await db.commit()
     logger.info(f"Knowledge base deleted: {kb.name} (id={kb.id}) by user {current_user.username}")
