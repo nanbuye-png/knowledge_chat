@@ -38,7 +38,7 @@ async def _verify_conversation_ownership(db: AsyncSession, conversation_id: int,
 async def create_conversation(db: AsyncSession, knowledge_base_id: int, user_id: int) -> dict:
     """Create a new conversation under the given knowledge base (must belong to user)."""
     await _verify_kb_ownership(db, knowledge_base_id, user_id)
-    conversation = Conversation(knowledge_base_id=knowledge_base_id)
+    conversation = Conversation(user_id=user_id, knowledge_base_id=knowledge_base_id)
     db.add(conversation)
     await db.commit()
     await db.refresh(conversation)
