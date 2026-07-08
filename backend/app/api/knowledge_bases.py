@@ -150,7 +150,10 @@ async def delete_knowledge_base(
             logger.warning(f"Failed to delete vectors for document {doc_id}: {e}")
 
     # 2. Delete all conversations under this KB (cascades to messages via DB FK)
-    await db.execute(sa_delete(Conversation).where(Conversation.knowledge_base_id == kb_id))
+    await db.execute(sa_delete(Conversation).where(
+        Conversation.knowledge_base_id == kb_id,
+        Conversation.user_id == current_user.id,
+    ))
 
     # 3. Delete all documents
     await db.execute(sa_delete(Document).where(Document.knowledge_base_id == kb_id))
