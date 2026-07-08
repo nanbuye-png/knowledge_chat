@@ -11,9 +11,36 @@ from ..schemas.chat import (
 )
 from ..services.chat_service import chat_service
 from ..services.message_service import create_user_message, create_assistant_message
+from ..services.conversation_service import update_conversation_title
+from ..models.conversation import Conversation
 from ..storage.database import get_db, async_session
+from sqlalchemy import select
 
 router = APIRouter(prefix="/api/chat", tags=["问答系统"])
+
+DEFAULT_TITLES = {"New Chat", "新对话"}
+
+
+def _generate_title(text: str, max_length: int = 30) -> str:
+    """Generate a conversation title from the first user message."""
+    title = text.strip()
+    if len(title) > max_length:
+        title = title[:max_length]
+    return title
+
+
+async def _auto_update_title(db: AsyncSession, conversation_id: int, text: str):
+    """Update conversation title from the first user message if it's still the default."""
+    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        return
+    if conversation.title in DEFAULT_TITLES:
+        new_title = _generate_title(text)
+        try:
+            await update_conversation_title(db, conversation_id, new_title)
+        except Exception:
+            logger.exception(f"Failed to auto-update title for conversation_id={conversation_id}")
 
 
 @router.post("/query", response_model=QueryResponse, summary="知识库问答")
@@ -25,6 +52,7 @@ async def query_knowledge(request: QueryRequest, db: AsyncSession = Depends(get_
     if request.conversation_id is not None:
         try:
             await create_user_message(db, request.conversation_id, request.question)
+            await _auto_update_title(db, request.conversation_id, request.question)
         except Exception:
             logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
             return QueryResponse(
@@ -105,6 +133,7 @@ async def stream_query_knowledge(request: QueryRequest):
             if request.conversation_id is not None:
                 try:
                     await create_user_message(db, request.conversation_id, request.question)
+                    await _auto_update_title(db, request.conversation_id, request.question)
                     user_msg_saved = True
                 except Exception:
                     logger.exception(

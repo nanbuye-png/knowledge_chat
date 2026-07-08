@@ -207,6 +207,12 @@ export default function App() {
               useChatStore.setState({ messagesByMode: { ...state.messagesByMode, [mode]: [...msg] }, messages: [...msg] })
             }
             setStreaming(false)
+            // Refresh conversation list so sidebar title updates immediately
+            if (currentKnowledgeBase) {
+              conversationsApi.listConversations(currentKnowledgeBase.id)
+                .then(data => setConversationList(data))
+                .catch((err: any) => console.error('Failed to refresh conversations:', err))
+            }
           },
           (error) => {
             updateLastMessage(`抱歉，查询出错：${error}`)
