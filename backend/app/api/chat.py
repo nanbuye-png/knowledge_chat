@@ -13,6 +13,7 @@ from ..services.chat_service import chat_service
 from ..services.message_service import create_user_message, create_assistant_message
 from ..services.conversation_service import update_conversation_title, _verify_conversation_ownership
 from ..models.conversation import Conversation
+from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db, async_session
 from ..auth.deps import get_current_user
 from ..models.user import User
@@ -45,6 +46,22 @@ async def _auto_update_title(db: AsyncSession, conversation_id: int, text: str):
             logger.exception(f"Failed to auto-update title for conversation_id={conversation_id}")
 
 
+async def verify_knowledge_base_access(
+    db: AsyncSession,
+    knowledge_base_id: int,
+    current_user: User,
+) -> KnowledgeBase:
+    """Verify the knowledge base belongs to the current user. Raises HTTPException if not."""
+    result = await db.execute(
+        select(KnowledgeBase).where(
+            KnowledgeBase.id == knowledge_base_id,
+            KnowledgeBase.user_id == current_user.id,
+        )
+    )
+    kb = result.scalar_one_or_none()
+    if kb is None:
+        raise HTTPException(status_code=403, detail="无权访问该知识库")
+    return kb
 @router.post("/query", response_model=QueryResponse, summary="知识库问答")
 async def query_knowledge(
     request: QueryRequest,
@@ -70,6 +87,10 @@ async def query_knowledge(
                 has_knowledge=False,
             )
 
+    # Verify knowledge base access when no conversation is specified
+    if request.conversation_id is None:
+        await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
+
     try:
         result = await chat_service.query_knowledge(request.question, request.knowledge_base_id, request.history)
     except Exception as e:
@@ -87,7 +108,10 @@ async def query_knowledge(
 
 
 @router.post("/chat", response_model=ChatResponse, summary="闲聊模式")
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+):
     """通用闲聊对话，直接调用 DeepSeek API。"""
     logger.info(f"Chat message: {request.message[:100]}...")
     try:
@@ -99,7 +123,10 @@ async def chat(request: ChatRequest):
 
 
 @router.post("/stream", summary="流式对话（SSE）")
-async def stream_chat(request: ChatRequest):
+async def stream_chat(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     SSE 流式对话接口。
     支持打字机效果，逐 token 返回响应。
@@ -160,6 +187,14 @@ async def stream_query_knowledge(
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '消息保存失败，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
 
+            # ---- Verify knowledge base access when no conversation ----
+            if request.conversation_id is None:
+                try:
+                    await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
+                except HTTPException:
+                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该知识库'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                    return
+
             # ---- During streaming: accumulate assistant content ----
             try:
                 async for data in chat_service.stream_query_knowledge(
@@ -209,7 +244,10 @@ async def stream_query_knowledge(
 
 
 @router.put("/mode", response_model=ModeResponse, summary="切换模式")
-async def set_mode(mode: ChatMode):
+async def set_mode(
+    mode: ChatMode,
+    current_user: User = Depends(get_current_user),
+):
     """切换问答模式：knowledge（知识库）或 chat（闲聊）。"""
     try:
         await chat_service.set_mode(mode.mode)
@@ -222,7 +260,9 @@ async def set_mode(mode: ChatMode):
 
 
 @router.get("/mode", response_model=ModeResponse, summary="获取当前模式")
-async def get_mode():
+async def get_mode(
+    current_user: User = Depends(get_current_user),
+):
     """获取当前问答模式。"""
     try:
         mode = await chat_service.get_mode()
