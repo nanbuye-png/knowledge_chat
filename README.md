@@ -35,17 +35,17 @@
 | 层级 | 技术 |
 |------|------|
 | 前端 | React 18 + Vite + TypeScript + Tailwind CSS + Framer Motion |
-| 后端 | FastAPI + Python 3.11 + SQLAlchemy (async) |
+| 后端 | FastAPI + Python 3.12 + SQLAlchemy (async) |
 | 向量库 | ChromaDB（嵌入式，无需独立部署） |
 | 嵌入模型 | BAAI/bge-small-zh-v1.5（本地运行） |
 | LLM | DeepSeek API |
-| 部署 | Docker Compose |
 
 ## 🚀 快速开始
 
 ### 前置要求
 
-- Docker & Docker Compose
+- Python 3.12+
+- Node.js 18+
 - DeepSeek API Key
 
 ### 1. 克隆项目
@@ -55,47 +55,32 @@ git clone <your-repo-url>
 cd knowledge_chat
 ```
 
-### 2. 配置环境变量
+### 2. 后端配置与启动
 
 ```bash
-cp .env.example .env
-```
+cd backend
 
-编辑 `.env` 文件，填入你的 DeepSeek API Key：
+# 创建并激活虚拟环境
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
 
-```env
-DEEPSEEK_API_KEY=sk-your-api-key-here
-```
+# 安装依赖
+pip install -r requirements.txt
 
-### 3. 启动服务
+# 配置环境变量
+cp ".env copy.example" .env
+# 编辑 .env 填入 API Key
 
-```bash
-docker-compose up -d
+# 启动后端服务
+uvicorn app.main:app --reload --port 8000
 ```
 
 首次启动会自动下载嵌入模型（约 500MB），请耐心等待。
 
-### 4. 访问系统
-
-- **前端界面**：http://localhost
-- **API 文档**：http://localhost:8000/docs
-- **健康检查**：http://localhost:8000/api/health
-
-## 🛠️ 本地开发
-
-### 后端
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
-# 编辑 .env 填入 API Key
-uvicorn app.main:app --reload --port 8000
-```
-
-### 前端
+### 3. 前端配置与启动
 
 ```bash
 cd frontend
@@ -103,7 +88,11 @@ npm install
 npm run dev
 ```
 
-前端开发服务器运行在 http://localhost:5173，自动代理 API 请求到后端。
+### 4. 访问系统
+
+- **前端界面**：http://localhost:5173
+- **API 文档**：http://localhost:8000/docs
+- **健康检查**：http://localhost:8000/api/health
 
 ## 📡 API 接口
 
@@ -128,7 +117,8 @@ knowledge_chat/
 ├── backend/
 │   ├── app/
 │   │   ├── api/           # API 路由
-│   │   ├── core/          # 配置、日志
+│   │   ├── auth/          # 认证相关
+│   │   ├── core/          # 配置、日志、异常
 │   │   ├── models/        # 数据库模型
 │   │   ├── schemas/       # Pydantic 校验
 │   │   ├── services/      # 业务逻辑
@@ -136,18 +126,18 @@ knowledge_chat/
 │   │   ├── utils/         # 工具函数
 │   │   └── main.py        # 应用入口
 │   ├── requirements.txt
-│   └── Dockerfile
+│   └── tests/             # 测试
 ├── frontend/
 │   ├── src/
 │   │   ├── api/           # API 调用
 │   │   ├── components/    # UI 组件
 │   │   ├── contexts/      # 状态管理
+│   │   ├── pages/         # 页面
+│   │   ├── store/         # 状态存储
 │   │   ├── types/         # TypeScript 类型
 │   │   └── App.tsx        # 主应用
 │   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-├── .env.example
+│   └── vite.config.ts
 └── README.md
 ```
 
@@ -164,6 +154,16 @@ knowledge_chat/
 | `CHUNK_OVERLAP` | 切块重叠 | 100 |
 | `MAX_FILE_SIZE` | 最大文件大小 | 50MB |
 
+## 🔧 变更日志
+
+### Sprint 11 — 生产环境加固 (2026-07-10)
+
+- **SQLite 数据库路径固定**：`DATABASE_URL` 中的相对路径基于 `backend/` 目录自动转换为绝对路径，确保无论启动目录在哪里都使用同一个 `knowledge.db`
+- **ChromaDB 持久化路径固定**：`CHROMA_PERSIST_DIR` 和 `UPLOAD_DIR` 同样基于项目 `backend/` 目录固定为绝对路径，避免向量数据丢失
+- **SSE 流式聊天 JWT Token 修复**：前端 `createStreamChat()` / `createStreamKnowledgeQuery()` 的 `fetch()` 请求现在携带 `Authorization: Bearer` 头，解决流式接口 401 问题
+
+---
+
 ## 📋 验收清单
 
 - [x] 上传 PDF/Word/Markdown/TXT，侧边栏显示文档列表
@@ -174,7 +174,7 @@ knowledge_chat/
 - [x] 模式切换流畅，界面有清晰状态提示
 - [x] 界面美观、动效流畅、支持深色/亮色主题
 - [x] API 有完善的错误处理和日志
-- [x] Docker Compose 一键启动成功
+- [x] 虚拟环境本地一键启动成功
 
 ## 📄 许可证
 

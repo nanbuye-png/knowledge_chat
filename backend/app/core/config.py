@@ -1,6 +1,18 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pathlib import Path
 import os
+
+# Compute the project backend directory (3 levels up from this file: core/config.py -> app -> backend)
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _make_absolute(path: str) -> str:
+    """Convert a relative path to an absolute path rooted at the backend directory."""
+    p = Path(path)
+    if p.is_absolute():
+        return str(p)
+    return str(_BACKEND_DIR / p)
 
 
 class Settings(BaseSettings):
@@ -54,6 +66,20 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# Normalize paths: fix relative paths to be absolute, rooted at the backend directory.
+# This handles DATABASE_URL (SQLite), CHROMA_PERSIST_DIR, and UPLOAD_DIR.
+# DATABASE_URL contains a file path inside the URL, so we parse it carefully.
+_db_url = settings.DATABASE_URL
+if _db_url.startswith("sqlite"):
+    # Extract the file path part after 'sqlite+aiosqlite:///' or 'sqlite:///'
+    for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
+        if _db_url.startswith(prefix):
+            _db_path = _db_url[len(prefix):]
+            settings.DATABASE_URL = prefix + _make_absolute(_db_path)
+            break
+settings.CHROMA_PERSIST_DIR = _make_absolute(settings.CHROMA_PERSIST_DIR)
+settings.UPLOAD_DIR = _make_absolute(settings.UPLOAD_DIR)
+
 # Ensure directories exist
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-os.makedirs(os.path.dirname(settings.CHROMA_PERSIST_DIR) if os.path.dirname(settings.CHROMA_PERSIST_DIR) else ".", exist_ok=True)
+os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)

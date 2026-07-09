@@ -35,9 +35,13 @@ export function createStreamChat(
 ): AbortController {
   const controller = new AbortController()
 
+  const token = localStorage.getItem('token')
   fetch('/api/chat/stream', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ message, history }),
     signal: controller.signal,
   })
@@ -112,9 +116,13 @@ export function createStreamKnowledgeQuery(
 ): AbortController {
   const controller = new AbortController()
 
+  const token = localStorage.getItem('token')
   fetch('/api/chat/stream/query', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ question, knowledge_base_id: knowledgeBaseId, conversation_id: conversationId }),
     signal: controller.signal,
   })
