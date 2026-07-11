@@ -138,16 +138,11 @@ async def delete_knowledge_base(
             detail="知识库不存在",
         )
 
-    # 1. Delete ChromaDB vectors for all documents in this KB
-    doc_result = await db.execute(
-        select(Document.id).where(Document.knowledge_base_id == kb_id)
-    )
-    doc_ids = [row[0] for row in doc_result.all()]
-    for doc_id in doc_ids:
-        try:
-            await vector_store.delete_document(doc_id)
-        except Exception as e:
-            logger.warning(f"Failed to delete vectors for document {doc_id}: {e}")
+    # 1. Delete all ChromaDB vectors for this knowledge base (single call)
+    try:
+        await vector_store.delete_knowledge_base(kb_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete vectors for knowledge base {kb_id}: {e}")
 
     # 2. Delete all conversations under this KB (cascades to messages via DB FK)
     await db.execute(sa_delete(Conversation).where(

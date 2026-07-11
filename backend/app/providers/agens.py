@@ -114,7 +114,12 @@ class AgensProvider(BaseLLMProvider):
             **kwargs,
         )
 
-        return response.choices[0].message.content
+        if not response.choices:
+            raise ValueError("Agens returned empty choices")
+
+        message = response.choices[0].message
+
+        return message.content or ""
 
     async def stream_chat(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
         """Send a streaming chat completion request to Agens.
@@ -145,10 +150,25 @@ class AgensProvider(BaseLLMProvider):
 
         try:
             async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+
+                delta = getattr(choice, "delta", None)
+
+                if not delta:
+                    continue
+
+                content = getattr(delta, "content", None)
+
+                if content:
+                    yield content
         finally:
-            try:
-                stream.close()
-            except Exception:
-                pass
+            close = getattr(stream, "close", None)
+
+            if close:
+                result = close()
+
+                if hasattr(result, "__await__"):
+                    await result

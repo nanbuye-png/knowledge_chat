@@ -179,6 +179,44 @@ class VectorStore:
             logger.error(f"Failed to delete document from vector store: {e}")
             raise
 
+    async def delete_knowledge_base(self, knowledge_base_id: int):
+        """Delete all vectors belonging to one knowledge base."""
+        if not self._initialized:
+            logger.error("Vector store not initialized")
+            return
+
+        try:
+            self.collection.delete(
+                where={
+                    "knowledge_base_id": {
+                        "$eq": knowledge_base_id
+                    }
+                }
+            )
+            logger.info(f"Deleted all vectors for knowledge base: {knowledge_base_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete vectors for knowledge base {knowledge_base_id}: {e}")
+            raise
+
+    async def delete_user(self, user_id: int):
+        """Delete all vectors belonging to one user."""
+        if not self._initialized:
+            logger.error("Vector store not initialized")
+            return
+
+        try:
+            self.collection.delete(
+                where={
+                    "user_id": {
+                        "$eq": user_id
+                    }
+                }
+            )
+            logger.info(f"Deleted all vectors for user: {user_id}")
+        except Exception as e:
+            logger.error(f"Failed to delete vectors for user {user_id}: {e}")
+            raise
+
     async def get_document_chunk_count(self, document_id: str) -> int:
         """Get chunk count for a document."""
         if not self._initialized:
