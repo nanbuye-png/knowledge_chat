@@ -21,10 +21,17 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     LOG_LEVEL: str = "INFO"
 
+    # LLM Provider
+    LLM_PROVIDER: str = "deepseek"  # deepseek or agens
+
     # DeepSeek
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
     LLM_MODEL: str = "deepseek-chat"
+
+    # Agens
+    AGENS_API_KEY: str = ""
+    AGENS_API_BASE: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./knowledge.db"

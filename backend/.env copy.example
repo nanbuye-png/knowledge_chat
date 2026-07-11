@@ -1,7 +1,14 @@
+# LLM Provider 选择（deepseek 或 agens）
+LLM_PROVIDER=deepseek
+
 # DeepSeek API 配置
 DEEPSEEK_API_KEY=sk-your-api-key-here
 DEEPSEEK_API_BASE=https://api.deepseek.com
 LLM_MODEL=deepseek-chat
+
+# Agens API 配置
+AGENS_API_KEY=
+AGENS_API_BASE=
 
 # 数据库配置
 DATABASE_URL=sqlite+aiosqlite:///./knowledge.db

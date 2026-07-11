@@ -21,6 +21,7 @@ it only receives pre‑loaded configuration objects.
 from typing import Union, TYPE_CHECKING
 
 from ..core.config import settings
+from .agens import AgensProvider
 from .base import BaseLLMProvider
 from .deepseek import DeepSeekProvider
 
@@ -29,10 +30,13 @@ if TYPE_CHECKING:
 
 
 def _resolve_provider_info(
-    provider_input: Union[str, "LLMModel"],
+    provider_input: Union[str, "LLMModel", None],
 ) -> tuple[str, str]:
     """Resolve (provider_name, model_name) from different input types."""
-    if isinstance(provider_input, str):
+    if provider_input is None:
+        provider_name = settings.LLM_PROVIDER.lower().strip()
+        model_name = settings.LLM_MODEL
+    elif isinstance(provider_input, str):
         provider_name = provider_input.lower().strip()
         model_name = settings.LLM_MODEL
     else:
@@ -44,13 +48,17 @@ def _resolve_provider_info(
 
 
 def get_llm_provider(
-    provider_input: Union[str, "LLMModel"] = "deepseek",
+    provider_input: Union[str, "LLMModel", None] = None,
 ) -> BaseLLMProvider:
     """Return a configured LLM provider instance.
 
+    When called without arguments, defaults to settings.LLM_PROVIDER so the
+    active provider can be switched via .env without any code changes.
+
     Args:
         provider_input:
-            - A string: provider name (e.g. "deepseek").
+            - None (default): uses settings.LLM_PROVIDER.
+            - A string: provider name (e.g. "deepseek", "agens").
               The model name is taken from settings.LLM_MODEL.
             - An LLMModel object: reads .provider and .model_name.
 
@@ -69,7 +77,14 @@ def get_llm_provider(
             model=model_name,
         )
 
+    if provider_name == "agens":
+        return AgensProvider(
+            api_key=settings.AGENS_API_KEY,
+            base_url=settings.AGENS_API_BASE,
+            model=model_name,
+        )
+
     raise ValueError(
         f"Unknown LLM provider: '{provider_name}'. "
-        f"Currently supported: deepseek"
+        f"Currently supported: deepseek, agens"
     )
