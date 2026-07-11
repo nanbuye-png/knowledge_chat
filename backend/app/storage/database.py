@@ -8,6 +8,7 @@ from ..models.knowledge_base import KnowledgeBase  # noqa: F401 - register Knowl
 from ..models.conversation import Conversation  # noqa: F401 - register Conversation model for table creation
 from ..models.message import Message  # noqa: F401 - register Message model for table creation
 from ..models.document import Document  # noqa: F401 - needed for migration
+from ..models.llm_model import LLMModel  # noqa: F401 - register LLMModel model for table creation
 import os
 
 
