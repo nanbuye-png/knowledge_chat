@@ -2,11 +2,10 @@ import json
 import time
 from loguru import logger
 from typing import AsyncGenerator, Optional
-from openai import AsyncOpenAI
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from ..core.config import settings
+from ..providers.base import BaseLLMProvider
+from ..providers.deepseek import DeepSeekProvider
 from ..models.document import Document, DocumentStatus
 from ..schemas.chat import QueryResponse, SourceReference
 from ..services.embedding_service import embedding_service
@@ -32,20 +31,15 @@ SYSTEM_PROMPT_CHAT = """你是一个智能AI助手，名为"智问"。
 
 
 class ChatService:
-    """Service for chat and Q&A operations."""
+    """Service for chat and Q&A operations.
 
-    def __init__(self):
+    LLM calls are delegated to an injected BaseLLMProvider.
+    This service no longer directly depends on AsyncOpenAI.
+    """
+
+    def __init__(self, provider: BaseLLMProvider):
         self._current_mode = "knowledge"  # knowledge or chat
-        self._client: Optional[AsyncOpenAI] = None
-
-    def _get_client(self) -> AsyncOpenAI:
-        """Get or create OpenAI client for DeepSeek."""
-        if self._client is None:
-            self._client = AsyncOpenAI(
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=settings.DEEPSEEK_API_BASE,
-            )
-        return self._client
+        self.provider = provider
 
     async def get_mode(self) -> str:
         """Get current chat mode."""
@@ -131,9 +125,14 @@ class ChatService:
                     })
             messages.append({"role": "user", "content": question})
 
-            # 5. Call LLM
+            # 5. Call LLM via provider
             t_llm_start = time.monotonic()
-            answer = await self._call_llm(messages=messages)
+            answer = await self.provider.chat(
+                messages=messages,
+                model=settings.LLM_MODEL,
+                temperature=0.7,
+                max_tokens=2000,
+            )
             logger.info(f"[TIMING] LLM call: {time.monotonic() - t_llm_start:.2f}s")
             logger.info(f"[TIMING] Total query_knowledge: {time.monotonic() - t0:.2f}s")
 
@@ -149,7 +148,7 @@ class ChatService:
     async def chat(self, message: str, history: list[dict] = None) -> str:
         """
         General chat mode.
-        Calls DeepSeek API directly with conversation history.
+        Delegates to the LLM provider with conversation history.
         """
         try:
             messages = [{"role": "system", "content": SYSTEM_PROMPT_CHAT}]
@@ -165,7 +164,12 @@ class ChatService:
             # Add current message
             messages.append({"role": "user", "content": message})
 
-            return await self._call_llm(messages=messages)
+            return await self.provider.chat(
+                messages=messages,
+                model=settings.LLM_MODEL,
+                temperature=0.7,
+                max_tokens=2000,
+            )
 
         except Exception as e:
             logger.error(f"Chat failed: {e}")
@@ -188,18 +192,13 @@ class ChatService:
 
             messages.append({"role": "user", "content": message})
 
-            client = self._get_client()
-            stream = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
+            async for token in self.provider.stream_chat(
                 messages=messages,
+                model=settings.LLM_MODEL,
                 temperature=0.7,
                 max_tokens=2000,
-                stream=True,
-            )
-
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            ):
+                yield token
 
         except Exception as e:
             logger.error(f"Stream chat failed: {e}")
@@ -211,7 +210,6 @@ class ChatService:
         First sends sources as JSON, then streams the answer.
         Uses conversation history for multi-turn context.
         """
-        stream = None
         t0 = time.monotonic()
         try:
             logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}, history_len={len(history) if history else 0}")
@@ -285,22 +283,17 @@ class ChatService:
                     })
             messages.append({"role": "user", "content": question})
 
-            # Stream LLM response
+            # Stream LLM response via provider
             t_llm_start = time.monotonic()
-            client = self._get_client()
-            stream = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
+            async for token in self.provider.stream_chat(
                 messages=messages,
+                model=settings.LLM_MODEL,
                 temperature=0.3,
                 max_tokens=2000,
-                stream=True,
-            )
-            logger.info(f"[TIMING] LLM stream started in {time.monotonic() - t_llm_start:.2f}s")
+            ):
+                yield token
 
-            async for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
-
+            logger.info(f"[TIMING] LLM stream duration: {time.monotonic() - t_llm_start:.2f}s")
             logger.info(f"[TIMING] Total stream_query_knowledge: {time.monotonic() - t0:.2f}s")
 
         except Exception as e:
@@ -310,40 +303,13 @@ class ChatService:
             except Exception:
                 # If even the error yield fails, generator will simply end
                 pass
-        finally:
-            # Ensure the stream is properly closed to release resources.
-            # Note: OpenAI SDK v1.x AsyncStream.close() is a synchronous method
-            # (it closes the underlying httpx response), so no await is needed.
-            if stream is not None:
-                try:
-                    stream.close()
-                except Exception:
-                    pass
-
-    async def _call_llm(self, system_prompt: str = None, user_message: str = None, messages: list = None) -> str:
-        """Call DeepSeek LLM."""
-        try:
-            client = self._get_client()
-
-            if messages is None:
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ]
-
-            response = await client.chat.completions.create(
-                model=settings.LLM_MODEL,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=2000,
-            )
-
-            return response.choices[0].message.content
-
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            raise
 
 
-# Singleton instance
-chat_service = ChatService()
+# Singleton instance — provider is injected from config
+chat_service = ChatService(
+    provider=DeepSeekProvider(
+        api_key=settings.DEEPSEEK_API_KEY,
+        base_url=settings.DEEPSEEK_API_BASE,
+        model=settings.LLM_MODEL,
+    )
+)

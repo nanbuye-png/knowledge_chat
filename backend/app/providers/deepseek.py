@@ -3,22 +3,27 @@ from typing import AsyncGenerator
 from loguru import logger
 from openai import AsyncOpenAI
 
-from ..core.config import settings
 from .base import BaseLLMProvider
 
 
 class DeepSeekProvider(BaseLLMProvider):
-    """LLM provider for DeepSeek API (OpenAI-compatible)."""
+    """LLM provider for DeepSeek API (OpenAI-compatible).
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None):
+    All configuration is injected via constructor parameters.
+    The provider is only responsible for calling the LLM API.
+    """
+
+    def __init__(self, api_key: str, base_url: str, model: str):
         """Initialize the DeepSeek provider.
 
         Args:
-            api_key: DeepSeek API key. Falls back to settings.DEEPSEEK_API_KEY.
-            base_url: API base URL. Falls back to settings.DEEPSEEK_API_BASE.
+            api_key: DeepSeek API key (required, injected from config).
+            base_url: API base URL (required, injected from config).
+            model: Default model name (required, injected from config).
         """
-        self.api_key = api_key or settings.DEEPSEEK_API_KEY
-        self.base_url = base_url or settings.DEEPSEEK_API_BASE
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
         self._client: AsyncOpenAI | None = None
 
     @property
@@ -41,7 +46,7 @@ class DeepSeekProvider(BaseLLMProvider):
         Returns:
             The complete response text.
         """
-        model = kwargs.pop("model", settings.LLM_MODEL)
+        model = kwargs.pop("model", self.model)
         temperature = kwargs.pop("temperature", 0.7)
         max_tokens = kwargs.pop("max_tokens", 2000)
 
@@ -65,7 +70,7 @@ class DeepSeekProvider(BaseLLMProvider):
         Yields:
             Text tokens as they are received.
         """
-        model = kwargs.pop("model", settings.LLM_MODEL)
+        model = kwargs.pop("model", self.model)
         temperature = kwargs.pop("temperature", 0.7)
         max_tokens = kwargs.pop("max_tokens", 2000)
 
