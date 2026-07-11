@@ -4,6 +4,8 @@ from loguru import logger
 from typing import AsyncGenerator, Optional
 
 from ..core.config import settings
+from ..prompts import get_prompt_provider
+from ..prompts.base import BasePromptProvider
 from ..providers.base import BaseLLMProvider
 from ..providers import get_llm_provider
 from ..models.document import Document, DocumentStatus
@@ -12,34 +14,19 @@ from ..services.embedding_service import embedding_service
 from ..storage.vector_store import vector_store
 
 
-SYSTEM_PROMPT_KNOWLEDGE = """你是一个专业的智能知识库问答助手，名为"智问"。
-请基于以下参考资料回答问题。回答需要：
-1. 准确、简洁、有条理
-2. 标注引用来源（使用文件名+段落索引格式）
-3. 如果参考资料不足以回答问题，请明确告知
-4. 使用中文回答
-
-参考资料：
-{context}"""
-
-SYSTEM_PROMPT_CHAT = """你是一个智能AI助手，名为"智问"。
-你的特点：
-1. 友好、专业、热情
-2. 回答简洁明了
-3. 能够进行多轮对话
-4. 使用中文回答"""
-
-
 class ChatService:
     """Service for chat and Q&A operations.
 
-    LLM calls are delegated to an injected BaseLLMProvider.
-    This service no longer directly depends on AsyncOpenAI.
+    LLM calls are delegated to an injected :class:`BaseLLMProvider`.
+    Prompt building is delegated to an injected :class:`BasePromptProvider`.
+    This service no longer directly depends on ``AsyncOpenAI`` or
+    hardcoded prompt strings.
     """
 
-    def __init__(self, provider: BaseLLMProvider):
+    def __init__(self, provider: BaseLLMProvider, prompt_provider: BasePromptProvider):
         self._current_mode = "knowledge"  # knowledge or chat
         self.provider = provider
+        self.prompt_provider = prompt_provider
 
     async def get_mode(self) -> str:
         """Get current chat mode."""
@@ -113,7 +100,7 @@ class ChatService:
                 ))
 
             context = "\n\n".join(context_parts)
-            system_prompt = SYSTEM_PROMPT_KNOWLEDGE.format(context=context)
+            system_prompt = self.prompt_provider.build_rag_prompt(context=context, question=question)
 
             # 4. Build messages with conversation history for multi-turn context
             messages = [{"role": "system", "content": system_prompt}]
@@ -151,7 +138,7 @@ class ChatService:
         Delegates to the LLM provider with conversation history.
         """
         try:
-            messages = [{"role": "system", "content": SYSTEM_PROMPT_CHAT}]
+            messages = [{"role": "system", "content": self.prompt_provider.system_prompt}]
 
             # Add history
             if history:
@@ -181,7 +168,7 @@ class ChatService:
         Used for typewriter effect in frontend.
         """
         try:
-            messages = [{"role": "system", "content": SYSTEM_PROMPT_CHAT}]
+            messages = [{"role": "system", "content": self.prompt_provider.system_prompt}]
 
             if history:
                 for h in history[-10:]:
@@ -271,7 +258,7 @@ class ChatService:
             yield json.dumps({"type": "sources", "sources": sources}, ensure_ascii=False) + "\n"
 
             context = "\n\n".join(context_parts)
-            system_prompt = SYSTEM_PROMPT_KNOWLEDGE.format(context=context)
+            system_prompt = self.prompt_provider.build_rag_prompt(context=context, question=question)
 
             # Build messages with conversation history for multi-turn context
             messages = [{"role": "system", "content": system_prompt}]
@@ -305,7 +292,8 @@ class ChatService:
                 pass
 
 
-# Singleton instance — provider obtained via factory
+# Singleton instance — provider and prompt_provider obtained via factories
 chat_service = ChatService(
-    provider=get_llm_provider()
+    provider=get_llm_provider(),
+    prompt_provider=get_prompt_provider(),
 )
