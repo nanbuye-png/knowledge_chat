@@ -3,9 +3,12 @@ import time
 from loguru import logger
 from typing import AsyncGenerator, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..core.config import settings
 from ..prompts import get_prompt_provider
 from ..prompts.base import BasePromptProvider
+from ..prompts.resolver import resolve_prompt_provider
 from ..providers.base import BaseLLMProvider
 from ..providers import get_llm_provider
 from ..models.document import Document, DocumentStatus
@@ -60,7 +63,62 @@ class ChatService:
         self._current_mode = mode
         logger.info(f"Chat mode switched to: {mode}")
 
-    async def query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None) -> QueryResponse:
+    async def set_prompt_provider(self, prompt_provider: BasePromptProvider) -> None:
+        """Replace the prompt provider for the current request.
+
+        Args:
+            prompt_provider: Any :class:`BasePromptProvider` instance.
+        """
+        if not isinstance(prompt_provider, BasePromptProvider):
+            raise ValueError(
+                f"prompt_provider must be an instance of BasePromptProvider, "
+                f"got {type(prompt_provider).__name__}"
+            )
+        self.prompt_provider = prompt_provider
+
+    async def get_prompt_provider(
+        self, session: AsyncSession | None = None
+    ) -> BasePromptProvider:
+        """Return the active prompt provider for the current request.
+
+        If *session* is provided, returns a :class:`DatabasePromptProvider`
+        backed by that session (database templates take priority).  Otherwise
+        returns the instance stored in ``self.prompt_provider``.
+
+        Args:
+            session: An optional async SQLAlchemy session.  When present,
+                database templates are queried first.
+
+        Returns:
+            A :class:`BasePromptProvider` instance.
+        """
+        if session is not None:
+            return resolve_prompt_provider(session)
+        return self.prompt_provider
+
+    @staticmethod
+    async def _get_system_prompt(prompt_provider: BasePromptProvider) -> str:
+        """Extract system prompt — supports both sync and async providers."""
+        if hasattr(prompt_provider, "get_system_prompt"):
+            return await prompt_provider.get_system_prompt()
+        return prompt_provider.system_prompt
+
+    @staticmethod
+    async def _build_rag_prompt(
+        prompt_provider: BasePromptProvider, context: str, question: str
+    ) -> str:
+        """Build RAG prompt — supports both sync and async providers."""
+        if hasattr(prompt_provider, "get_rag_prompt"):
+            return await prompt_provider.get_rag_prompt(context=context, question=question)
+        return prompt_provider.build_rag_prompt(context=context, question=question)
+
+    async def query_knowledge(
+        self,
+        question: str,
+        knowledge_base_id: int,
+        history: list[dict] = None,
+        session: Optional[AsyncSession] = None,
+    ) -> QueryResponse:
         """
         Query knowledge base with RAG and multi-turn context.
         
@@ -121,7 +179,8 @@ class ChatService:
                 ))
 
             context = "\n\n".join(context_parts)
-            system_prompt = self.prompt_provider.build_rag_prompt(context=context, question=question)
+            prompt_provider = await self.get_prompt_provider(session)
+            system_prompt = await self._build_rag_prompt(prompt_provider, context, question)
 
             # 4. Build messages with conversation history for multi-turn context
             messages = [{"role": "system", "content": system_prompt}]
@@ -153,13 +212,16 @@ class ChatService:
                 has_knowledge=False,
             )
 
-    async def chat(self, message: str, history: list[dict] = None) -> str:
+    async def chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> str:
         """
         General chat mode.
         Delegates to the LLM provider with conversation history.
         """
         try:
-            messages = [{"role": "system", "content": self.prompt_provider.system_prompt}]
+            prompt_provider = await self.get_prompt_provider(session)
+            system_prompt = await self._get_system_prompt(prompt_provider)
+
+            messages = [{"role": "system", "content": system_prompt}]
 
             # Add history
             if history:
@@ -183,13 +245,16 @@ class ChatService:
             logger.error(f"Chat failed: {e}")
             return f"抱歉，对话出现错误：{str(e)}"
 
-    async def stream_chat(self, message: str, history: list[dict] = None) -> AsyncGenerator[str, None]:
+    async def stream_chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> AsyncGenerator[str, None]:
         """
         Stream chat response using SSE.
         Used for typewriter effect in frontend.
         """
         try:
-            messages = [{"role": "system", "content": self.prompt_provider.system_prompt}]
+            prompt_provider = await self.get_prompt_provider(session)
+            system_prompt = await self._get_system_prompt(prompt_provider)
+
+            messages = [{"role": "system", "content": system_prompt}]
 
             if history:
                 for h in history[-10:]:
@@ -212,7 +277,7 @@ class ChatService:
             logger.error(f"Stream chat failed: {e}")
             yield f"抱歉，对话出现错误：{str(e)}"
 
-    async def stream_query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None) -> AsyncGenerator[str, None]:
+    async def stream_query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None, session: Optional[AsyncSession] = None) -> AsyncGenerator[str, None]:
         """
         Stream knowledge base query response using SSE.
         First sends sources as JSON, then streams the answer.
@@ -279,7 +344,8 @@ class ChatService:
             yield json.dumps({"type": "sources", "sources": sources}, ensure_ascii=False) + "\n"
 
             context = "\n\n".join(context_parts)
-            system_prompt = self.prompt_provider.build_rag_prompt(context=context, question=question)
+            prompt_provider = await self.get_prompt_provider(session)
+            system_prompt = await self._build_rag_prompt(prompt_provider, context, question)
 
             # Build messages with conversation history for multi-turn context
             messages = [{"role": "system", "content": system_prompt}]

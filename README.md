@@ -109,6 +109,18 @@ npm run dev
 | POST | `/api/chat/stream/query` | 流式知识库问答（SSE） |
 | GET | `/api/chat/mode` | 获取当前模式 |
 | PUT | `/api/chat/mode` | 切换模式 |
+| GET | `/api/llm-models` | 获取 LLM 模型列表 |
+| POST | `/api/llm-models` | 创建 LLM 模型配置 |
+| GET | `/api/llm-models/{id}` | 获取单个模型配置 |
+| PUT | `/api/llm-models/{id}` | 更新模型配置 |
+| DELETE | `/api/llm-models/{id}` | 删除模型配置 |
+| GET | `/api/prompt-templates` | 获取 Prompt 模板列表 |
+| POST | `/api/prompt-templates` | 创建 Prompt 模板 |
+| GET | `/api/prompt-templates/{id}` | 获取单个模板 |
+| PUT | `/api/prompt-templates/{id}` | 更新模板 |
+| DELETE | `/api/prompt-templates/{id}` | 删除模板 |
+| GET | `/api/prompt-templates/{id}/versions` | 获取模板版本历史 |
+| POST | `/api/prompt-templates/{id}/rollback/{v}` | 回滚模板到指定版本 |
 
 ## 📁 项目结构
 
@@ -120,6 +132,8 @@ knowledge_chat/
 │   │   ├── auth/          # 认证相关
 │   │   ├── core/          # 配置、日志、异常
 │   │   ├── models/        # 数据库模型
+│   │   ├── prompts/       # Prompt Provider（模板管理 & 动态加载）
+│   │   ├── providers/     # LLM Provider（DeepSeek / Agens）
 │   │   ├── schemas/       # Pydantic 校验
 │   │   ├── services/      # 业务逻辑
 │   │   ├── storage/       # 存储层
@@ -189,6 +203,15 @@ LLM_PROVIDER=agens
 | `MAX_FILE_SIZE` | 最大文件大小 | 50MB |
 
 ## 🔧 变更日志
+
+### Sprint 15 — Prompt 模板管理 & 动态加载 (2026-07-11)
+
+- **PromptTemplate 数据模型**：新增 `prompt_templates` 表，支持 name / prompt_type / content / version / enabled 字段
+- **PromptTemplate CRUD API**：完整的 RESTful 管理接口（创建、查询、更新、删除）
+- **Prompt 版本管理**：每次修改 content 自动创建不可变版本快照（`prompt_template_versions`），支持版本历史查询与回滚
+- **DatabasePromptProvider**：从数据库动态加载 Prompt 模板，ChromeDB 优先，DefaultPromptProvider 兜底
+- **Prompt Factory 扩展**：`get_prompt_provider("database", session=db)` 新增数据库 Provider 注册
+- **ChatService 动态接入**：`chat()` / `query_knowledge()` / SSE 全链路支持运行时切换 Prompt Provider
 
 ### Sprint 13.3 — Architecture Polish & Documentation (2026-07-11)
 

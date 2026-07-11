@@ -19,6 +19,8 @@ from .api.auth import router as auth_router
 from .api.knowledge_bases import router as knowledge_bases_router
 from .api.conversation import router as conversation_router
 from .api.llm_model import router as llm_model_router
+from .api.prompt_template import router as prompt_template_router
+from .api.prompt_version import router as prompt_version_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
@@ -121,6 +123,8 @@ app.include_router(auth_router)
 app.include_router(knowledge_bases_router)
 app.include_router(conversation_router)
 app.include_router(llm_model_router)
+app.include_router(prompt_template_router)
+app.include_router(prompt_version_router)
 
 
 @app.get("/", tags=["根路径"])

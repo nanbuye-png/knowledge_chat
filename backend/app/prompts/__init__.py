@@ -7,11 +7,13 @@ individual prompt modules.
 
 from .base import BasePromptProvider
 from .default import DefaultPromptProvider
+from .database import DatabasePromptProvider
 from .factory import get_prompt_provider, SUPPORTED_PROMPTS
 
 __all__ = [
     "BasePromptProvider",
     "DefaultPromptProvider",
+    "DatabasePromptProvider",
     "SUPPORTED_PROMPTS",
     "get_prompt_provider",
 ]

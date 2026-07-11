@@ -9,6 +9,8 @@ from ..models.conversation import Conversation  # noqa: F401 - register Conversa
 from ..models.message import Message  # noqa: F401 - register Message model for table creation
 from ..models.document import Document  # noqa: F401 - needed for migration
 from ..models.llm_model import LLMModel  # noqa: F401 - register LLMModel model for table creation
+from ..models.prompt_template import PromptTemplate  # noqa: F401 - register PromptTemplate model for table creation
+from ..models.prompt_template_version import PromptTemplateVersion  # noqa: F401 - register PromptTemplateVersion model for table creation
 import os
 
 
