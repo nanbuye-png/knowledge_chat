@@ -24,6 +24,27 @@ class ChatService:
     """
 
     def __init__(self, provider: BaseLLMProvider, prompt_provider: BasePromptProvider):
+        """Initialize the chat service with injected dependencies.
+
+        Args:
+            provider: An LLM provider instance. Must be an instance of
+                :class:`BaseLLMProvider`.
+            prompt_provider: A prompt provider instance. Must be an
+                instance of :class:`BasePromptProvider`.
+
+        Raises:
+            ValueError: If either dependency is not of the expected type.
+        """
+        if not isinstance(provider, BaseLLMProvider):
+            raise ValueError(
+                f"provider must be an instance of BaseLLMProvider, "
+                f"got {type(provider).__name__}"
+            )
+        if not isinstance(prompt_provider, BasePromptProvider):
+            raise ValueError(
+                f"prompt_provider must be an instance of BasePromptProvider, "
+                f"got {type(prompt_provider).__name__}"
+            )
         self._current_mode = "knowledge"  # knowledge or chat
         self.provider = provider
         self.prompt_provider = prompt_provider
