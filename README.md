@@ -38,7 +38,7 @@
 | 后端 | FastAPI + Python 3.12 + SQLAlchemy (async) |
 | 向量库 | ChromaDB（嵌入式，无需独立部署） |
 | 嵌入模型 | BAAI/bge-small-zh-v1.5（本地运行） |
-| LLM | DeepSeek API |
+| LLM | DeepSeek API / Agens API（多 Provider 支持） |
 
 ## 🚀 快速开始
 
@@ -141,13 +141,47 @@ knowledge_chat/
 └── README.md
 ```
 
+## 🤖 Multi LLM Provider Support
+
+系统支持多 LLM Provider，目前内置以下提供商：
+
+| Provider | 状态 | 说明 |
+|----------|------|------|
+| **DeepSeek** | ✅ 已支持 | OpenAI 兼容 API，支持 Stream + JSON |
+| **Agens** | ✅ 已支持 | 假定 OpenAI 兼容 API，支持 Stream |
+
+### 切换 Provider
+
+只需修改 `.env` 文件，**无需修改任何代码**：
+
+```bash
+# 使用 DeepSeek
+LLM_PROVIDER=deepseek
+
+# 或使用 Agens
+LLM_PROVIDER=agens
+```
+
+### 未来可扩展
+
+架构已预留接口，可轻松接入更多 Provider：
+
+- OpenAI
+- Gemini
+- Qwen
+
+新增 Provider 只需编写一个 `BaseLLMProvider` 子类并在工厂中注册即可接入，无需修改 ChatService、API 或前端代码。
+
 ## ⚙️ 配置说明
 
 | 环境变量 | 说明 | 默认值 |
 |---------|------|--------|
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | - |
-| `DEEPSEEK_API_BASE` | API 地址 | https://api.deepseek.com |
+| `LLM_PROVIDER` | LLM 提供商（deepseek / agens） | deepseek |
 | `LLM_MODEL` | 模型名称 | deepseek-chat |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | - |
+| `DEEPSEEK_API_BASE` | DeepSeek API 地址 | https://api.deepseek.com |
+| `AGENS_API_KEY` | Agens API Key | - |
+| `AGENS_API_BASE` | Agens API 地址 | - |
 | `EMBEDDING_MODEL` | 嵌入模型 | BAAI/bge-small-zh-v1.5 |
 | `LOG_LEVEL` | 日志级别 | INFO |
 | `CHUNK_SIZE` | 文档切块大小 | 500 |
@@ -155,6 +189,13 @@ knowledge_chat/
 | `MAX_FILE_SIZE` | 最大文件大小 | 50MB |
 
 ## 🔧 变更日志
+
+### Sprint 13.3 — Architecture Polish & Documentation (2026-07-11)
+
+- **Provider 文档完善**：所有 Provider 模块补充统一风格 Docstring
+- **Factory 常量**：新增 `SUPPORTED_PROVIDERS` 注册表，新 Provider 只需在此注入
+- **代码整理**：移除未使用 import，统一类型注解
+- **README 更新**：新增 Multi LLM Provider Support 章节
 
 ### Sprint 11 — 生产环境加固 (2026-07-10)
 

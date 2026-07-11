@@ -1,6 +1,14 @@
+"""DeepSeek provider — OpenAI‑compatible LLM provider for DeepSeek API.
+
+Uses the ``AsyncOpenAI`` client under the hood.  DeepSeek's API is fully
+OpenAI‑compatible, so no custom adapter logic is needed.
+
+Configuration is injected via constructor parameters; the provider itself
+does not read environment variables or config files.
+"""
+
 from typing import AsyncGenerator
 
-from loguru import logger
 from openai import AsyncOpenAI
 
 from .base import BaseLLMProvider
@@ -8,10 +16,22 @@ from .capabilities import ModelCapability
 
 
 class DeepSeekProvider(BaseLLMProvider):
-    """LLM provider for DeepSeek API (OpenAI-compatible).
+    """LLM provider for DeepSeek API (OpenAI‑compatible).
 
     All configuration is injected via constructor parameters.
-    The provider is only responsible for calling the LLM API.
+    The provider is only responsible for calling the LLM API — it does
+    **not** read environment variables, config files, or the database.
+
+    Capabilities
+    ------------
+    Supports:
+        - Stream (SSE)
+        - JSON mode / structured output
+
+    Not Supported:
+        - Vision / image inputs
+        - Tool / function calling
+        - Embeddings
     """
 
     def __init__(self, api_key: str, base_url: str, model: str):
@@ -36,12 +56,24 @@ class DeepSeekProvider(BaseLLMProvider):
 
     @property
     def capabilities(self) -> ModelCapability:
-        """Return the capability descriptor for DeepSeek."""
+        """Return the capability descriptor for DeepSeek.
+
+        Returns:
+            :class:`ModelCapability` with ``supports_stream=True``
+            and ``supports_json=True``.
+        """
         return self._capabilities
 
     @property
     def client(self) -> AsyncOpenAI:
-        """Lazily create and return the AsyncOpenAI client."""
+        """Lazily create and return the ``AsyncOpenAI`` client.
+
+        The client is created once on first access and cached for
+        subsequent calls.
+
+        Returns:
+            A configured :class:`AsyncOpenAI` instance.
+        """
         if self._client is None:
             self._client = AsyncOpenAI(
                 api_key=self.api_key,
@@ -50,14 +82,18 @@ class DeepSeekProvider(BaseLLMProvider):
         return self._client
 
     async def chat(self, messages: list[dict], **kwargs) -> str:
-        """Send a non-streaming chat completion request to DeepSeek.
+        """Send a non‑streaming chat completion request to DeepSeek.
 
         Args:
-            messages: List of message dicts with 'role' and 'content'.
-            **kwargs: Additional parameters (model, temperature, max_tokens, etc.).
+            messages: List of message dicts with ``role`` and ``content``.
+            **kwargs: Additional parameters (model, temperature,
+                max_tokens, etc.).  Default values:
+                ``model`` = ``self.model``,
+                ``temperature`` = 0.7,
+                ``max_tokens`` = 2000.
 
         Returns:
-            The complete response text.
+            The complete response text from DeepSeek.
         """
         model = kwargs.pop("model", self.model)
         temperature = kwargs.pop("temperature", 0.7)
@@ -77,11 +113,15 @@ class DeepSeekProvider(BaseLLMProvider):
         """Send a streaming chat completion request to DeepSeek.
 
         Args:
-            messages: List of message dicts with 'role' and 'content'.
-            **kwargs: Additional parameters (model, temperature, max_tokens, etc.).
+            messages: List of message dicts with ``role`` and ``content``.
+            **kwargs: Additional parameters (model, temperature,
+                max_tokens, etc.).  Default values:
+                ``model`` = ``self.model``,
+                ``temperature`` = 0.7,
+                ``max_tokens`` = 2000.
 
         Yields:
-            Text tokens as they are received.
+            Text tokens (``str``) as they are received from DeepSeek.
         """
         model = kwargs.pop("model", self.model)
         temperature = kwargs.pop("temperature", 0.7)

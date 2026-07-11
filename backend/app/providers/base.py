@@ -1,3 +1,10 @@
+"""Base LLM provider — abstract interface for all LLM providers.
+
+Defines the contract that every concrete provider must implement.
+New providers (OpenAI, Gemini, Qwen, etc.) should subclass
+``BaseLLMProvider`` and provide implementations for all abstract methods.
+"""
+
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, TYPE_CHECKING
 
@@ -6,10 +13,14 @@ if TYPE_CHECKING:
 
 
 class BaseLLMProvider(ABC):
-    """Abstract base class for LLM providers.
+    """Abstract base class for all LLM providers.
 
-    All LLM providers (DeepSeek, OpenAI, Gemini, Agens, etc.) must inherit
-    from this class and implement the abstract methods.
+    Every concrete LLM provider (DeepSeek, Agens, OpenAI, Gemini, Qwen,
+    etc.) **must** inherit from this class and implement:
+
+    - :meth:`capabilities` — declare supported features
+    - :meth:`chat` — non‑streaming chat completion
+    - :meth:`stream_chat` — streaming chat completion (SSE)
     """
 
     @property
@@ -17,8 +28,11 @@ class BaseLLMProvider(ABC):
     def capabilities(self) -> "ModelCapability":
         """Return the capability descriptor for this provider.
 
-        Each concrete provider must implement this property to declare
-        which features it supports (streaming, tools, vision, etc.).
+        Returns:
+            A :class:`ModelCapability` instance describing which features
+            this provider supports (streaming, tools, vision, json, embeddings).
+
+        Each concrete provider **must** override this property.
         """
         ...
 
@@ -27,23 +41,25 @@ class BaseLLMProvider(ABC):
         """Send a non-streaming chat completion request.
 
         Args:
-            messages: A list of message dicts with 'role' and 'content' keys.
-            **kwargs: Additional provider-specific parameters.
+            messages: A list of message dicts with ``role`` and ``content`` keys.
+            **kwargs: Additional provider‑specific parameters (e.g. model,
+                temperature, max_tokens).
 
         Returns:
-            The complete response text from the LLM.
+            The complete response text from the LLM as a single string.
         """
         ...
 
     @abstractmethod
     async def stream_chat(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
-        """Send a streaming chat completion request.
+        """Send a streaming chat completion request (SSE).
 
         Args:
-            messages: A list of message dicts with 'role' and 'content' keys.
-            **kwargs: Additional provider-specific parameters.
+            messages: A list of message dicts with ``role`` and ``content`` keys.
+            **kwargs: Additional provider‑specific parameters (e.g. model,
+                temperature, max_tokens).
 
         Yields:
-            Text tokens as they are received from the LLM.
+            Text tokens (``str``) as they are received from the LLM.
         """
         ...
