@@ -4,6 +4,7 @@ from loguru import logger
 from openai import AsyncOpenAI
 
 from .base import BaseLLMProvider
+from .capabilities import ModelCapability
 
 
 class DeepSeekProvider(BaseLLMProvider):
@@ -25,6 +26,18 @@ class DeepSeekProvider(BaseLLMProvider):
         self.base_url = base_url
         self.model = model
         self._client: AsyncOpenAI | None = None
+        self._capabilities = ModelCapability(
+            supports_stream=True,
+            supports_tools=False,
+            supports_vision=False,
+            supports_json=True,
+            supports_embeddings=False,
+        )
+
+    @property
+    def capabilities(self) -> ModelCapability:
+        """Return the capability descriptor for DeepSeek."""
+        return self._capabilities
 
     @property
     def client(self) -> AsyncOpenAI:
