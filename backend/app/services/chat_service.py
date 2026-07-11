@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Optional
 
 from ..core.config import settings
 from ..providers.base import BaseLLMProvider
-from ..providers.deepseek import DeepSeekProvider
+from ..providers import get_llm_provider
 from ..models.document import Document, DocumentStatus
 from ..schemas.chat import QueryResponse, SourceReference
 from ..services.embedding_service import embedding_service
@@ -305,11 +305,7 @@ class ChatService:
                 pass
 
 
-# Singleton instance — provider is injected from config
+# Singleton instance — provider obtained via factory
 chat_service = ChatService(
-    provider=DeepSeekProvider(
-        api_key=settings.DEEPSEEK_API_KEY,
-        base_url=settings.DEEPSEEK_API_BASE,
-        model=settings.LLM_MODEL,
-    )
+    provider=get_llm_provider()
 )
