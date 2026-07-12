@@ -1,10 +1,13 @@
 """PromptTemplateVersion service — version history & rollback logic."""
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.exceptions import ResourceNotFoundError
+from ..core.prompt_cache import prompt_cache
 from ..models.prompt_template import PromptTemplate
 from ..models.prompt_template_version import PromptTemplateVersion
+from ..schemas.prompt_template import PromptTemplateResponse
 
 
 async def get_prompt_versions(
@@ -67,63 +70,87 @@ async def create_prompt_version(
     return version_record
 
 
-async def rollback_prompt_version(
-    db: AsyncSession, template_id: int, target_version: int
-) -> PromptTemplate | None:
-    """Rollback a prompt template to a previous version's content.
+# ---------------------------------------------------------------------------
+# PromptVersionService — activation‑switch rollback (no new versions created)
+# ---------------------------------------------------------------------------
 
-    Creates a **new** version snapshot containing the content from
-    *target_version* and updates the parent template's ``content`` and
-    ``version`` fields.  No historical versions are deleted.
 
-    Args:
-        db: An active async SQLAlchemy session.
-        template_id: The parent template's id.
-        target_version: The version number to rollback to.
+class PromptVersionService:
+    """Service for prompt version history queries and activation‑switch rollback.
 
-    Returns:
-        The updated :class:`PromptTemplate`, or ``None`` if the
-        target version or template does not exist.
+    Unlike the legacy module‑level ``rollback_prompt_version``, this class
+    implements rollback by reactivating an existing version snapshot **without**
+    creating a new version record.
     """
-    # 1. Look up the target version record
-    stmt = (
-        select(PromptTemplateVersion)
-        .where(
-            PromptTemplateVersion.template_id == template_id,
-            PromptTemplateVersion.version == target_version,
+
+    async def rollback_prompt_version(
+        self,
+        db: AsyncSession,
+        template_id: int,
+        version: int,
+    ) -> PromptTemplate:
+        """Rollback to a previous version by switching the ``is_active`` flag.
+
+        1. Look up the parent :class:`PromptTemplate`.
+        2. Look up the target :class:`PromptTemplateVersion`.
+        3. Deactivate **all** currently active versions for this template.
+        4. Activate the target version.
+        5. Sync the parent template's ``content`` and ``version``.
+        6. Commit in a single transaction.
+        7. Update :data:`~app.core.prompt_cache.prompt_cache`.
+
+        Raises:
+            ResourceNotFoundError: If the template or target version does not exist.
+        """
+        # 1. Resolve the parent prompt template
+        template = await db.get(PromptTemplate, template_id)
+        if template is None:
+            raise ResourceNotFoundError(resource="PromptTemplate", identifier=template_id)
+
+        # 2. Resolve the target version record
+        target_stmt = (
+            select(PromptTemplateVersion)
+            .where(
+                PromptTemplateVersion.template_id == template_id,
+                PromptTemplateVersion.version == version,
+            )
         )
-    )
-    result = await db.execute(stmt)
-    target_record = result.scalar_one_or_none()
-    if target_record is None:
-        logger.warning(
-            f"Rollback failed: version {target_version} not found for template {template_id}"
+        result = await db.execute(target_stmt)
+        target_record = result.scalar_one_or_none()
+        if target_record is None:
+            raise ResourceNotFoundError(
+                resource="PromptTemplateVersion",
+                identifier=f"template_id={template_id}, version={version}",
+            )
+
+        # 3. Deactivate every currently active version for this template
+        await db.execute(
+            update(PromptTemplateVersion)
+            .where(
+                PromptTemplateVersion.template_id == template_id,
+                PromptTemplateVersion.is_active == True,
+            )
+            .values(is_active=False)
         )
-        return None
 
-    # 2. Look up the parent template
-    template = await db.get(PromptTemplate, template_id)
-    if template is None:
-        logger.warning(f"Rollback failed: template {template_id} not found")
-        return None
+        # 4. Activate the target version
+        target_record.is_active = True
 
-    # 3. Create a new version with the old content
-    next_version = await _get_max_version(db, template_id) + 1
-    new_version = PromptTemplateVersion(
-        template_id=template_id,
-        version=next_version,
-        content=target_record.content,
-    )
-    db.add(new_version)
+        # 5. Sync the parent PromptTemplate
+        template.content = target_record.content
+        template.version = target_record.version
 
-    # 4. Update the parent template to point to the rolled-back content
-    template.content = target_record.content
-    template.version = next_version
+        # 6. Commit
+        await db.commit()
+        await db.refresh(template)
 
-    await db.commit()
-    await db.refresh(template)
-    logger.info(
-        f"Rollback: template_id={template_id} -> version {next_version} "
-        f"(content from v{target_version})"
-    )
-    return template
+        logger.info(
+            f"Rollback (activation-switch): template_id={template_id} "
+            f"-> version {version}"
+        )
+
+        # 7. Sync cache
+        response = PromptTemplateResponse(**template.to_dict())
+        await prompt_cache.set(template.name, response)
+
+        return template
