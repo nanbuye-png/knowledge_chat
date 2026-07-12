@@ -1,8 +1,7 @@
-"""Prompts package — prompt management abstraction layer.
+"""提示词包 — 提示词管理抽象层。
 
-Exports the base interface, default implementation, and factory function
-for downstream consumers.  Import from here instead of reaching into
-individual prompt modules.
+对外导出基础接口、默认实现和工厂函数。
+下游消费者应从此处导入，而非直接引用单个提示词模块。
 """
 
 from .base import BasePromptProvider

@@ -1,21 +1,29 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.pool import NullPool
+import os
+from pathlib import Path
+
 from loguru import logger
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool
+
 from ..core.config import settings
 from ..models.document import Base
-from ..models.user import User  # noqa: F401 - register User model for table creation
-from ..models.knowledge_base import KnowledgeBase  # noqa: F401 - register KnowledgeBase model for table creation
-from ..models.conversation import Conversation  # noqa: F401 - register Conversation model for table creation
-from ..models.message import Message  # noqa: F401 - register Message model for table creation
-from ..models.document import Document  # noqa: F401 - needed for migration
-from ..models.llm_model import LLMModel  # noqa: F401 - register LLMModel model for table creation
-from ..models.prompt_template import PromptTemplate  # noqa: F401 - register PromptTemplate model for table creation
-from ..models.prompt_template_version import PromptTemplateVersion  # noqa: F401 - register PromptTemplateVersion model for table creation
-from ..models.knowledge_config import KnowledgeConfig  # noqa: F401 - register KnowledgeConfig model for table creation
-import os
+from ..models.user import User  # noqa: F401 - 注册 User 模型用于建表
+from ..models.knowledge_base import KnowledgeBase  # noqa: F401 - 注册 KnowledgeBase 模型用于建表
+from ..models.conversation import Conversation  # noqa: F401 - 注册 Conversation 模型用于建表
+from ..models.message import Message  # noqa: F401 - 注册 Message 模型用于建表
+from ..models.document import Document  # noqa: F401 - 迁移所需
+from ..models.llm_model import LLMModel  # noqa: F401 - 注册 LLMModel 模型用于建表
+from ..models.prompt_template import PromptTemplate  # noqa: F401 - 注册 PromptTemplate 模型用于建表
+from ..models.prompt_template_version import PromptTemplateVersion  # noqa: F401 - 注册 PromptTemplateVersion 模型用于建表
+from ..models.knowledge_config import KnowledgeConfig  # noqa: F401 - 注册 KnowledgeConfig 模型用于建表
+from ..models.llm_usage import LLMUsage  # noqa: F401 - 注册 LLMUsage 模型用于建表
 
 
-# Create engine based on database URL
+# 根据数据库 URL 创建引擎
 if settings.DATABASE_URL.startswith("sqlite"):
     engine = create_async_engine(
         settings.DATABASE_URL,
@@ -34,7 +42,7 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 
 async def get_db():
-    """Dependency: get async database session."""
+    """依赖注入：获取异步数据库会话。"""
     async with async_session() as session:
         try:
             yield session
@@ -42,92 +50,61 @@ async def get_db():
             await session.close()
 
 
+async def _run_alembic_upgrade() -> bool:
+    """程序化运行 Alembic 迁移。
+
+    返回值：
+        True 表示迁移成功执行（或已是最新版本）。
+        False 表示 alembic_version 表不存在（首次初始化）。
+    """
+    from alembic.config import Config as AlembicConfig
+    from alembic import command as alembic_command
+
+    # 定位 alembic.ini — 该文件位于 backend/ 目录
+    _backend_dir = Path(__file__).resolve().parent.parent.parent
+    _alembic_ini = _backend_dir / "alembic.ini"
+    _alembic_dir = _backend_dir / "alembic"
+
+    if not _alembic_ini.exists():
+        logger.warning("alembic.ini not found, falling back to create_all")
+        return False
+
+    alembic_cfg = AlembicConfig(str(_alembic_ini))
+    # 确保正确的 script_location 覆盖 ini 中的值
+    alembic_cfg.set_main_option("script_location", str(_alembic_dir))
+
+    try:
+        alembic_command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic 迁移执行成功")
+        return True
+    except Exception as e:
+        logger.warning(f"Alembic 升级失败: {e}")
+        return False
+
+
 async def init_db():
-    """Create all tables on startup."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created/verified successfully")
+    """启动时初始化数据库。
 
-    # Migration: add knowledge_base_id to documents (for existing DBs)
-    await _migrate_documents_add_kb_id()
+    生产环境：运行 ``alembic upgrade head``，仅在数据库为空/首次初始化时
+    回退到 ``create_all``。
 
-    # Migration: add email column to users
-    await _migrate_users_add_email()
+    旧的 ad-hoc 迁移（``_migrate_users_add_email`` 和
+    ``_migrate_documents_add_kb_id``）已由初始 Alembic 迁移处理，不再需要。
+    """
+    _ran_alembic = await _run_alembic_upgrade()
 
+    if not _ran_alembic:
+        # 开发环境/首次启动回退：从模型元数据创建表
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("通过 create_all 创建数据库表（回退模式）")
+
+    logger.info("数据库表就绪")
 
 
 async def close_db():
-    """Dispose engine on shutdown."""
+    """关闭时释放引擎。"""
     await engine.dispose()
-    logger.info("Database engine disposed")
+    logger.info("数据库引擎已释放")
 
 
-async def _migrate_users_add_email():
-    """Migrate existing users: add email column if missing."""
-    from sqlalchemy import text
-
-    try:
-        async with engine.begin() as conn:
-            if settings.DATABASE_URL.startswith("sqlite"):
-                try:
-                    await conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255)"))
-                    logger.info("Migration: added email column to users")
-                except Exception:
-                    pass  # Column already exists
-            else:
-                try:
-                    await conn.execute(text(
-                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)"
-                    ))
-                except Exception:
-                    pass
-    except Exception as e:
-        logger.warning(f"Migration _migrate_users_add_email: {e}")
-
-
-async def _migrate_documents_add_kb_id():
-    """Migrate existing documents: add knowledge_base_id column and assign to default KB."""
-    from sqlalchemy import text
-
-    try:
-        async with engine.begin() as conn:
-            # 1. Add column if it doesn't exist (SQLite safe: try, ignore if exists)
-            if settings.DATABASE_URL.startswith("sqlite"):
-                try:
-                    await conn.execute(text(
-                        "ALTER TABLE documents ADD COLUMN knowledge_base_id INTEGER REFERENCES knowledge_bases(id)"
-                    ))
-                    logger.info("Migration: added knowledge_base_id column to documents")
-                except Exception:
-                    # Column already exists
-                    pass
-            else:
-                # PostgreSQL: add column if not exists
-                try:
-                    await conn.execute(text(
-                        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS knowledge_base_id INTEGER REFERENCES knowledge_bases(id)"
-                    ))
-                except Exception:
-                    pass
-
-            # 2. Assign existing documents with NULL kb_id to each user's default KB
-            # For each user, find their default KB (first one created), then assign orphan docs
-            await conn.execute(text("""
-                UPDATE documents
-                SET knowledge_base_id = (
-                    SELECT kb.id FROM knowledge_bases kb
-                    WHERE kb.user_id = (
-                        SELECT u.id FROM users u
-                        JOIN knowledge_bases kb2 ON kb2.user_id = u.id
-                        -- This is a heuristic: assign to ANY user's default KB
-                        -- Since old docs had no user separation, we use the first KB found
-                        LIMIT 1
-                    )
-                    LIMIT 1
-                )
-                WHERE knowledge_base_id IS NULL
-            """))
-            logger.info("Migration: assigned existing documents to default knowledge bases")
-
-    except Exception as e:
-        logger.warning(f"Migration _migrate_documents_add_kb_id: {e}")

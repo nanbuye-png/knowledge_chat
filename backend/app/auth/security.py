@@ -4,10 +4,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
+    """使用 bcrypt 对密码进行哈希。"""
     return pwd_context.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a bcrypt hash."""
+    """验证明文密码与 bcrypt 哈希是否匹配。"""
     return pwd_context.verify(plain_password, hashed_password)

@@ -18,11 +18,20 @@ export interface SourceReference {
   text: string
 }
 
+export interface Citation {
+  document_id: string
+  filename: string
+  chunk_id: number
+  score: number
+  metadata?: Record<string, any>
+}
+
 export interface Message {
   id: number | string
   role: 'user' | 'assistant'
   content: string
   sources?: SourceReference[]
+  citations?: Citation[]
   hasKnowledge?: boolean
   timestamp: number
 }

@@ -3,12 +3,12 @@ from typing import Optional
 from pathlib import Path
 import os
 
-# Compute the project backend directory (3 levels up from this file: core/config.py -> app -> backend)
+# 计算项目 backend 目录（从此文件向上 3 级: core/config.py -> app -> backend）
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _make_absolute(path: str) -> str:
-    """Convert a relative path to an absolute path rooted at the backend directory."""
+    """将相对路径转换为以 backend 目录为根的绝对路径。"""
     p = Path(path)
     if p.is_absolute():
         return str(p)
@@ -16,53 +16,53 @@ def _make_absolute(path: str) -> str:
 
 
 class Settings(BaseSettings):
-    # App
+    # 应用
     APP_NAME: str = "智能知识库问答系统"
     APP_VERSION: str = "1.0.0"
     LOG_LEVEL: str = "INFO"
 
-    # LLM Provider
-    LLM_PROVIDER: str = "deepseek"  # deepseek or agens
+    # LLM 提供商
+    LLM_PROVIDER: str = "deepseek"  # deepseek 或 agens
 
-    # DeepSeek
+    # DeepSeek 配置
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
     LLM_MODEL: str = "deepseek-chat"
 
-    # Agens
+    # Agens 配置
     AGENS_API_KEY: str = ""
     AGENS_API_BASE: str = ""
 
-    # Database
+    # 数据库
     DATABASE_URL: str = "sqlite+aiosqlite:///./knowledge.db"
 
-    # Vector Store
-    VECTOR_STORE_TYPE: str = "chroma"  # chroma or qdrant
+    # 向量存储
+    VECTOR_STORE_TYPE: str = "chroma"  # chroma 或 qdrant
     QDRANT_URL: Optional[str] = None
     QDRANT_API_KEY: Optional[str] = None
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     COLLECTION_NAME: str = "documents"
     EMBEDDING_DIM: int = 768
 
-    # Embedding
+    # 嵌入
     EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
 
-    # File upload
+    # 文件上传
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_EXTENSIONS: set = {
         ".pdf", ".docx", ".md", ".txt", ".doc"
     }
 
-    # Chunking
+    # 分块
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100
 
-    # JWT Auth
+    # JWT 认证
     SECRET_KEY: str = "knowledge-chat-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
 
-    # CORS
+    # 跨域
     CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000", "http://localhost"]
 
     class Config:
@@ -73,12 +73,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Normalize paths: fix relative paths to be absolute, rooted at the backend directory.
-# This handles DATABASE_URL (SQLite), CHROMA_PERSIST_DIR, and UPLOAD_DIR.
-# DATABASE_URL contains a file path inside the URL, so we parse it carefully.
+# 标准化路径：将相对路径修复为以 backend 目录为根的绝对路径。
+# 处理 DATABASE_URL（SQLite）、CHROMA_PERSIST_DIR 和 UPLOAD_DIR。
+# DATABASE_URL 在 URL 中包含文件路径，因此需要仔细解析。
 _db_url = settings.DATABASE_URL
 if _db_url.startswith("sqlite"):
-    # Extract the file path part after 'sqlite+aiosqlite:///' or 'sqlite:///'
+    # 提取 'sqlite+aiosqlite:///' 或 'sqlite:///' 之后的文件路径部分
     for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
         if _db_url.startswith(prefix):
             _db_path = _db_url[len(prefix):]
@@ -87,6 +87,6 @@ if _db_url.startswith("sqlite"):
 settings.CHROMA_PERSIST_DIR = _make_absolute(settings.CHROMA_PERSIST_DIR)
 settings.UPLOAD_DIR = _make_absolute(settings.UPLOAD_DIR)
 
-# Ensure directories exist
+# 确保目录存在
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)

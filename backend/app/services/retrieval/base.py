@@ -1,9 +1,43 @@
-"""Base Retriever — abstract interface for all document retrievers.
+"""Base Retriever / RetrievalProvider — abstract interfaces for document retrievers.
 
 Every concrete retriever (Chroma, Qdrant, Milvus, hybrid, …) MUST inherit
 from :class:`BaseRetriever` and implement :meth:`retrieve`.
 """
 from abc import ABC, abstractmethod
+from typing import Any
+
+
+class RetrievalProvider(ABC):
+    """High‑level retrieval interface for the pipeline.
+
+    Encapsulates the full query → results flow.  Implementations may
+    handle embedding generation internally or delegate to an embedding
+    service.
+
+    Usage::
+
+        provider = SomeRetrievalProvider()
+        results = await provider.retrieve("什么是知识库？", top_k=5)
+    """
+
+    @abstractmethod
+    async def retrieve(
+        self,
+        query: Any,
+        top_k: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Search for documents matching *query*.
+
+        Args:
+            query: The query — may be a raw string or an embedding vector
+                depending on the implementation.
+            top_k: Maximum number of results to return.
+
+        Returns:
+            A list of result dicts with at least: ``document_id``,
+            ``filename``, ``chunk_index``, ``text``, ``score``.
+        """
+        ...
 
 
 class BaseRetriever(ABC):

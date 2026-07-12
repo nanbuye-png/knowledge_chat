@@ -15,6 +15,21 @@ class EmbeddingProvider(ABC):
     """
 
     @abstractmethod
+    async def embed_text(self, text: str) -> list[float]:
+        """Generate an embedding for a single text.
+
+        Canonical single‑text entry point.  Implementations may delegate
+        to :meth:`embed_documents` internally.
+
+        Args:
+            text: The text to embed.
+
+        Returns:
+            A list of floats representing the embedding vector.
+        """
+        ...
+
+    @abstractmethod
     async def embed_query(self, text: str) -> list[float]:
         """Generate an embedding for a single query text.
 

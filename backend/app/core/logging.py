@@ -4,10 +4,10 @@ from .config import settings
 
 
 def setup_logging():
-    """Configure structured logging for the application."""
+    """配置应用的结构化日志。"""
     logger.remove()
 
-    # Console handler
+    # 控制台处理器
     logger.add(
         sys.stdout,
         format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
@@ -18,7 +18,7 @@ def setup_logging():
         colorize=True,
     )
 
-    # File handler with rotation
+    # 带轮转的文件处理器
     logger.add(
         "logs/app_{time:YYYY-MM-DD}.log",
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",

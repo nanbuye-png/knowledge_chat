@@ -1,14 +1,13 @@
-"""Prompt factory — centralizes prompt provider creation.
+"""提示词工厂 — 集中管理提示词提供者的创建。
 
-This module is the **single place** where prompt provider instances
-are created.  Consumers should call :func:`get_prompt_provider` instead
-of importing and instantiating concrete providers directly.
+本模块是创建提示词提供者实例的 **唯一入口**。
+消费者应调用 :func:`get_prompt_provider` 而非直接导入和实例化具体提供者。
 
-To add a new prompt provider
------------------------------
-1. Create a new class inheriting from :class:`BasePromptProvider`.
-2. Register it in :data:`SUPPORTED_PROMPTS`.
-3. All other code paths remain unchanged.
+新增提示词提供者的步骤
+-------------------------
+1. 创建一个继承 :class:`BasePromptProvider` 的新类。
+2. 在 :data:`SUPPORTED_PROMPTS` 中注册它。
+3. 所有其他代码路径保持不变。
 """
 
 from typing import Optional
@@ -20,18 +19,17 @@ from .default import DefaultPromptProvider
 from .database import DatabasePromptProvider
 
 # ---------------------------------------------------------------------------
-# Prompt provider registry
+# 提示词提供者注册表
 # ---------------------------------------------------------------------------
 
 SUPPORTED_PROMPTS: dict[str, type[BasePromptProvider]] = {
     "default": DefaultPromptProvider,
     "database": DatabasePromptProvider,
 }
-"""Mapping from prompt provider name (lowercase) to its concrete class.
+"""提示词提供者名称（小写）到其具体类的映射。
 
-Used by :func:`get_prompt_provider` to look up providers.  Registering a
-new prompt provider here is the **only** change needed to make it
-available to the rest of the system.
+由 :func:`get_prompt_provider` 用于查找提供者。在此处注册新的
+提示词提供者是使其对系统其余部分可用的 **唯一** 变更。
 """
 
 
@@ -39,25 +37,25 @@ def get_prompt_provider(
     name: str | None = None,
     session: Optional[AsyncSession] = None,
 ) -> BasePromptProvider:
-    """Return a prompt provider instance by name.
+    """按名称返回提示词提供者实例。
 
-    When called **without arguments**, defaults to ``"default"``.
+    当 **无参数** 调用时，默认为 ``"default"``。
 
-    Args:
-        name: Prompt provider name (e.g. ``"default"``, ``"database"``).
-            If ``None``, defaults to ``"default"``.
-        session: An async SQLAlchemy session.  **Required** when *name*
-            is ``"database"``; ignored otherwise.
+    参数：
+        name: 提示词提供者名称（如 ``"default"``、``"database"``）。
+            如果为 ``None``，则默认为 ``"default"``。
+        session: 异步 SQLAlchemy 会话。当 *name* 为 ``"database"``
+            时 **必须** 提供；否则忽略。
 
-    Returns:
-        A fully configured :class:`BasePromptProvider` instance.
+    返回值：
+        完整配置的 :class:`BasePromptProvider` 实例。
 
-    Raises:
-        ValueError: If the requested prompt provider name is not
-            registered in :data:`SUPPORTED_PROMPTS`, or if
-            ``"database"`` is requested without a *session*.
+    异常：
+        ValueError: 如果请求的提示词提供者名称未在
+            :data:`SUPPORTED_PROMPTS` 中注册，或者请求
+            ``"database"`` 时未提供 *session*。
 
-    Example::
+    示例::
 
         provider = get_prompt_provider()                          # → DefaultPromptProvider
         provider = get_prompt_provider("default")                 # → DefaultPromptProvider
@@ -68,15 +66,15 @@ def get_prompt_provider(
     if resolved == "database":
         if session is None:
             raise ValueError(
-                "DatabasePromptProvider requires an AsyncSession. "
-                "Pass `session=your_async_session` to get_prompt_provider()."
+                "DatabasePromptProvider 需要 AsyncSession。"
+                "请将 `session=your_async_session` 传递给 get_prompt_provider()。"
             )
         return DatabasePromptProvider(session=session)
 
     provider_cls = SUPPORTED_PROMPTS.get(resolved)
     if provider_cls is None:
         raise ValueError(
-            f"Unknown prompt provider: '{resolved}'. "
-            f"Currently supported: {', '.join(SUPPORTED_PROMPTS)}"
+            f"未知的提示词提供者: '{resolved}'。"
+            f"当前支持的: {', '.join(SUPPORTED_PROMPTS)}"
         )
     return provider_cls()

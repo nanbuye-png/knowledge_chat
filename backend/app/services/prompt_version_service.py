@@ -1,4 +1,4 @@
-"""PromptTemplateVersion service — version history & rollback logic."""
+"""PromptTemplateVersion 服务 — 版本历史与回滚逻辑。"""
 from loguru import logger
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession

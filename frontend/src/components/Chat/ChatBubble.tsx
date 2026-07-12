@@ -8,6 +8,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Message } from '../../types'
 import SourceReference from './SourceReference'
+import CitationCard from './CitationCard'
 
 interface ChatBubbleProps {
   message: Message
@@ -147,6 +148,10 @@ export default function ChatBubble({ message, isStreaming }: ChatBubbleProps) {
         {/* Sources */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <SourceReference sources={message.sources} />
+        )}
+
+        {!isUser && message.citations && message.citations.length > 0 && (
+          <CitationCard citations={message.citations} />
         )}
 
         {/* No knowledge indicator */}

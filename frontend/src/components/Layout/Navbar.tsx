@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
-import { Brain, Menu, X, LogOut, User } from 'lucide-react'
+import { Brain, Menu, X, LogOut, User, BarChart3, FileEdit } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import ThemeToggle from '../UI/ThemeToggle'
 import ModeSwitch from '../UI/ModeSwitch'
 
@@ -13,6 +14,22 @@ interface NavbarProps {
 }
 
 export default function Navbar({ mode, sidebarOpen, onToggleMode, onToggleSidebar, onLogout, username }: NavbarProps) {
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const navLink = (path: string, label: string, icon: React.ReactNode) => (
+    <button
+      onClick={() => navigate(path)}
+      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        location.pathname === path
+          ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+      }`}
+    >
+      {icon}{label}
+    </button>
+  )
+
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
@@ -50,6 +67,12 @@ export default function Navbar({ mode, sidebarOpen, onToggleMode, onToggleSideba
         {/* Center: Mode switch */}
         <div className="hidden md:block">
           <ModeSwitch mode={mode} onToggle={onToggleMode} />
+        </div>
+
+        {/* Center: Navigation */}
+        <div className="hidden md:flex items-center gap-1">
+          {navLink('/usage', '用量', <BarChart3 className="w-3.5 h-3.5" />)}
+          {navLink('/prompts', 'Prompt', <FileEdit className="w-3.5 h-3.5" />)}
         </div>
 
         {/* Right: Actions */}

@@ -11,6 +11,7 @@ from ..models.knowledge_base import KnowledgeBase
 from ..schemas.document import DocumentResponse, DocumentListResponse
 from ..storage.vector_store import vector_store
 
+from .knowledge.context import KnowledgePipelineContext
 from .knowledge.pipeline import KnowledgePipeline
 
 
@@ -77,12 +78,13 @@ class DocumentService:
 
         # Process via KnowledgePipeline
         try:
-            chunk_count = await self._pipeline.process_document(
+            context = KnowledgePipelineContext(
                 file_path=file_path,
                 document_id=doc.id,
                 filename=doc.filename,
                 knowledge_base_id=knowledge_base_id,
             )
+            chunk_count = await self._pipeline.process_document(context)
 
             # Update document status to completed
             doc.status = DocumentStatus.COMPLETED.value

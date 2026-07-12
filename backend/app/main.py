@@ -6,7 +6,7 @@ from loguru import logger
 import os
 import sys
 
-# Add parent directory to path
+# 将父目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from .core.config import settings
@@ -21,6 +21,8 @@ from .api.conversation import router as conversation_router
 from .api.llm_model import router as llm_model_router
 from .api.prompt_template import router as prompt_template_router
 from .api.prompt_version import router as prompt_version_router
+from .api.knowledge_config import router as knowledge_config_router
+from .api.usage import router as usage_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
@@ -28,14 +30,14 @@ from .services.embedding_service import embedding_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle manager."""
-    # Startup
+    """应用生命周期管理器。"""
+    # 启动
     setup_logging()
     logger.info("=" * 60)
     logger.info(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 正在启动...")
     logger.info("=" * 60)
 
-    # Initialize database
+    # 初始化数据库
     try:
         await init_db()
         logger.info("✅ Database initialized")
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Database initialization issue: {e}")
         logger.info("Will continue without database...")
 
-    # Initialize vector store
+    # 初始化向量存储
     try:
         await vector_store.initialize()
         logger.info("✅ Vector store initialized")
@@ -51,7 +53,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Vector store initialization issue: {e}")
         logger.info("Will continue without vector store...")
 
-    # Initialize embedding service
+    # 初始化嵌入服务
     try:
         await embedding_service.initialize()
         logger.info("✅ Embedding service initialized")
@@ -59,7 +61,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Embedding service initialization issue: {e}")
         logger.info("Will continue without embedding service...")
 
-    # Startup summary
+    # 启动摘要
     logger.info("=" * 60)
     logger.info(f"✅ {settings.APP_NAME} 启动完成")
     logger.info(f"📡 API 文档: http://localhost:8000/docs")
@@ -71,7 +73,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
+    # 关闭
     logger.info("🛑 正在关闭服务...")
     await close_db()
     await vector_store.close()
@@ -88,7 +90,7 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS middleware
+# 跨域中间件
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -98,13 +100,13 @@ app.add_middleware(
 )
 
 
-# Global exception handlers
+# 全局异常处理器
 app.add_exception_handler(AppError, app_error_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler for unhandled errors."""
+    """全局异常处理器：处理未捕获的错误。"""
     logger.error(f"Unhandled error: {exc} on {request.url}")
     return JSONResponse(
         status_code=500,
@@ -115,7 +117,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Register routers
+# 注册路由
 app.include_router(health_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
@@ -125,11 +127,13 @@ app.include_router(conversation_router)
 app.include_router(llm_model_router)
 app.include_router(prompt_template_router)
 app.include_router(prompt_version_router)
+app.include_router(knowledge_config_router)
+app.include_router(usage_router)
 
 
 @app.get("/", tags=["根路径"])
 async def root():
-    """Root endpoint - API info."""
+    """根路径 - API 信息。"""
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,

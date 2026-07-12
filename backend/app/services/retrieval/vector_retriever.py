@@ -1,6 +1,6 @@
 """Vector Retriever — concrete retriever backed by ChromaDB."""
 
-from ..storage.vector_store import vector_store
+from ...storage.vector_store import vector_store
 
 from .base import BaseRetriever
 

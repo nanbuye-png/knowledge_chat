@@ -21,7 +21,10 @@ class EmbeddingProviderFactory:
     """
 
     @staticmethod
-    def create(settings: Settings) -> EmbeddingProvider:
+    def create(
+        settings: Settings,
+        model_override: str | None = None,
+    ) -> EmbeddingProvider:
         """Return the default embedding provider.
 
         In the future this will inspect configuration
@@ -30,11 +33,13 @@ class EmbeddingProviderFactory:
 
         Args:
             settings: Application settings object.
+            model_override: Optional per‑KB embedding model name.
+                Falls back to ``settings.EMBEDDING_MODEL`` when ``None``.
 
         Returns:
             A :class:`DefaultEmbeddingProvider` instance.
         """
         return DefaultEmbeddingProvider(
-            model_name=settings.EMBEDDING_MODEL,
+            model_name=model_override if model_override is not None else settings.EMBEDDING_MODEL,
             embedding_dim=settings.EMBEDDING_DIM,
         )

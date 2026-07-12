@@ -20,17 +20,24 @@ class ChunkerFactory:
     """
 
     @staticmethod
-    def create(settings: Settings) -> BaseChunker:
+    def create(
+        settings: Settings,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
+    ) -> BaseChunker:
         """Return the default chunker (recursive paragraph‑aware).
 
         Args:
             settings: Application settings object.
+            chunk_size: Optional per‑KB override for chunk size.
+                Falls back to ``settings.CHUNK_SIZE`` when ``None``.
+            chunk_overlap: Optional per‑KB override for chunk overlap.
+                Falls back to ``settings.CHUNK_OVERLAP`` when ``None``.
 
         Returns:
-            A :class:`RecursiveChunker` instance configured with
-            ``CHUNK_SIZE`` and ``CHUNK_OVERLAP`` from settings.
+            A :class:`RecursiveChunker` instance.
         """
         return RecursiveChunker(
-            chunk_size=settings.CHUNK_SIZE,
-            chunk_overlap=settings.CHUNK_OVERLAP,
+            chunk_size=chunk_size if chunk_size is not None else settings.CHUNK_SIZE,
+            chunk_overlap=chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP,
         )

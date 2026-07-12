@@ -10,46 +10,16 @@ into this pipeline without affecting ChatService.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 from loguru import logger
 
+from ..services.citation.builder import CitationBuilder
 from ..services.embedding_service import embedding_service
+from ..storage.database import async_session
+from .knowledge.runtime_config import KnowledgeRuntimeConfigService
 from .retrieval.factory import RetrieverFactory
-
-# ---------------------------------------------------------------------------
-# Result types
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class RetrievalResult:
-    """Container returned by :meth:`RetrievalPipeline.retrieve`.
-
-    Attributes:
-        results: Raw search results from the vector store.
-        context: Formatted context string ready for prompt insertion.
-        sources: List of source dicts suitable for frontend display.
-        metadata: Reserved for future pipeline metadata (latency, recall, …).
-        has_results: ``False`` when no relevant documents were found.
-    """
-
-    results: list[dict[str, Any]] = field(default_factory=list)
-    """Raw chunks returned by the vector store."""
-
-    context: str = ""
-    """Concatenated context string (e.g. '[来源1] 文件名：…')"""
-
-    sources: list[dict[str, Any]] = field(default_factory=list)
-    """Simplified source info for the frontend."""
-
-    metadata: dict[str, Any] = field(default_factory=dict)
-    """Reserved for future pipeline metadata (latency per step, recall count, …)."""
-
-    has_results: bool = False
-    """Convenience flag: ``True`` when at least one relevant chunk was found."""
-
+from .retrieval.models import RetrievalResult
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -75,6 +45,8 @@ class RetrievalPipeline:
 
     def __init__(self) -> None:
         self._retriever = RetrieverFactory.create()
+        self._runtime_config_service = KnowledgeRuntimeConfigService()
+        self._citation_builder = CitationBuilder()
 
     # ------------------------------------------------------------------
     # Public API
@@ -105,8 +77,17 @@ class RetrievalPipeline:
             A :class:`RetrievalResult` containing results, context, sources,
             and a convenience :attr:`~RetrievalResult.has_results` flag.
         """
-        top_k = top_k if top_k is not None else self._top_k
         min_score = min_score if min_score is not None else self._min_score
+
+        # Resolve top_k: caller override → per‑KB config → default (5)
+        if top_k is None:
+            async with async_session() as session:
+                runtime_config = await self._runtime_config_service.resolve(
+                    session, knowledge_base_id
+                )
+            top_k = runtime_config.retrieval_top_k
+        else:
+            logger.debug(f"Using caller‑supplied top_k={top_k}")
 
         # 1. Embed
         query_embedding = await embedding_service.embed_query(question)
@@ -133,7 +114,10 @@ class RetrievalPipeline:
         if not relevant:
             return RetrievalResult()
 
-        # 4. Build context & sources
+        # 4. Build citations
+        citations = self._citation_builder.build(relevant)
+
+        # 5. Build context & sources (backward‑compatible)
         context_parts: list[str] = []
         sources: list[dict[str, Any]] = []
 
@@ -153,5 +137,6 @@ class RetrievalPipeline:
             results=relevant,
             context="\n\n".join(context_parts),
             sources=sources,
+            citations=citations,
             has_results=True,
         )

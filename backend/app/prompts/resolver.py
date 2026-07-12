@@ -1,10 +1,8 @@
-"""Prompt Provider Resolver — runtime prompt provider selection.
+"""提示词 Provider 解析器 — 运行时选择提示词提供者。
 
-Provides :func:`resolve_prompt_provider` which creates a
-:class:`DatabasePromptProvider` backed by the given async session.
-The returned provider attempts to load templates from the database
-first, falling back to the default provider when no matching template
-is found.
+提供 :func:`resolve_prompt_provider`，用于创建基于给定异步会话的
+:class:`DatabasePromptProvider`。返回的提供者首先尝试从数据库加载模板，
+当没有匹配模板时回退到默认提供者。
 """
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,21 +11,19 @@ from .factory import get_prompt_provider
 
 
 def resolve_prompt_provider(session: AsyncSession) -> BasePromptProvider:
-    """Create a database‑backed prompt provider for the given session.
+    """为给定会话创建基于数据库的提示词提供者。
 
-    Returns a :class:`DatabasePromptProvider` that queries the
-    ``prompt_templates`` table via *session*.  When no matching template
-    exists in the database, the provider automatically falls back to
-    :class:`DefaultPromptProvider`.
+    返回一个 :class:`DatabasePromptProvider`，通过 *session* 查询
+    ``prompt_templates`` 表。当数据库中不存在匹配模板时，
+    提供者会自动回退到 :class:`DefaultPromptProvider`。
 
-    Args:
-        session: An active async SQLAlchemy session.
+    参数：
+        session: 活动的异步 SQLAlchemy 会话。
 
-    Returns:
-        A fully configured :class:`BasePromptProvider` instance.
+    返回值：
+        完整配置的 :class:`BasePromptProvider` 实例。
 
-    Raises:
-        SQLAlchemyError: If the session is not valid or a database
-            error occurs during provider initialisation.
+    异常：
+        SQLAlchemyError: 如果会话无效或在提供者初始化期间发生数据库错误。
     """
     return get_prompt_provider("database", session=session)

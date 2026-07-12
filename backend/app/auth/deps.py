@@ -16,7 +16,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Dependency: extract and validate JWT token, return current user."""
+    """依赖注入：提取并验证 JWT token，返回当前用户。"""
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,9 +60,9 @@ async def get_optional_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
-    """Dependency: extract JWT token if present, return user or None.
+    """依赖注入：如果存在则提取 JWT token，返回用户或 None。
     
-    This is for endpoints that work both authenticated and unauthenticated.
+    用于同时支持认证和未认证的端点。
     """
     if token is None:
         return None

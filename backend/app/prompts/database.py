@@ -1,9 +1,8 @@
-"""Database Prompt Provider — loads prompt templates from the database.
+"""数据库提示词 Provider — 从数据库加载提示词模板。
 
-Provides a :class:`DatabasePromptProvider` that reads prompt templates
-from the ``prompt_templates`` table at runtime.  When no matching template
-is found in the database, it falls back to a configured
-:class:`BasePromptProvider` (defaulting to :class:`DefaultPromptProvider`).
+提供 :class:`DatabasePromptProvider`，在运行时从 ``prompt_templates`` 表
+读取提示词模板。当数据库中没有匹配的模板时，回退到配置的
+:class:`BasePromptProvider`（默认为 :class:`DefaultPromptProvider`）。
 """
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,18 +16,18 @@ from ..models.prompt_template import PromptTemplate
 async def _query_template(
     session: AsyncSession, prompt_type: str
 ) -> PromptTemplate | None:
-    """Query the database for an enabled template of the given type.
+    """查询数据库中给定类型的启用模板。
 
-    Args:
-        session: An active async SQLAlchemy session.
-        prompt_type: The ``prompt_type`` value to look up (e.g. ``"chat"``, ``"rag"``).
+    参数：
+        session: 活动的异步 SQLAlchemy 会话。
+        prompt_type: 要查询的 ``prompt_type`` 值（如 ``"chat"``、``"rag"``）。
 
-    Returns:
-        The first matching :class:`PromptTemplate` ordered by ``id``
-        ascending, or ``None`` if no enabled template exists.
+    返回值：
+        按 ``id`` 升序排列的第一个匹配 :class:`PromptTemplate`，
+        如果没有启用的模板则返回 ``None``。
 
-    Raises:
-        SQLAlchemyError: Any database error is propagated to the caller.
+    异常：
+        SQLAlchemyError: 任何数据库错误都会传播给调用方。
     """
     stmt = (
         select(PromptTemplate)
@@ -44,28 +43,26 @@ async def _query_template(
 
 
 class DatabasePromptProvider(BasePromptProvider):
-    """Prompt provider that reads templates from the ``prompt_templates`` table.
+    """从 ``prompt_templates`` 表读取模板的提示词提供者。
 
-    Every prompt method first tries to load the corresponding template from
-    the database (``prompt_type`` = ``"chat"`` / ``"rag"``, ``enabled = True``).
-    If a matching record is found its ``content`` is used (with optional
-    ``str.format`` interpolation).  Otherwise the request is delegated to
-    *fallback_provider*.
+    每个提示词方法首先尝试从数据库加载对应模板
+    （``prompt_type`` = ``"chat"`` / ``"rag"``，``enabled = True``）。
+    如果找到匹配记录，则使用其 ``content``（支持可选的
+    ``str.format`` 插值）。否则将请求委托给 *fallback_provider*。
 
-    Usage::
+    用法::
 
         provider = DatabasePromptProvider(session=db)
-        # or with a custom fallback:
+        # 或使用自定义回退：
         provider = DatabasePromptProvider(
             session=db,
             fallback_provider=CustomPromptProvider(),
         )
 
-    Args:
-        session: An async SQLAlchemy session used for all DB queries.
-        fallback_provider: A :class:`BasePromptProvider` used when no
-            matching template exists in the database.  Defaults to
-            :class:`DefaultPromptProvider`.
+    参数：
+        session: 用于所有数据库查询的异步 SQLAlchemy 会话。
+        fallback_provider: 当数据库中不存在匹配模板时使用的
+            :class:`BasePromptProvider`。默认为 :class:`DefaultPromptProvider`。
     """
 
     def __init__(
@@ -75,104 +72,101 @@ class DatabasePromptProvider(BasePromptProvider):
     ) -> None:
         self._session = session
         self._fallback = fallback_provider or DefaultPromptProvider()
-        logger.debug("DatabasePromptProvider initialised")
+        logger.debug("DatabasePromptProvider 已初始化")
 
     # ------------------------------------------------------------------
-    # BasePromptProvider interface (async variants)
+    # BasePromptProvider 接口（异步变体）
     # ------------------------------------------------------------------
 
     @property
     def system_prompt(self) -> str:
-        """Synchronous accessor — returns fallback system prompt.
+        """同步访问器 — 返回回退的系统提示词。
 
-        DatabasePromptProvider requires async I/O for database access.
-        For synchronous contexts, the fallback provider's system prompt
-        is returned directly.
+        DatabasePromptProvider 需要异步 I/O 来访问数据库。
+        在同步上下文中，直接返回回退提供者的系统提示词。
 
-        Use :meth:`get_system_prompt` for database‑backed resolution.
+        使用 :meth:`get_system_prompt` 进行基于数据库的解析。
         """
         return self._fallback.system_prompt
 
     async def get_system_prompt(self) -> str:
-        """Resolve the system prompt from the database or fallback.
+        """从数据库或回退解析系统提示词。
 
-        Looks for a template with ``prompt_type == "chat"`` and
-        ``enabled == True``.
+        查找 ``prompt_type == "chat"`` 且 ``enabled == True`` 的模板。
 
-        Returns:
-            The ``content`` of the matching template, or the
-            fallback provider's ``system_prompt``.
+        返回值：
+            匹配模板的 ``content``，或回退提供者的 ``system_prompt``。
         """
         template = await _query_template(self._session, "chat")
         if template is not None:
-            logger.debug("Using system prompt from database (id={})".format(template.id))
+            logger.debug("使用数据库中的系统提示词 (id={})".format(template.id))
             return template.content
-        logger.debug("No database system prompt found — using fallback")
+        logger.debug("未找到数据库系统提示词 — 使用回退")
         return self._fallback.system_prompt
 
     def build_rag_prompt(self, context: str, question: str) -> str:
-        """Synchronous RAG prompt — delegates to fallback provider.
+        """同步 RAG 提示词 — 委托给回退提供者。
 
-        For async context see :meth:`get_rag_prompt`.
+        异步上下文请使用 :meth:`get_rag_prompt`。
         """
         return self._fallback.build_rag_prompt(context, question)
 
     async def get_rag_prompt(self, context: str, question: str) -> str:
-        """Build RAG prompt from the database or fallback.
+        """从数据库或回退构建 RAG 提示词。
 
-        Looks for a template with ``prompt_type == "rag"`` and
-        ``enabled == True``.  If found, formats ``content`` with
-        ``context`` and ``question`` via :meth:`str.format`.
+        查找 ``prompt_type == "rag"`` 且 ``enabled == True`` 的模板。
+        如果找到，则使用 ``str.format`` 将 ``context`` 和 ``question``
+        格式化到 ``content`` 中。
 
-        Args:
-            context: Retrieved document chunks.
-            question: The user's question.
+        参数：
+            context: 检索到的文档块。
+            question: 用户的问题。
 
-        Returns:
-            A formatted prompt string.
+        返回值：
+            格式化后的提示词字符串。
         """
         template = await _query_template(self._session, "rag")
         if template is not None:
             try:
                 formatted = template.content.format(context=context, question=question)
-                logger.debug("Using RAG prompt from database (id={})".format(template.id))
+                logger.debug("使用数据库中的 RAG 提示词 (id={})".format(template.id))
                 return formatted
             except KeyError as exc:
                 logger.warning(
-                    "RAG template content missing placeholder: {} — falling back".format(exc)
+                    "RAG 模板 content 缺少占位符: {} — 回退".format(exc)
                 )
-        logger.debug("No database RAG prompt found — using fallback")
+        logger.debug("未找到数据库 RAG 提示词 — 使用回退")
         return self._fallback.build_rag_prompt(context, question)
 
     def build_chat_prompt(self, message: str) -> str:
-        """Synchronous chat prompt — delegates to fallback provider.
+        """同步聊天提示词 — 委托给回退提供者。
 
-        For async context see :meth:`get_chat_prompt`.
+        异步上下文请使用 :meth:`get_chat_prompt`。
         """
         return self._fallback.build_chat_prompt(message)
 
     async def get_chat_prompt(self, message: str) -> str:
-        """Build chat prompt from the database or fallback.
+        """从数据库或回退构建聊天提示词。
 
-        Looks for a template with ``prompt_type == "chat"`` and
-        ``enabled == True``.  If found, formats ``content`` with
-        ``message`` via :meth:`str.format`.
+        查找 ``prompt_type == "chat"`` 且 ``enabled == True`` 的模板。
+        如果找到，则使用 ``str.format`` 将 ``message`` 格式化到
+        ``content`` 中。
 
-        Args:
-            message: The user's chat message.
+        参数：
+            message: 用户的聊天消息。
 
-        Returns:
-            A formatted prompt string.
+        返回值：
+            格式化后的提示词字符串。
         """
         template = await _query_template(self._session, "chat")
         if template is not None:
             try:
                 formatted = template.content.format(message=message)
-                logger.debug("Using chat prompt from database (id={})".format(template.id))
+                logger.debug("使用数据库中的聊天提示词 (id={})".format(template.id))
                 return formatted
             except KeyError as exc:
                 logger.warning(
-                    "Chat template content missing placeholder: {} — falling back".format(exc)
+                    "聊天模板 content 缺少占位符: {} — 回退".format(exc)
                 )
-        logger.debug("No database chat prompt found — using fallback")
+        logger.debug("未找到数据库聊天提示词 — 使用回退")
         return self._fallback.build_chat_prompt(message)

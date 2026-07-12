@@ -15,6 +15,7 @@ from ..services.prompt_template_service import (
     update_prompt_template,
     delete_prompt_template,
 )
+from ..services.prompt_version_service import PromptVersionService
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/prompt-templates", tags=["Prompt 模板管理"])
@@ -77,3 +78,27 @@ async def delete_template(
         raise HTTPException(status_code=404, detail="Prompt 模板不存在")
     logger.info(f"PromptTemplate deleted: id={template_id}")
     return {"success": True}
+
+
+@router.post(
+    "/{template_id}/versions/{version}/rollback",
+    response_model=PromptTemplateResponse,
+    summary="回滚模板版本",
+)
+async def rollback_version(
+    template_id: int,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """将 Prompt 模板回滚到指定历史版本。
+
+    通过切换 ``is_active`` 标志激活目标版本，
+    不创建新的版本记录。成功后返回当前模板。
+    """
+    service = PromptVersionService()
+    template = await service.rollback_prompt_version(db, template_id, version)
+    logger.info(
+        f"PromptTemplate rolled back: id={template.id}, name='{template.name}', "
+        f"version={template.version}"
+    )
+    return template.to_dict()

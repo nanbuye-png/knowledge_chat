@@ -1,9 +1,9 @@
-"""Pydantic schemas for PromptTemplateVersion API."""
+"""PromptTemplateVersion API 的 Pydantic 模型。"""
 from pydantic import BaseModel
 
 
 class PromptVersionResponse(BaseModel):
-    """Schema for a single prompt template version."""
+    """单个提示词模板版本的响应模型。"""
     id: int
     template_id: int
     version: int

@@ -1,4 +1,4 @@
-"""KnowledgeConfig — per‑KnowledgeBase AI configuration."""
+"""KnowledgeConfig — 每个知识库的 AI 参数配置。"""
 
 from datetime import datetime, timezone
 
@@ -9,12 +9,12 @@ from .document import Base
 
 
 class KnowledgeConfig(Base):
-    """Optional per‑KB overrides for AI parameters.
+    """每个知识库可选的 AI 参数覆盖。
 
-    When a row exists for a *knowledge_base_id*, the pipeline uses these
-    values instead of the global ``settings.*`` defaults.
+    当某 *knowledge_base_id* 存在记录时，Pipeline 将使用这些值
+    替代全局 ``settings.*`` 默认值。
 
-    One‑to‑one with :class:`KnowledgeBase`.
+    与 :class:`KnowledgeBase` 为一对一关系。
     """
 
     __tablename__ = "knowledge_configs"
@@ -27,31 +27,31 @@ class KnowledgeConfig(Base):
         nullable=False,
         unique=True,
         index=True,
-        comment="Parent KnowledgeBase",
+        comment="父知识库",
     )
 
-    # Chunking
-    chunk_size = Column(Integer, nullable=True, comment="Override settings.CHUNK_SIZE")
+    # 分块
+    chunk_size = Column(Integer, nullable=True, comment="覆盖 settings.CHUNK_SIZE")
     chunk_overlap = Column(
-        Integer, nullable=True, comment="Override settings.CHUNK_OVERLAP"
+        Integer, nullable=True, comment="覆盖 settings.CHUNK_OVERLAP"
     )
 
-    # Embedding
+    # 嵌入
     embedding_provider = Column(
-        String(50), nullable=True, comment="e.g. 'openai', 'local'"
+        String(50), nullable=True, comment="如 'openai'、'local'"
     )
     embedding_model = Column(
         String(200),
         nullable=True,
-        comment="Override settings.EMBEDDING_MODEL",
+        comment="覆盖 settings.EMBEDDING_MODEL",
     )
 
-    # Retrieval
+    # 检索
     retrieval_top_k = Column(
-        Integer, nullable=True, comment="Override default top_k for retrieval"
+        Integer, nullable=True, comment="覆盖检索的默认 top_k 值"
     )
 
-    # Timestamps
+    # 时间戳
     created_at = Column(
         DateTime,
         nullable=False,
@@ -64,7 +64,7 @@ class KnowledgeConfig(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    # Relationship
+    # 关系
     knowledge_base = relationship("KnowledgeBase", backref="config", uselist=False)
 
     def __repr__(self) -> str:

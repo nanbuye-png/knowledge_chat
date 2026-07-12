@@ -1,4 +1,4 @@
-"""KnowledgeConfigService — manage per‑KnowledgeBase AI configuration."""
+"""KnowledgeConfigService — 管理每个知识库的 AI 参数配置。"""
 
 from loguru import logger
 from sqlalchemy import select

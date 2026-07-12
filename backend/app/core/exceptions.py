@@ -4,7 +4,7 @@ from loguru import logger
 
 
 class AppError(Exception):
-    """Base application error with code and message."""
+    """应用基础异常类，包含错误码和消息。"""
     def __init__(self, code: str, message: str, status_code: int = 500):
         self.code = code
         self.message = message
@@ -39,7 +39,7 @@ class ValidationError(AppError):
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    """Unified handler for custom AppError exceptions."""
+    """统一处理自定义 AppError 异常。"""
     logger.warning(f"AppError [{exc.code}]: {exc.message}")
     return JSONResponse(
         status_code=exc.status_code,
@@ -48,7 +48,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
 
 
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Convert HTTPException to unified error format."""
+    """将 HTTPException 转换为统一错误格式。"""
     return JSONResponse(
         status_code=exc.status_code,
         content={"code": "HTTP_ERROR", "message": exc.detail},
