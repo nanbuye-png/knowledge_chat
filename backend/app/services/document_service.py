@@ -12,15 +12,19 @@ from ..models.document import Document, DocumentStatus
 from ..models.knowledge_base import KnowledgeBase
 from ..schemas.document import DocumentResponse, DocumentListResponse
 from ..utils.file_parser import parse_file
-from ..utils.text_chunker import chunk_text
 from ..services.embedding_service import embedding_service
 from ..storage.vector_store import vector_store
+
+from .chunking.factory import ChunkerFactory
 
 
 class DocumentService:
     """Service for document management."""
 
     ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".md", ".txt"}
+
+    def __init__(self):
+        self._chunker = ChunkerFactory.create(settings)
 
     async def upload_document(self, file: UploadFile, db: AsyncSession, user_id: int, knowledge_base_id: int) -> Document:
         """Upload and process a document.
@@ -113,7 +117,7 @@ class DocumentService:
 
             # 2. Chunk
             logger.info(f"Chunking text: {len(text)} chars")
-            chunks = chunk_text(text)
+            chunks = self._chunker.chunk(text)
             if not chunks:
                 raise ValueError("文档切块后内容为空")
 
