@@ -16,16 +16,14 @@ To add a new provider:
     2. Register it in :data:`_PROVIDERS`.
 """
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from app.core.config import Settings
+from app.models.llm_model import LLMModel
 
 from .base import LLMProvider
 from .deepseek_provider import DeepSeekProvider
 from .agens_provider import AgensProvider
-
-if TYPE_CHECKING:
-    from app.models.llm_model import LLMModel  # pragma: no cover
 
 # ---------------------------------------------------------------------------
 # Provider Registry
