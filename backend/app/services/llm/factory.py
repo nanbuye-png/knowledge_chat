@@ -18,8 +18,11 @@ To add a new provider:
 
 from typing import Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import Settings
 from app.models.llm_model import LLMModel
+from app.services.model_registry import get_model_registry
 
 from .base import LLMProvider
 from .deepseek_provider import DeepSeekProvider
@@ -54,6 +57,9 @@ class LLMProviderFactory:
 
         # From database model
         provider = LLMProviderFactory.create_from_model(llm_model, settings)
+
+        # From database via ModelRegistry (resolves default model)
+        provider = await LLMProviderFactory.create_from_registry(db, settings)
     """
 
     # ------------------------------------------------------------------
@@ -115,6 +121,30 @@ class LLMProviderFactory:
         """
         name = model.provider.lower().strip()
         return LLMProviderFactory._build(name, model.model_name, settings)
+
+    @staticmethod
+    async def create_from_registry(
+        db: AsyncSession, settings: Settings
+    ) -> LLMProvider | None:
+        """Create a provider by resolving the default model via :class:`ModelRegistry`.
+
+        This is the **database‑driven** entry‑point.  It queries the
+        ``llm_models`` table for the default ``LLMModel`` and delegates
+        to :meth:`create_from_model`.
+
+        Args:
+            db: An active async SQLAlchemy session.
+            settings: Application settings object.
+
+        Returns:
+            A concrete :class:`LLMProvider`, or ``None`` if no enabled
+            model was found in the registry.
+        """
+        registry = get_model_registry()
+        model = await registry.get_default_model(db)
+        if model is None:
+            return None
+        return LLMProviderFactory.create_from_model(model, settings)
 
     # ------------------------------------------------------------------
     # Internal
