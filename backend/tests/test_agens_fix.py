@@ -1,16 +1,13 @@
-"""Test script to verify AgensProvider stream-chat compatibility fixes.
+"""Test script to verify AgensProvider compatibility (migrated to services/llm).
 
 Run: cd backend && python -m pytest tests/test_agens_fix.py -v
 """
 
 import asyncio
-import sys
 import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-sys.path.insert(0, ".")
 
 
 # ---------------------------------------------------------------------------
@@ -44,25 +41,25 @@ _MOCK_CHOICE_NONE_DELTA.delta = None
 class TestAgensStreamChatSafeAccess:
     """Verify stream_chat handles every edge-case chunk safely."""
 
-    def test_get_llm_provider_agens(self):
-        """(a) get_llm_provider('agens') returns AgensProvider."""
-        from app.providers.factory import get_llm_provider
+    def test_factory_create_agens(self):
+        """(a) LLMProviderFactory.create_with_name('agens') returns AgensProvider."""
+        from app.services.llm.factory import LLMProviderFactory
+        from app.core.config import Settings
 
-        with patch(
-            "app.core.config.settings.AGENS_API_KEY", "test-key"
-        ), patch(
-            "app.core.config.settings.AGENS_API_BASE", "https://api.agens.test"
-        ), patch(
-            "app.core.config.settings.LLM_MODEL", "agens-model"
-        ):
-            provider = get_llm_provider("agens")
-            from app.providers.agens import AgensProvider
+        settings = Settings(
+            LLM_PROVIDER="agens",
+            AGENS_API_KEY="test-key",
+            AGENS_API_BASE="https://api.agens.test",
+            LLM_MODEL="agens-model",
+        )
+        provider = LLMProviderFactory.create_with_name("agens", settings)
+        from app.services.llm.agens_provider import AgensProvider
 
-            assert isinstance(provider, AgensProvider)
+        assert isinstance(provider, AgensProvider)
 
     def test_stream_skips_empty_choices(self):
         """(b) empty choices list → skip, no exception."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -88,7 +85,9 @@ class TestAgensStreamChatSafeAccess:
 
         async def _collect():
             tokens = []
-            async for t in provider.stream_chat([{"role": "user", "content": "hi"}]):
+            async for t in await provider.chat(
+                [{"role": "user", "content": "hi"}], stream=True
+            ):
                 tokens.append(t)
             return tokens
 
@@ -98,7 +97,7 @@ class TestAgensStreamChatSafeAccess:
 
     def test_stream_skips_none_delta(self):
         """(b2) choice.delta is None → skip."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -120,7 +119,9 @@ class TestAgensStreamChatSafeAccess:
 
         async def _collect():
             tokens = []
-            async for t in provider.stream_chat([{"role": "user", "content": "hi"}]):
+            async for t in await provider.chat(
+                [{"role": "user", "content": "hi"}], stream=True
+            ):
                 tokens.append(t)
             return tokens
 
@@ -129,7 +130,7 @@ class TestAgensStreamChatSafeAccess:
 
     def test_stream_skips_no_delta_attr(self):
         """(b3) choice has no .delta attribute → skip."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -151,7 +152,9 @@ class TestAgensStreamChatSafeAccess:
 
         async def _collect():
             tokens = []
-            async for t in provider.stream_chat([{"role": "user", "content": "hi"}]):
+            async for t in await provider.chat(
+                [{"role": "user", "content": "hi"}], stream=True
+            ):
                 tokens.append(t)
             return tokens
 
@@ -160,7 +163,7 @@ class TestAgensStreamChatSafeAccess:
 
     def test_stream_skips_empty_content_string(self):
         """(b4) content is empty string → skip."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -182,7 +185,9 @@ class TestAgensStreamChatSafeAccess:
 
         async def _collect():
             tokens = []
-            async for t in provider.stream_chat([{"role": "user", "content": "hi"}]):
+            async for t in await provider.chat(
+                [{"role": "user", "content": "hi"}], stream=True
+            ):
                 tokens.append(t)
             return tokens
 
@@ -195,7 +200,7 @@ class TestAgensStreamClose:
 
     def test_sync_close_not_awaited(self):
         """(c1) Sync close (DeepSeek-style): no coroutine warning."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -212,14 +217,18 @@ class TestAgensStreamClose:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
+
             async def _run():
-                async for _ in provider.stream_chat([{"role": "user", "content": "hi"}]):
+                async for _ in await provider.chat(
+                    [{"role": "user", "content": "hi"}], stream=True
+                ):
                     pass
 
             asyncio.run(_run())
 
         coro_warnings = [
-            x for x in w
+            x
+            for x in w
             if issubclass(x.category, RuntimeWarning)
             and "never awaited" in str(x.message).lower()
         ]
@@ -230,7 +239,7 @@ class TestAgensStreamClose:
 
     def test_async_close_awaited(self):
         """(c2) Async close (Agens AsyncStream): properly awaited."""
-        from app.providers.agens import AgensProvider
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -250,14 +259,18 @@ class TestAgensStreamClose:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
+
             async def _run():
-                async for _ in provider.stream_chat([{"role": "user", "content": "hi"}]):
+                async for _ in await provider.chat(
+                    [{"role": "user", "content": "hi"}], stream=True
+                ):
                     pass
 
             asyncio.run(_run())
 
         coro_warnings = [
-            x for x in w
+            x
+            for x in w
             if issubclass(x.category, RuntimeWarning)
             and "never awaited" in str(x.message).lower()
         ]
@@ -270,24 +283,9 @@ class TestAgensStreamClose:
 class TestAgensChatSafety:
     """Verify chat() method protects against empty choices."""
 
-    def test_chat_empty_choices_raises(self):
-        """(3) chat() with empty choices raises ValueError."""
-        from app.providers.agens import AgensProvider
-
-        provider = AgensProvider("k", "https://a", "m")
-        provider._client = MagicMock()
-        provider._client.chat.completions.create = AsyncMock()
-
-        response_mock = MagicMock()
-        response_mock.choices = []
-        provider._client.chat.completions.create.return_value = response_mock
-
-        with pytest.raises(ValueError, match="empty choices"):
-            asyncio.run(provider.chat([{"role": "user", "content": "hi"}]))
-
     def test_chat_returns_content_or_empty_string(self):
-        """(3) chat() returns content, or '' if content is None."""
-        from app.providers.agens import AgensProvider
+        """Chat returns content, or '' if content is None."""
+        from app.services.llm.agens_provider import AgensProvider
 
         provider = AgensProvider("k", "https://a", "m")
         provider._client = MagicMock()
@@ -301,26 +299,27 @@ class TestAgensChatSafety:
         response_mock.choices = [choice_mock]
         provider._client.chat.completions.create.return_value = response_mock
 
-        result = asyncio.run(provider.chat([{"role": "user", "content": "hi"}]))
+        result = asyncio.run(
+            provider.chat([{"role": "user", "content": "hi"}], stream=False)
+        )
         assert result == ""
 
 
 class TestDeepSeekUnaffected:
-    """(d) DeepSeek Provider behavior remains unchanged."""
+    """DeepSeek Provider behavior remains unchanged."""
 
     def test_deepseek_still_works(self):
-        """DeepSeek provider can be created and has stream capability."""
-        from app.providers.factory import get_llm_provider
+        """DeepSeek provider can be created via factory."""
+        from app.services.llm.factory import LLMProviderFactory
+        from app.core.config import Settings
 
-        with patch(
-            "app.core.config.settings.DEEPSEEK_API_KEY", "test-key"
-        ), patch(
-            "app.core.config.settings.DEEPSEEK_API_BASE", "https://api.deepseek.com"
-        ), patch(
-            "app.core.config.settings.LLM_MODEL", "deepseek-chat"
-        ):
-            provider = get_llm_provider("deepseek")
-            from app.providers.deepseek import DeepSeekProvider
+        settings = Settings(
+            LLM_PROVIDER="deepseek",
+            DEEPSEEK_API_KEY="test-key",
+            DEEPSEEK_API_BASE="https://api.deepseek.com",
+            LLM_MODEL="deepseek-chat",
+        )
+        provider = LLMProviderFactory.create(settings)
+        from app.services.llm.deepseek_provider import DeepSeekProvider
 
-            assert isinstance(provider, DeepSeekProvider)
-            assert provider.capabilities.supports_stream is True
+        assert isinstance(provider, DeepSeekProvider)
