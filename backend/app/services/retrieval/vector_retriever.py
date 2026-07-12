@@ -1,11 +1,11 @@
-"""Chroma Retriever — concrete retriever backed by ChromaDB."""
+"""Vector Retriever — concrete retriever backed by ChromaDB."""
 
 from ..storage.vector_store import vector_store
 
 from .base import BaseRetriever
 
 
-class ChromaRetriever(BaseRetriever):
+class VectorRetriever(BaseRetriever):
     """Document retriever using ChromaDB as the vector store.
 
     Delegates to the singleton :data:`vector_store` for all search

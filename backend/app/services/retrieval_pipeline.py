@@ -16,7 +16,7 @@ from typing import Any
 from loguru import logger
 
 from ..services.embedding_service import embedding_service
-from .retrievers.factory import RetrieverFactory
+from .retrieval.factory import RetrieverFactory
 
 # ---------------------------------------------------------------------------
 # Result types

@@ -5,7 +5,7 @@ affecting any consumer code.
 """
 
 from .base import BaseRetriever
-from .chroma_retriever import ChromaRetriever
+from .vector_retriever import VectorRetriever
 
 
 class RetrieverFactory:
@@ -19,12 +19,12 @@ class RetrieverFactory:
 
     @staticmethod
     def create() -> BaseRetriever:
-        """Return the default retriever (currently ChromaDB).
+        """Return the default retriever (currently ChromaDB-backed VectorRetriever).
 
         In the future this will inspect configuration (``settings.VECTOR_STORE_TYPE``,
         ``settings.RETRIEVER_TYPE``, or similar) to decide which backend to return.
 
         Returns:
-            A :class:`ChromaRetriever` instance.
+            A :class:`VectorRetriever` instance.
         """
-        return ChromaRetriever()
+        return VectorRetriever()
