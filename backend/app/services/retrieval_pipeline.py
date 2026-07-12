@@ -16,7 +16,7 @@ from typing import Any
 from loguru import logger
 
 from ..services.embedding_service import embedding_service
-from ..storage.vector_store import vector_store
+from .retrievers.factory import RetrieverFactory
 
 # ---------------------------------------------------------------------------
 # Result types
@@ -73,6 +73,9 @@ class RetrievalPipeline:
     _top_k: int = 5
     _min_score: float = 0.3
 
+    def __init__(self) -> None:
+        self._retriever = RetrieverFactory.create()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -88,7 +91,7 @@ class RetrievalPipeline:
 
         Steps:
             1. Embed *question* via :func:`embedding_service.embed_query`.
-            2. Search the vector store filtered by *knowledge_base_id*.
+            2. Delegate to :class:`BaseRetriever` for vector search.
             3. Score‑filter results.
             4. Build concatenated context + source list.
 
@@ -110,14 +113,14 @@ class RetrievalPipeline:
         if not query_embedding:
             return RetrievalResult()
 
-        # 2. Vector search
-        raw_results = await vector_store.search(
-            query_embedding,
-            top_k=top_k,
+        # 2. Retrieve via retriever abstraction
+        raw_results = await self._retriever.retrieve(
+            embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
+            top_k=top_k,
         )
         logger.info(
-            f"Vector search: kb_id={knowledge_base_id}, top_k={top_k}, "
+            f"Retriever search: kb_id={knowledge_base_id}, top_k={top_k}, "
             f"results={len(raw_results)}"
         )
 
