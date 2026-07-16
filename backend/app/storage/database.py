@@ -21,6 +21,9 @@ from ..models.prompt_template import PromptTemplate  # noqa: F401 - 注册 Promp
 from ..models.prompt_template_version import PromptTemplateVersion  # noqa: F401 - 注册 PromptTemplateVersion 模型用于建表
 from ..models.knowledge_config import KnowledgeConfig  # noqa: F401 - 注册 KnowledgeConfig 模型用于建表
 from ..models.llm_usage import LLMUsage  # noqa: F401 - 注册 LLMUsage 模型用于建表
+from ..models.permission import Role, Permission, user_roles, role_permissions  # noqa: F401 - RBAC 模型
+from ..models.token_blacklist import TokenBlacklist  # noqa: F401 - Token 黑名单模型
+from ..models.api_key import ApiKey  # noqa: F401 - API Key 模型
 
 
 # 根据数据库 URL 创建引擎
@@ -98,6 +101,14 @@ async def init_db():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("通过 create_all 创建数据库表（回退模式）")
+
+    # 初始化 RBAC 默认角色和权限
+    try:
+        async with async_session() as session:
+            from ..services.auth.rbac_service import RBACService
+            await RBACService.init_default_roles(session)
+    except Exception as e:
+        logger.warning(f"RBAC 初始化失败: {e}")
 
     logger.info("数据库表就绪")
 

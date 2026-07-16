@@ -65,6 +65,15 @@ class Settings(BaseSettings):
     # 跨域
     CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000", "http://localhost"]
 
+    # 速率限制
+    RATE_LIMIT_WINDOW: int = 60              # 默认限流窗口（秒）
+    RATE_LIMIT_LOGIN: int = 5                # 登录接口每分钟最大请求数
+    RATE_LIMIT_CHAT: int = 20                # 聊天接口每分钟最大请求数
+    RATE_LIMIT_UPLOAD: int = 10              # 上传接口每分钟最大请求数
+
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

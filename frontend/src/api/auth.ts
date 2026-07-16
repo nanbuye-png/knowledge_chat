@@ -20,6 +20,7 @@ export interface UserInfo {
   id: number
   username: string
   email: string | null
+  role?: string | null
   created_at: string | null
 }
 

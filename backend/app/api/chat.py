@@ -16,7 +16,11 @@ from ..models.conversation import Conversation
 from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db, async_session
 from ..auth.deps import get_current_user
+from ..auth.api_key import get_api_key_user
+from ..core.rate_limit import rate_limit
+from ..core.config import settings as app_settings
 from ..models.user import User
+from ..services.user_service import update_user_activity
 from sqlalchemy import select
 
 router = APIRouter(prefix="/api/chat", tags=["问答系统"])
@@ -62,19 +66,44 @@ async def verify_knowledge_base_access(
     if kb is None:
         raise HTTPException(status_code=403, detail="无权访问该知识库")
     return kb
-@router.post("/query", response_model=QueryResponse, summary="知识库问答")
+
+
+async def _resolve_user(
+    current_user: User | None = Depends(get_current_user),
+    api_key_user: User | None = Depends(get_api_key_user),
+) -> User:
+    """支持 JWT 和 API Key 两种认证方式。"""
+    user = current_user or api_key_user
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+@router.post(
+    "/query",
+    response_model=QueryResponse,
+    summary="知识库问答",
+    dependencies=[
+        Depends(rate_limit(
+            limit=app_settings.RATE_LIMIT_CHAT,
+            window_seconds=app_settings.RATE_LIMIT_WINDOW,
+            scope="chat",
+            use_user=True,
+        )),
+    ],
+)
 async def query_knowledge(
     request: QueryRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_resolve_user),
     db: AsyncSession = Depends(get_db),
 ):
     """基于知识库进行问答检索，返回回答和引用来源。"""
+    await update_user_activity(db, current_user.id)
     logger.info(f"Knowledge query: {request.question[:100]}...")
 
     # Save user message if conversation_id is provided
     if request.conversation_id is not None:
         try:
-            # Verify conversation ownership before saving
             await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
             await create_user_message(db, request.conversation_id, request.question)
             await _auto_update_title(db, request.conversation_id, request.question)
@@ -87,7 +116,6 @@ async def query_knowledge(
                 has_knowledge=False,
             )
 
-    # Verify knowledge base access when no conversation is specified
     if request.conversation_id is None:
         await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
 
@@ -97,7 +125,6 @@ async def query_knowledge(
         logger.error(f"Query failed: {e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
 
-    # Save assistant message if conversation_id is provided
     if request.conversation_id is not None:
         try:
             await create_assistant_message(db, request.conversation_id, result.answer)
@@ -110,9 +137,11 @@ async def query_knowledge(
 @router.post("/chat", response_model=ChatResponse, summary="闲聊模式")
 async def chat(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_resolve_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """通用闲聊对话，直接调用 DeepSeek API。"""
+    """通用闲聊对话，调用当前配置的 LLM Provider。"""
+    await update_user_activity(db, current_user.id)
     logger.info(f"Chat message: {request.message[:100]}...")
     try:
         answer = await chat_service.chat(request.message, request.history)
@@ -125,12 +154,11 @@ async def chat(
 @router.post("/stream", summary="流式对话（SSE）")
 async def stream_chat(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(_resolve_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    SSE 流式对话接口。
-    支持打字机效果，逐 token 返回响应。
-    """
+    """SSE 流式对话接口。"""
+    await update_user_activity(db, current_user.id)
     logger.info(f"Stream chat: {request.message[:100]}...")
 
     async def generate():
@@ -154,25 +182,17 @@ async def stream_query_knowledge(
     request: QueryRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """
-    SSE 流式知识库问答接口。
-    先返回引用来源（JSON），再逐 token 返回回答。
-    若提供 conversation_id，会在流开始前保存用户消息，流结束后保存完整的助理回复。
-    """
+    """SSE 流式知识库问答接口。"""
     logger.info(f"Stream knowledge query: {request.question[:100]}...")
 
     async def generate():
-        # Manually manage DB session for StreamingResponse generator lifetime.
-        # Depends(get_db) is not suitable here because the session would be closed
-        # before the async generator finishes.
         async with async_session() as db:
             full_answer = ""
             user_msg_saved = False
+            await update_user_activity(db, current_user.id)
 
-            # ---- Before streaming: save user message ----
             if request.conversation_id is not None:
                 try:
-                    # Verify conversation ownership before saving
                     await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
                     await create_user_message(db, request.conversation_id, request.question)
                     await _auto_update_title(db, request.conversation_id, request.question)
@@ -181,13 +201,10 @@ async def stream_query_knowledge(
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该会话'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
                 except Exception:
-                    logger.exception(
-                        f"Failed to save user message for conversation_id={request.conversation_id}"
-                    )
+                    logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '消息保存失败，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
 
-            # ---- Verify knowledge base access when no conversation ----
             if request.conversation_id is None:
                 try:
                     await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
@@ -195,14 +212,10 @@ async def stream_query_knowledge(
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该知识库'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
 
-            # ---- During streaming: accumulate assistant content ----
             try:
                 async for data in chat_service.stream_query_knowledge(
                     request.question, request.knowledge_base_id, request.history, session=db
                 ):
-                    # Distinguish plain-text tokens from control JSON messages
-                    # (sources / error / no_result).  Control messages must not be
-                    # included in the persisted assistant content.
                     is_control = False
                     try:
                         parsed = json.loads(data.strip())
@@ -210,25 +223,19 @@ async def stream_query_knowledge(
                             is_control = True
                     except (json.JSONDecodeError, TypeError):
                         pass
-
                     if not is_control:
                         full_answer += data
-
                     yield f"data: {json.dumps({'token': data}, ensure_ascii=False)}\n\n"
-
             except Exception:
                 logger.exception("Stream query generator failed")
                 yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '查询过程中出现内部错误，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                 return
 
-            # ---- Before [DONE]: save assistant message ----
             if request.conversation_id is not None and user_msg_saved and full_answer.strip():
                 try:
                     await create_assistant_message(db, request.conversation_id, full_answer)
                 except Exception:
-                    logger.exception(
-                        f"Failed to save assistant message for conversation_id={request.conversation_id}"
-                    )
+                    logger.exception(f"Failed to save assistant message for conversation_id={request.conversation_id}")
 
             yield "data: [DONE]\n\n"
 
@@ -248,7 +255,7 @@ async def set_mode(
     mode: ChatMode,
     current_user: User = Depends(get_current_user),
 ):
-    """切换问答模式：knowledge（知识库）或 chat（闲聊）。"""
+    """切换问答模式。"""
     try:
         await chat_service.set_mode(mode.mode)
         return ModeResponse(mode=mode.mode)

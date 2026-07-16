@@ -9,13 +9,27 @@ from ..schemas.document import (
 )
 from ..services.document_service import document_service
 from ..core.config import settings
+from ..core.rate_limit import rate_limit
+from ..services.audit_service import create_audit_log
 from ..auth.deps import get_current_user
 from ..models.user import User
 
 router = APIRouter(prefix="/api/documents", tags=["文档管理"])
 
 
-@router.post("/upload", response_model=UploadResponse, summary="上传文档")
+@router.post(
+    "/upload",
+    response_model=UploadResponse,
+    summary="上传文档",
+    dependencies=[
+        Depends(rate_limit(
+            limit=settings.RATE_LIMIT_UPLOAD,
+            window_seconds=settings.RATE_LIMIT_WINDOW,
+            scope="upload",
+            use_user=True,
+        )),
+    ],
+)
 async def upload_document(
     file: UploadFile = File(...),
     knowledge_base_id: int = Query(..., description="目标知识库 ID"),
@@ -36,6 +50,11 @@ async def upload_document(
 
     try:
         doc = await document_service.upload_document(file, db, user_id=current_user.id, knowledge_base_id=knowledge_base_id)
+        await create_audit_log(
+            db=db, operator_id=current_user.id, action="DOCUMENT_UPLOAD",
+            target_type="document", target_id=doc.id,
+            detail={"filename": doc.filename, "kb_id": knowledge_base_id}, status="SUCCESS",
+        )
         return UploadResponse(
             message="文档上传成功，正在处理中",
             document_id=doc.id,
@@ -73,6 +92,11 @@ async def delete_document(
     """删除指定文档及其向量数据。"""
     try:
         result = await document_service.delete_document(document_id, db, user_id=current_user.id)
+        await create_audit_log(
+            db=db, operator_id=current_user.id, action="DOCUMENT_DELETE",
+            target_type="document", target_id=result.id if hasattr(result, 'id') else None,
+            status="SUCCESS",
+        )
         return result
     except HTTPException:
         raise

@@ -16,6 +16,7 @@ from .api.documents import router as documents_router
 from .api.chat import router as chat_router
 from .api.health import router as health_router
 from .api.auth import router as auth_router
+from .api.auth_sessions import router as auth_sessions_router
 from .api.knowledge_bases import router as knowledge_bases_router
 from .api.conversation import router as conversation_router
 from .api.llm_model import router as llm_model_router
@@ -23,6 +24,11 @@ from .api.prompt_template import router as prompt_template_router
 from .api.prompt_version import router as prompt_version_router
 from .api.knowledge_config import router as knowledge_config_router
 from .api.usage import router as usage_router
+from .api.admin.users import router as admin_users_router
+from .api.admin.dashboard import router as admin_dashboard_router
+from .api.admin.audit_logs import router as admin_audit_logs_router
+from .api.admin.sessions import router as admin_sessions_router
+from .api.api_keys import router as api_keys_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
@@ -65,7 +71,14 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info(f"✅ {settings.APP_NAME} 启动完成")
     logger.info(f"📡 API 文档: http://localhost:8000/docs")
-    logger.info(f"🔗 DeepSeek API: {settings.DEEPSEEK_API_BASE}")
+    logger.info(f"🔗 LLM Provider: {settings.LLM_PROVIDER}")
+    
+    # 动态显示当前 Provider 的 endpoint
+    if settings.LLM_PROVIDER == "deepseek":
+        logger.info(f"🔗 DeepSeek API: {settings.DEEPSEEK_API_BASE}")
+    elif settings.LLM_PROVIDER == "agens":
+        logger.info(f"🔗 Agens API: {settings.AGENS_API_BASE}")
+    
     logger.info(f"🗄️  数据库: {settings.DATABASE_URL}")
     logger.info(f"📦 向量存储: {settings.VECTOR_STORE_TYPE}")
     logger.info(f"🔤 嵌入模型: {settings.EMBEDDING_MODEL}")
@@ -99,6 +112,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 安全 Headers 中间件
+from .middleware.security_headers import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 限流中间件
+from .middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 
 # 全局异常处理器
 app.add_exception_handler(AppError, app_error_handler)
@@ -122,6 +143,7 @@ app.include_router(health_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
 app.include_router(auth_router)
+app.include_router(auth_sessions_router)
 app.include_router(knowledge_bases_router)
 app.include_router(conversation_router)
 app.include_router(llm_model_router)
@@ -129,6 +151,11 @@ app.include_router(prompt_template_router)
 app.include_router(prompt_version_router)
 app.include_router(knowledge_config_router)
 app.include_router(usage_router)
+app.include_router(admin_users_router)
+app.include_router(admin_dashboard_router)
+app.include_router(admin_audit_logs_router)
+app.include_router(admin_sessions_router)
+app.include_router(api_keys_router)
 
 
 @app.get("/", tags=["根路径"])

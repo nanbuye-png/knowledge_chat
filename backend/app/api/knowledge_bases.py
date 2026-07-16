@@ -11,6 +11,7 @@ from ..models.document import Document
 from ..models.conversation import Conversation
 from ..storage.database import get_db
 from ..storage.vector_store import vector_store
+from ..services.audit_service import create_audit_log
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["知识库"])
 
@@ -82,6 +83,11 @@ async def create_knowledge_base(
     db.add(kb)
     await db.commit()
     await db.refresh(kb)
+    await create_audit_log(
+        db=db, operator_id=current_user.id, action="KNOWLEDGE_CREATE",
+        target_type="knowledge_base", target_id=kb.id,
+        detail={"name": kb.name}, status="SUCCESS",
+    )
     logger.info(f"Knowledge base created: {kb.name} (id={kb.id}) by user {current_user.username}")
     return KnowledgeBaseResponse(**kb.to_dict())
 
@@ -156,4 +162,9 @@ async def delete_knowledge_base(
     # 4. Delete the KB itself
     await db.delete(kb)
     await db.commit()
+    await create_audit_log(
+        db=db, operator_id=current_user.id, action="KNOWLEDGE_DELETE",
+        target_type="knowledge_base", target_id=kb.id,
+        detail={"name": kb.name}, status="SUCCESS",
+    )
     logger.info(f"Knowledge base deleted: {kb.name} (id={kb.id}) by user {current_user.username}")
