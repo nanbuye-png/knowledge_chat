@@ -42,11 +42,15 @@ target_metadata = Base.metadata
 _db_url = settings.DATABASE_URL
 
 # Convert async URL to sync URL for Alembic (which uses a sync engine)
-# e.g. sqlite+aiosqlite:///./knowledge.db → sqlite:///./knowledge.db
-_sync_url = re.sub(r'\+aiosqlite', '', _db_url, count=1)
+# sqlite+aiosqlite:///./knowledge.db → sqlite:///./knowledge.db
+# postgresql+asyncpg://user:pass@host/db → postgresql+psycopg2://user:pass@host/db
+_sync_url = _db_url
+_sync_url = re.sub(r'\+aiosqlite', '', _sync_url, count=1)
+_sync_url = re.sub(r'\+asyncpg', '+psycopg2', _sync_url, count=1)
 
 # Use render_as_batch for SQLite (needed for ALTER operations)
-_sqlite_mode = _db_url.startswith("sqlite")
+_db_type = settings.DATABASE_TYPE
+_sqlite_mode = _db_type == "sqlite"
 
 
 def run_migrations_offline() -> None:

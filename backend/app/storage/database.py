@@ -26,20 +26,31 @@ from ..models.token_blacklist import TokenBlacklist  # noqa: F401 - Token 黑名
 from ..models.api_key import ApiKey  # noqa: F401 - API Key 模型
 
 
-# 根据数据库 URL 创建引擎
-if settings.DATABASE_URL.startswith("sqlite"):
+# ---- 根据 DATABASE_TYPE 动态创建引擎 ----
+_db_type = settings.DATABASE_TYPE
+
+if _db_type == "sqlite":
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=False,
         connect_args={"check_same_thread": False},
     )
-else:
+    logger.info("使用 SQLite 数据库引擎")
+elif _db_type == "postgresql":
     engine = create_async_engine(
         settings.DATABASE_URL,
         echo=False,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        pool_pre_ping=True,
+        pool_recycle=settings.DATABASE_POOL_RECYCLE,
     )
+    logger.info(
+        f"使用 PostgreSQL 数据库引擎 (pool_size={settings.DATABASE_POOL_SIZE}, "
+        f"max_overflow={settings.DATABASE_MAX_OVERFLOW})"
+    )
+else:
+    raise ValueError(f"不支持的 DATABASE_TYPE: {_db_type}，仅支持 'sqlite' 或 'postgresql'")
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -117,5 +128,3 @@ async def close_db():
     """关闭时释放引擎。"""
     await engine.dispose()
     logger.info("数据库引擎已释放")
-
-
