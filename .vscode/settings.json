@@ -1,0 +1,8 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.defaultPackageManager": "ms-python.python:pip",
+    "python.analysis.extraPaths": [
+        "./backend"
+    ],
+    "js/ts.tsdk.path": "./frontend/node_modules/typescript/lib"
+}
