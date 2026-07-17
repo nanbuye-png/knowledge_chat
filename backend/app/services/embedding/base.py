@@ -52,3 +52,10 @@ class EmbeddingProvider(ABC):
             A list of embedding vectors, one per input text.
         """
         ...
+
+    async def close(self):
+        """Clean up resources. Override if the provider holds state needing cleanup.
+
+        The default implementation is a no-op.
+        """
+        ...

@@ -2,9 +2,19 @@ import { create } from 'zustand'
 import * as authApi from '../api/auth'
 import type { UserInfo } from '../api/auth'
 
+export type UserRole = 'ROOT' | 'ADMIN' | 'USER'
+
+interface UserState {
+  id: number
+  username: string
+  role: UserRole
+  permissions: string[]
+}
+
 interface AuthState {
   token: string | null
   user: UserInfo | null
+  userState: UserState | null
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
   register: (username: string, password: string, email?: string | null) => Promise<void>
@@ -12,9 +22,18 @@ interface AuthState {
   fetchUser: () => Promise<void>
 }
 
+function getRole(user: UserInfo): UserRole {
+  if (!user.role) return 'USER'
+  const upper = user.role.toUpperCase()
+  if (upper === 'ROOT') return 'ROOT'
+  if (upper === 'ADMIN') return 'ADMIN'
+  return 'USER'
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   token: localStorage.getItem('token'),
   user: null,
+  userState: null,
   isAuthenticated: !!localStorage.getItem('token'),
 
   login: async (username: string, password: string) => {
@@ -29,15 +48,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('token')
-    set({ token: null, user: null, isAuthenticated: false })
+    set({ token: null, user: null, userState: null, isAuthenticated: false })
   },
 
   fetchUser: async () => {
     try {
       const user = await authApi.getMe()
-      set({ user, isAuthenticated: true })
+      const role = getRole(user)
+      const userState: UserState = {
+        id: user.id,
+        username: user.username,
+        role,
+        permissions: [],
+      }
+      set({ user, userState, isAuthenticated: true })
     } catch {
-      // Token invalid or expired
       get().logout()
     }
   },

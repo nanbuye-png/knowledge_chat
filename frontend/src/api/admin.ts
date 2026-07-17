@@ -110,3 +110,83 @@ export async function updateUserRole(userId: number, role: string): Promise<void
 export async function deleteUser(userId: number): Promise<void> {
   await apiClient.delete(`/admin/users/${userId}`)
 }
+
+export interface SystemConfigData {
+  llm_provider?: string
+  llm_model?: string
+  embedding_model?: string
+  embedding_dim?: number
+  chunk_size?: number
+  chunk_overlap?: number
+  rate_limit_window?: number
+  rate_limit_chat?: number
+  rate_limit_upload?: number
+  [key: string]: any
+}
+
+// ---- System Config (TODO: backend endpoint not yet registered in main.py) ----
+export async function getSystemConfig(): Promise<SystemConfigData> {
+  // TODO: register /admin/system/config in main.py
+  const response = await apiClient.get('/admin/system/config')
+  return response.data
+}
+
+export async function updateSystemConfig(config: Record<string, any>): Promise<void> {
+  // TODO: register /admin/system/config in main.py
+  await apiClient.put('/admin/system/config', config)
+}
+
+// ---- API Keys (TODO: backend endpoint not yet registered in main.py) ----
+export interface ApiKeyItem {
+  id: number
+  key: string
+  user_id: number
+  username: string
+  is_active: boolean
+  last_used_at: string | null
+  created_at: string
+  call_count: number
+}
+
+export async function listApiKeys(): Promise<ApiKeyItem[]> {
+  // TODO: register /admin/api-keys in main.py
+  const response = await apiClient.get('/admin/api-keys')
+  return response.data
+}
+
+export async function createApiKey(userId: number): Promise<{ key: string }> {
+  // TODO: register /admin/api-keys in main.py
+  const response = await apiClient.post('/admin/api-keys', { user_id: userId })
+  return response.data
+}
+
+export async function revokeApiKey(keyId: number): Promise<void> {
+  // TODO: register /admin/api-keys in main.py
+  await apiClient.delete(`/admin/api-keys/${keyId}`)
+}
+
+// ---- Audit Logs (actual backend: /api/admin/audit-logs) ----
+export interface AuditLogItem {
+  id: number
+  operator_id: number
+  action: string
+  target_type: string
+  target_id: string | null
+  detail: Record<string, any> | null
+  ip_address: string | null
+  user_agent: string | null
+  status: string
+  created_at: string
+}
+
+export interface AuditLogListResponse {
+  items: AuditLogItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export async function listAuditLogs(params?: { page?: number; page_size?: number }): Promise<AuditLogListResponse> {
+  const response = await apiClient.get('/admin/audit-logs', { params })
+  return response.data
+}

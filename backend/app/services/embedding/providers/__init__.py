@@ -1,5 +1,11 @@
-"""Embedding Provider implementations."""
+from .bge import BgeEmbeddingProvider
+from .jina import JinaEmbeddingProvider
+from .openai import OpenAIEmbeddingProvider
+from .voyage import VoyageEmbeddingProvider
 
-from .default import DefaultEmbeddingProvider
-
-__all__ = ["DefaultEmbeddingProvider"]
+__all__ = [
+    "BgeEmbeddingProvider",
+    "JinaEmbeddingProvider",
+    "OpenAIEmbeddingProvider",
+    "VoyageEmbeddingProvider",
+]

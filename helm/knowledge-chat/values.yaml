@@ -1,0 +1,63 @@
+# Default values for knowledge-chart
+replicaCount: 2
+
+image:
+  repository: ghcr.io/nanbuye-png/knowledge_chat
+  tag: latest
+  pullPolicy: IfNotPresent
+
+backend:
+  port: 8000
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+frontend:
+  port: 80
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+
+database:
+  type: postgresql
+  host: knowledge-postgres
+  port: 5432
+  name: knowledge_chat
+
+redis:
+  host: knowledge-redis
+  port: 6379
+
+ingress:
+  enabled: true
+  host: your-domain.com
+  tls:
+    enabled: true
+    secretName: knowledge-tls
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuTarget: 70
+  memoryTarget: 80
+
+config:
+  environment: production
+  logLevel: INFO
+  llmProvider: deepseek
+  cacheBackend: redis
+  workerBackend: local
+
+secrets:
+  postgresPassword: ""
+  deepseekApiKey: ""
+  secretKey: ""

@@ -103,9 +103,12 @@ class KnowledgePipeline:
         )
 
         # ── 3. Create embedding provider with per‑KB config ─────────────
+        model_name = runtime_config.embedding_model or settings.EMBEDDING_MODEL
+        provider_name = model_name.split("/")[-1].split("-")[0] if "/" in model_name else "bge"
         embedding_provider = EmbeddingProviderFactory.create(
-            settings,
-            model_override=runtime_config.embedding_model,
+            provider_name=provider_name,
+            model_name=model_name,
+            embedding_dim=settings.EMBEDDING_DIM,
         )
         await embedding_provider.initialize()
 

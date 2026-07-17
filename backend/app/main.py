@@ -28,6 +28,7 @@ from .api.admin.users import router as admin_users_router
 from .api.admin.dashboard import router as admin_dashboard_router
 from .api.admin.audit_logs import router as admin_audit_logs_router
 from .api.admin.sessions import router as admin_sessions_router
+from .api.admin.organizations import router as admin_organizations_router
 from .api.api_keys import router as api_keys_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
@@ -156,6 +157,7 @@ app.include_router(admin_dashboard_router)
 app.include_router(admin_audit_logs_router)
 app.include_router(admin_sessions_router)
 app.include_router(api_keys_router)
+app.include_router(admin_organizations_router)
 
 
 @app.get("/", tags=["根路径"])

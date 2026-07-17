@@ -22,7 +22,14 @@ class EmbeddingService:
     """
 
     def __init__(self):
-        self._provider = EmbeddingProviderFactory.create(settings)
+        # 从 EMBEDDING_MODEL 中提取 provider 名称（如 "BAAI/bge-small-zh-v1.5" -> "bge"）
+        model_name = settings.EMBEDDING_MODEL
+        provider_name = model_name.split("/")[-1].split("-")[0] if "/" in model_name else "bge"
+        self._provider = EmbeddingProviderFactory.create(
+            provider_name=provider_name,
+            model_name=model_name,
+            embedding_dim=settings.EMBEDDING_DIM,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle (kept for main.py compatibility)

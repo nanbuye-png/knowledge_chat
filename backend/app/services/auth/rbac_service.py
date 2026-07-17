@@ -164,9 +164,16 @@ class RBACService:
             # ROOT: 所有权限
             if root_role:
                 for perm in all_permissions:
-                    await db.execute(
-                        role_permissions.insert().values(role_id=root_role.id, permission_id=perm.id)
+                    existing = await db.execute(
+                        select(role_permissions).where(
+                            role_permissions.c.role_id == root_role.id,
+                            role_permissions.c.permission_id == perm.id,
+                        )
                     )
+                    if not existing.scalar_one_or_none():
+                        await db.execute(
+                            role_permissions.insert().values(role_id=root_role.id, permission_id=perm.id)
+                        )
             
             # ADMIN: dashboard:view, user:view, user:manage, knowledge:view, knowledge:manage
             if admin_role:
@@ -174,9 +181,16 @@ class RBACService:
                 for code in admin_perms:
                     perm = permission_map.get(code)
                     if perm:
-                        await db.execute(
-                            role_permissions.insert().values(role_id=admin_role.id, permission_id=perm.id)
+                        existing = await db.execute(
+                            select(role_permissions).where(
+                                role_permissions.c.role_id == admin_role.id,
+                                role_permissions.c.permission_id == perm.id,
+                            )
                         )
+                        if not existing.scalar_one_or_none():
+                            await db.execute(
+                                role_permissions.insert().values(role_id=admin_role.id, permission_id=perm.id)
+                            )
             
             # MEMBER: dashboard:view, knowledge:view
             if member_role:
@@ -184,9 +198,16 @@ class RBACService:
                 for code in member_perms:
                     perm = permission_map.get(code)
                     if perm:
-                        await db.execute(
-                            role_permissions.insert().values(role_id=member_role.id, permission_id=perm.id)
+                        existing = await db.execute(
+                            select(role_permissions).where(
+                                role_permissions.c.role_id == member_role.id,
+                                role_permissions.c.permission_id == perm.id,
+                            )
                         )
+                        if not existing.scalar_one_or_none():
+                            await db.execute(
+                                role_permissions.insert().values(role_id=member_role.id, permission_id=perm.id)
+                            )
             
             # VIEWER: dashboard:view
             if viewer_role:
@@ -194,9 +215,16 @@ class RBACService:
                 for code in viewer_perms:
                     perm = permission_map.get(code)
                     if perm:
-                        await db.execute(
-                            role_permissions.insert().values(role_id=viewer_role.id, permission_id=perm.id)
+                        existing = await db.execute(
+                            select(role_permissions).where(
+                                role_permissions.c.role_id == viewer_role.id,
+                                role_permissions.c.permission_id == perm.id,
+                            )
                         )
+                        if not existing.scalar_one_or_none():
+                            await db.execute(
+                                role_permissions.insert().values(role_id=viewer_role.id, permission_id=perm.id)
+                            )
             
             await db.commit()
             logger.info("✅ RBAC default roles and permissions initialized")

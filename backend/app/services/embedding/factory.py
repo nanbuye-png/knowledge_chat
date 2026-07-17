@@ -1,45 +1,57 @@
-"""Embedding Provider Factory — creates EmbeddingProvider instances.
-
-Future backends (OpenAI Embeddings, Voyage, Jina, etc.) are registered
-here without affecting any consumer code.
-"""
-
-from app.core.config import Settings
+"""Embedding Provider Factory 2.0 — creates embedding providers by name."""
+from typing import Optional
 
 from .base import EmbeddingProvider
-from .default_provider import DefaultEmbeddingProvider
+from .providers import (
+    BgeEmbeddingProvider,
+    JinaEmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    VoyageEmbeddingProvider,
+)
 
 
 class EmbeddingProviderFactory:
-    """Factory that returns the appropriate :class:`EmbeddingProvider` implementation.
+    """Factory that returns the appropriate EmbeddingProvider by name."""
 
-    Usage::
-
-        provider = EmbeddingProviderFactory.create(settings)
-        await provider.initialize()
-        embedding = await provider.embed_query("Hello")
-    """
+    _PROVIDERS = {
+        "bge": BgeEmbeddingProvider,
+        "jina": JinaEmbeddingProvider,
+        "openai": OpenAIEmbeddingProvider,
+        "voyage": VoyageEmbeddingProvider,
+    }
 
     @staticmethod
     def create(
-        settings: Settings,
-        model_override: str | None = None,
+        provider_name: str = "bge",
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        embedding_dim: int = 768,
     ) -> EmbeddingProvider:
-        """Return the default embedding provider.
-
-        In the future this will inspect configuration
-        (e.g. ``settings.EMBEDDING_PROVIDER``) to decide which backend
-        to return.
+        """Create an embedding provider by name.
 
         Args:
-            settings: Application settings object.
-            model_override: Optional per‑KB embedding model name.
-                Falls back to ``settings.EMBEDDING_MODEL`` when ``None``.
+            provider_name: One of "bge", "jina", "openai", "voyage"
+            model_name: Optional model override
+            api_key: Optional API key for cloud providers
+            embedding_dim: Embedding dimension
 
         Returns:
-            A :class:`DefaultEmbeddingProvider` instance.
+            An EmbeddingProvider instance.
+
+        Raises:
+            ValueError: If provider_name is not supported
         """
-        return DefaultEmbeddingProvider(
-            model_name=model_override if model_override is not None else settings.EMBEDDING_MODEL,
-            embedding_dim=settings.EMBEDDING_DIM,
-        )
+        provider_cls = EmbeddingProviderFactory._PROVIDERS.get(provider_name.lower())
+        if not provider_cls:
+            raise ValueError(
+                f"Unsupported embedding provider: '{provider_name}'. "
+                f"Supported: {list(EmbeddingProviderFactory._PROVIDERS.keys())}"
+            )
+
+        kwargs = {"dim": embedding_dim}
+        if model_name:
+            kwargs["model_name" if provider_name == "bge" else "model"] = model_name
+        if api_key:
+            kwargs["api_key"] = api_key
+
+        return provider_cls(**kwargs)

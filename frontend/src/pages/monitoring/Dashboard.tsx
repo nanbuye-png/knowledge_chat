@@ -1,0 +1,3 @@
+import React from 'react'
+export default function MonitoringDashboard() { return <Placeholder title="Monitoring & Analytics" desc="System performance metrics, AI token usage, and cost tracking." /> }
+function Placeholder({ title, desc }: { title: string; desc?: string }) { return <div className="p-6"><h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{title}</h1><p className="text-slate-500 mt-2">{desc || 'Coming soon.'}</p></div> }

@@ -36,6 +36,13 @@ class User(Base):
         back_populates="user"
     )
 
+    # 组织关系
+    organizations = relationship(
+        "OrganizationMember",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
     def to_dict(self):
         return {
             "id": self.id,
