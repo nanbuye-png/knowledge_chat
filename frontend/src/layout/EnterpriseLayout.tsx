@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, Settings, Key, Shield,
   Brain, Cpu, Database, Bot, BarChart3, BookOpen, MessageSquare,
-  LogOut, Sun, Moon, ChevronRight
+  LogOut, Sun, Moon, ChevronRight, FileText, GitBranch
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import { usePermission } from '../hooks/usePermission'
@@ -18,7 +18,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'AI Chat', icon: MessageSquare, path: '/', roles: ['ROOT', 'ADMIN', 'USER'] },
+  { label: 'AI Workspace', icon: MessageSquare, path: '/workspace', roles: ['ROOT', 'ADMIN', 'USER'] },
   {
     label: 'Admin Center',
     icon: Shield,
@@ -30,6 +30,10 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'System Config', icon: Settings, path: '/admin/system', roles: ['ROOT'] },
       { label: 'API Keys', icon: Key, path: '/admin/api-keys', roles: ['ROOT'] },
       { label: 'Audit Logs', icon: BarChart3, path: '/admin/audit', roles: ['ROOT'] },
+      { label: 'Models', icon: Cpu, path: '/platform/models', roles: ['ROOT'] },
+      { label: 'Prompts', icon: FileText, path: '/platform/prompts', roles: ['ROOT'] },
+      { label: 'Agents', icon: Bot, path: '/platform/agents', roles: ['ROOT'] },
+      { label: 'Workflows', icon: GitBranch, path: '/platform/workflows', roles: ['ROOT'] },
     ],
   },
   {
@@ -41,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Overview', icon: Building2, path: '/organization', roles: ['ROOT', 'ADMIN'] },
       { label: 'Members', icon: Users, path: '/organization/members', roles: ['ROOT', 'ADMIN'] },
       { label: 'Departments', icon: Building2, path: '/organization/departments', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Models', icon: Cpu, path: '/organization/models', roles: ['ROOT', 'ADMIN'] },
     ],
   },
   { label: 'Knowledge ACL', icon: BookOpen, path: '/knowledge/acl', roles: ['ROOT', 'ADMIN'] },
@@ -68,6 +73,18 @@ export default function EnterpriseLayout({ children }: { children: React.ReactNo
   const { theme, toggleTheme } = useThemeStore()
   const [sidebarOpen, setSidebarOpen] = React.useState(true)
   const [expandedMenus, setExpandedMenus] = React.useState<string[]>(['Admin Center', 'AI Console'])
+  const [accountOpen, setAccountOpen] = React.useState(false)
+  const accountRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   const handleLogout = () => {
     logout()
@@ -121,20 +138,40 @@ export default function EnterpriseLayout({ children }: { children: React.ReactNo
           >
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
-          <div className="flex items-center gap-2 px-3 py-1.5">
-            <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">
-              {user?.username?.[0]?.toUpperCase() || 'U'}
-            </div>
-            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              {user?.username || 'User'}
-            </span>
+          <div className="relative" ref={accountRef}>
+            <button
+              onClick={() => setAccountOpen(!accountOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold">
+                {user?.username?.[0]?.toUpperCase() || 'U'}
+              </div>
+              <div className="text-left">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300 block leading-tight">
+                  {user?.username || 'User'}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block leading-tight">
+                  {role === 'ROOT' ? 'System Account' : role === 'ADMIN' ? 'Administrator' : 'User'}
+                </span>
+              </div>
+            </button>
+
+            {accountOpen && (
+              <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-50">
+                <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700 mb-1">
+                  <p className="text-sm font-medium text-slate-800 dark:text-white">{user?.username}</p>
+                  <p className="text-xs text-slate-400">{role === 'ROOT' ? 'System Account' : role === 'ADMIN' ? 'Administrator' : 'User'}</p>
+                </div>
+                <button onClick={() => { navigate('/account/profile'); setAccountOpen(false) }} className="w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Profile</button>
+                <button onClick={() => { navigate('/account/security'); setAccountOpen(false) }} className="w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Security</button>
+                <button onClick={() => { navigate('/account/api-keys'); setAccountOpen(false) }} className="w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">API Keys</button>
+                <div className="border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">
+                  <button onClick={() => { navigate('/account/sessions'); setAccountOpen(false) }} className="w-full text-left px-3 py-1.5 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">Logout All Devices</button>
+                  <button onClick={() => { handleLogout(); setAccountOpen(false) }} className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">Logout</button>
+                </div>
+              </div>
+            )}
           </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
       </header>
 
@@ -204,8 +241,8 @@ export default function EnterpriseLayout({ children }: { children: React.ReactNo
           </div>
         </aside>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto">
+        {/* Content — only children that allow scrolling should scroll */}
+        <main className="flex-1 overflow-hidden">
           {children}
         </main>
       </div>

@@ -1,6 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Paperclip, StopCircle, Sparkles } from 'lucide-react'
+import { Send, Paperclip, StopCircle, Sparkles, AlertCircle, X, CheckCircle2, Loader2 } from 'lucide-react'
+
+interface UploadStatus {
+  filename: string
+  status: 'uploading' | 'processing' | 'completed' | 'failed'
+  error?: string
+}
 
 interface Props {
   onSend: (content: string) => void
@@ -8,7 +14,12 @@ interface Props {
   disabled?: boolean
   mode: 'knowledge' | 'chat'
   placeholder?: string
+  uploadStatus?: UploadStatus | null
+  onDismissUploadStatus?: () => void
 }
+
+const ALLOWED_EXTENSIONS = '.pdf,.docx,.doc,.md,.txt,.xlsx,.csv'
+const ALLOWED_NAMES = ['pdf', 'docx', 'doc', 'md', 'txt', 'xlsx', 'csv']
 
 export default function InputBox({ onSend, onUpload, disabled, mode, placeholder }: Props) {
   const [input, setInput] = useState('')

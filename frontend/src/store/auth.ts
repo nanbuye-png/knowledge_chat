@@ -4,11 +4,12 @@ import type { UserInfo } from '../api/auth'
 
 export type UserRole = 'ROOT' | 'ADMIN' | 'USER'
 
-interface UserState {
+export interface UserState {
   id: number
   username: string
   role: UserRole
   permissions: string[]
+  isSystemAccount?: boolean
 }
 
 interface AuthState {
@@ -60,6 +61,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         username: user.username,
         role,
         permissions: [],
+        isSystemAccount: user.is_system_account ?? false,
       }
       set({ user, userState, isAuthenticated: true })
     } catch {

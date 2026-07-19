@@ -21,6 +21,7 @@ from ..core.rate_limit import rate_limit
 from ..services.audit_service import create_audit_log, _extract_client_info
 from ..services.auth.token_service import revoke_token
 from ..auth.deps import oauth2_scheme
+from ..core.roles import UserRole
 
 # 登录安全配置
 MAX_FAILED_LOGIN_ATTEMPTS = 5
@@ -52,6 +53,8 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: str | None = None
+    role: str | None = None
+    is_system_account: bool | None = None
     created_at: str | None = None
 
 
@@ -255,6 +258,9 @@ async def get_me(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return current authenticated user's info."""
+    """Return current authenticated user's info.
+    
+    is_system_account 只对 ROOT 用户返回，普通用户不返回此字段。
+    """
     await update_user_activity(db, current_user.id)
-    return UserResponse(**current_user.to_dict())
+    return UserResponse(**current_user.to_dict(include_system_flag=(current_user.role == UserRole.ROOT)))

@@ -171,7 +171,7 @@ export default function ChatPage() {
 
   const handleUpload = useCallback(async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const allowed = ['pdf', 'docx', 'doc', 'md', 'txt']
+    const allowed = ['pdf', 'docx', 'doc', 'md', 'txt', 'xlsx', 'csv']
     if (!ext || !allowed.includes(ext)) {
       alert(`不支持的文件类型。支持: ${allowed.join(', ')}`)
       return
@@ -274,7 +274,7 @@ export default function ChatPage() {
   }, [setMode])
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
                     dark:from-slate-900 dark:to-slate-800 text-slate-800 dark:text-slate-100">
       {/* Top bar */}
       <header className="h-12 flex-shrink-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl 
@@ -342,7 +342,17 @@ export default function ChatPage() {
           isOpen={sidebarOpen}
           onDelete={handleDelete}
           onRefresh={() => currentKnowledgeBase && fetchDocuments(currentKnowledgeBase.id)}
-          onUpload={() => {}}
+          onUpload={() => {
+            // Trigger hidden file input
+            const input = document.createElement('input')
+            input.type = 'file'
+            input.accept = '.pdf,.docx,.doc,.md,.txt'
+            input.onchange = (e) => {
+              const file = (e.target as HTMLInputElement).files?.[0]
+              if (file) handleUpload(file)
+            }
+            input.click()
+          }}
           knowledgeBases={knowledgeBases}
           kbLoading={kbLoading}
           onCreateKB={async (name) => {
@@ -384,8 +394,8 @@ export default function ChatPage() {
 
         {/* Main chat area */}
         <main className="flex-1 flex flex-col min-w-0">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin">
+          {/* Messages — min-h-0 prevents flex overflow */}
+          <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-thin min-h-0">
             <div className="max-w-4xl mx-auto">
               <AnimatePresence mode="popLayout">
                 {messages.length === 0 ? (

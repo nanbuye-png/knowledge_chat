@@ -17,7 +17,7 @@ from ...core.config import settings
 from ...models.knowledge_base import KnowledgeBase
 from ...storage.database import async_session
 from ...storage.vector_store import vector_store
-from ...utils.file_parser import parse_file
+from ..parser.factory import ParserFactory
 from ..chunking.factory import ChunkerFactory
 from ..embedding.factory import EmbeddingProviderFactory
 from .config import KnowledgeConfigService
@@ -115,15 +115,35 @@ class KnowledgePipeline:
         try:
             # ── 4. Parse ───────────────────────────────────────────────
             logger.info(f"Parsing document: {context.filename}")
-            text = parse_file(context.file_path)
+            parser = ParserFactory.get_parser(context.file_path)
+            result = parser.parse(context.file_path)
+            text = result["content"]
             if not text.strip():
                 raise ValueError("文档内容为空，无法处理")
+
+            # ── 4a. Parser Debug ───────────────────────────────────────
+            logger.debug(f"Document Parser Debug:")
+            logger.debug(f"  filename: {context.filename}")
+            logger.debug(f"  raw_text_length: {len(text)}")
+            # Sample first 500 chars to check digit preservation
+            sample = text[:500]
+            digit_count = sum(c.isdigit() for c in sample)
+            logger.debug(f"  first_500_chars_digit_count: {digit_count}")
+            logger.debug(f"  first_500_chars: {repr(sample)}")
 
             # ── 5. Chunk ───────────────────────────────────────────────
             logger.info(f"Chunking text: {len(text)} chars")
             chunks = chunker.chunk(text)
             if not chunks:
                 raise ValueError("文档切块后内容为空")
+
+            # ── 5a. Chunk Debug ────────────────────────────────────────
+            logger.debug(f"  chunks_count: {len(chunks)}")
+            for i, chunk in enumerate(chunks):
+                cd = sum(c.isdigit() for c in chunk[:200])
+                logger.debug(f"  Chunk {i + 1}: len={len(chunk)}, "
+                             f"first_200_digit_count={cd}, "
+                             f"preview={repr(chunk[:100])}")
 
             # ── 6. Embed ───────────────────────────────────────────────
             logger.info(f"Generating embeddings for {len(chunks)} chunks")

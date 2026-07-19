@@ -8,6 +8,8 @@ export function usePermission() {
     const role: UserRole = userState?.role ?? 'USER'
     const permissions: string[] = userState?.permissions ?? []
 
+    const userIsSystemAccount = userState?.isSystemAccount ?? false
+
     return {
       role,
       permissions,
@@ -21,6 +23,8 @@ export function usePermission() {
       isRoot: () => role === 'ROOT',
 
       isUser: () => role === 'USER',
+
+      isSystemAccount: () => userIsSystemAccount,
 
       canManage: () => role === 'ROOT' || role === 'ADMIN',
 

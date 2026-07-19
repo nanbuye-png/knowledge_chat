@@ -7,6 +7,7 @@ class AdminUserResponse(BaseModel):
     username: str
     email: str | None = None
     role: str
+    is_system_account: bool = False
     is_active: bool
     last_activity_at: str | None = None
     last_login_at: str | None = None

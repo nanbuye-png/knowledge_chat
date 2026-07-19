@@ -1,138 +1,88 @@
-# knowledge_chat — 企业级 AI 知识库问答平台
+# knowledge_chat · 企业级 AI 知识库平台
 
-> Enterprise AI Knowledge Assistant
+> **Enterprise AI Knowledge Platform** — v2.0.0
 
-基于 FastAPI + React 的 AI 知识库问答平台，支持企业知识库管理、RAG 增强问答、普通 AI 闲聊、多模型 Provider、Prompt 工程管理及用户资源隔离。
-
----
-
-## 1. 项目介绍
-
-knowledge_chat 是一个面向企业场景的 AI 知识库问答系统，具备以下核心能力：
-
-- **企业知识库管理**：创建、配置、隔离多个知识库
-- **RAG 增强问答**：全链路检索增强生成，自动标注引用来源
-- **普通 AI 闲聊**：多轮对话、流式输出、上下文记忆
-- **多模型 Provider**：抽象 LLM Provider 层，支持 DeepSeek / Agens，一键切换
-- **Prompt 工程管理**：模板 CRUD、版本管理、缓存、运行时动态加载
-- **用户资源隔离**：多用户环境下 Knowledge Base、Document、Conversation 完全隔离
+基于 FastAPI + React 的 AI 知识库平台，支持企业知识管理、RAG 增强问答、多模型 Provider、组织管理与安全中心。
 
 ---
 
-## 2. 核心功能
+## 🚀 产品概述
 
-### AI Chat Workspace
+knowledge_chat v2.0 是一套面向企业的 AI 知识库平台，从最初的 RAG 问答工具，演进为具备 **企业管理后台、组织管理、安全中心、AI 能力中心、可观测性中心** 的完整企业 AI 平台。
 
-ChatGPT 风格对话界面，提供两种交互模式：
-
-- **知识库问答模式**：基于选定知识库进行 RAG 问答，回答附带引用来源
-- **普通闲聊模式**：不检索知识库，直接调用 LLM 进行通用对话
-- **Streaming 流式回复**：SSE 实时推送，打字机效果
-- **会话历史管理**：Conversation 级别对话记录持久化
-- **知识库切换**：运行时切换当前对话关联的知识库
-
-### Knowledge Base
-
-完整的知识库生命周期管理：
-
-- 创建 / 删除知识库
-- 文档上传（PDF、DOCX、MD、TXT）
-- 自动文档解析
-- Chunk 切分（可配置 chunk_size / chunk_overlap）
-- 向量化存储至 ChromaDB
-- 用户级别知识库隔离
-
-### RAG Pipeline
-
-```
-Document
-   ↓  Parser（文件解析）
-Chunker（文本切分）
-   ↓  Embedding Provider（向量化）
-Vector Store（ChromaDB）
-   ↓  Retriever（向量检索）
-Citation Builder（来源标注）
-   ↓  LLM（答案生成）
-```
-
-### Citation（引用追踪）
-
-系统支持结构化来源追踪，每次 RAG 回答附带：
-
-- 文档名称（filename）
-- Chunk ID
-- 相关度评分（score）
-- Metadata 元数据
-
-前端 CitationCard 组件展示引用卡片，支持点击查看来源详情。
-
-### Multi Model Provider
-
-抽象 LLM Provider 层，统一 `LLMProvider` 接口：
-
-| Provider | 状态 | 说明 |
-|----------|------|------|
-| DeepSeek | ✅ 已支持 | OpenAI 兼容 API，Stream + JSON |
-| Agens | ✅ 已支持 | OpenAI 兼容 API，Stream |
-
-通过 `.env` 配置一键切换：
-
-```bash
-LLM_PROVIDER=deepseek   # 或 agens
-```
-
-新增 Provider 只需实现 `LLMProvider` 接口并在工厂注册即可。
-
-### Prompt Engineering
-
-完整的 Prompt 模板工程体系：
-
-- **PromptTemplate**：模板 CRUD，支持 name / type / content / enabled
-- **PromptVersion**：自动版本快照，历史回滚
-- **Prompt Cache**：内存缓存，减少数据库查询
-- **Runtime Loading**：运行时动态加载，支持 Database / Default 两种 Provider
-
-### Usage Tracking（用量追踪）
-
-记录每一次 LLM 调用的详细信息：
-
-- Provider & Model
-- Token 消耗（prompt_tokens / completion_tokens / total_tokens）
-- 延迟（latency_ms）
-- 关联 Conversation
-
-前端 Usage 页面提供用量统计面板。
-
-### User Isolation（用户隔离）
-
-多用户环境下资源完全隔离：
-
-- Knowledge Base（知识库归属）
-- Documents（文档归属）
-- Conversations（会话归属）
-- Messages（消息归属）
-
-JWT 认证 + 归属验证确保数据安全。
+| 模块 | 说明 |
+|------|------|
+| 💬 **AI Chat** | 多轮对话、流式输出、知识库问答 + 普通闲聊双模式 |
+| 📚 **知识库** | 文档上传( PDF/DOCX/MD/TXT )、自动解析、Chunk 切分、向量化存储 |
+| 🔍 **RAG Pipeline** | 文档 → 解析 → 切分 → 向量化 → 检索 → 引用标注 → 生成 |
+| 🏢 **企业管理** | Organization、Members、Departments、ACL、Quota |
+| 🔐 **安全中心** | RBAC 权限、审计日志、API Key、安全仪表盘 |
+| 🤖 **AI 中心** | 多 Provider 管理、模型注册、Prompt 工程、配置管理 |
+| 📊 **可观测性** | 系统监控、AI 指标、Token 分析、错误追踪 |
 
 ---
 
-## 3. 技术栈
+## ✨ 核心功能
 
-### Backend
+### 💬 AI Chat Workspace
+- 知识库问答模式（RAG 增强，自动标注引用来源）
+- 普通闲聊模式（直接调用 LLM）
+- Streaming 流式回复（SSE 打字机效果）
+- 会话历史管理与知识库切换
 
+### 📚 知识库管理
+- 创建/删除知识库，文档上传与自动解析
+- Chunk 切分配置（chunk_size / chunk_overlap）
+- 向量化存储（ChromaDB），用户级别隔离
+
+### 🔗 RAG Pipeline
+```
+Document → Parser → Chunker → Embedding → VectorStore → Retriever → Citation → LLM
+```
+
+### 🏢 企业管理 (v2.0 新增)
+- Organization Console：组织信息与功能入口
+- Members Management：组织成员管理与角色分配
+- Departments：部门管理结构
+- Knowledge ACL：知识库 4 级访问权限
+- Quota Management：资源配额监控
+
+### 🔐 安全中心 (v2.0 新增)
+- Security Dashboard：安全状态总览
+- Audit Logs：系统操作审计日志
+- API Key 管理：密钥创建、撤销
+- RBAC：ROOT / ADMIN / USER 三级权限
+
+### 🤖 AI 能力中心 (v2.0 新增)
+- Model Registry：AI 模型注册表管理
+- Provider Management：多 Provider 状态查看
+- Prompt Templates：提示词模板 CRUD 与版本管理
+- AI Configuration：运行时配置概览
+- Agents / Workflows / Tools：AI Agent 平台框架
+
+### 📊 可观测性中心 (v2.0 新增)
+- Monitoring Dashboard：系统 + AI 健康度监控
+- AI Metrics：AI 调用指标与模型排行
+- Token Analytics：Token 消耗趋势分析
+- Error Tracking：错误追踪
+
+---
+
+## 🏗️ 技术栈
+
+### 后端
 | 组件 | 技术 |
 |------|------|
 | Web 框架 | FastAPI (Python 3.12) |
 | ORM | SQLAlchemy 2.0 (Async) |
-| 数据库 | SQLite (开发) |
+| 数据库 | SQLite (开发) / PostgreSQL (生产) |
 | 迁移工具 | Alembic |
-| 向量存储 | ChromaDB (嵌入式) |
-| 嵌入模型 | BAAI/bge-small-zh-v1.5 (本地运行) |
-| 数据校验 | Pydantic v2 |
+| 向量存储 | ChromaDB |
+| 嵌入模型 | BAAI/bge-small-zh-v1.5 |
 | 认证 | JWT + passlib |
+| AI Provider | DeepSeek / Agens |
 
-### Frontend
-
+### 前端
 | 组件 | 技术 |
 |------|------|
 | 框架 | React 18 |
@@ -140,241 +90,130 @@ JWT 认证 + 归属验证确保数据安全。
 | 构建工具 | Vite |
 | 样式 | Tailwind CSS |
 | 状态管理 | Zustand |
+| 动画 | framer-motion |
+| 图标 | lucide-react |
 
-### AI
-
+### 部署
 | 组件 | 技术 |
 |------|------|
-| LLM | Provider Architecture (DeepSeek / Agens) |
-| Embedding | Provider Architecture (BGE 本地模型) |
-| RAG | Pipeline (Parse → Chunk → Embed → Search → Cite → LLM) |
+| 容器化 | Docker + Docker Compose |
+| CI/CD | GitHub Actions |
 
 ---
 
-## 4. 系统架构
-
-```mermaid
-graph TD
-    A[React Frontend] -->|HTTP / SSE| B[FastAPI]
-    B --> C[Services Layer]
-    C --> D[LLM Provider]
-    C --> E[RAG Pipeline]
-    C --> F[Prompt Provider]
-    C --> G[Usage Service]
-    D --> H[DeepSeek / Agens API]
-    E --> I[ChromaDB Vector Store]
-    B --> J[SQLite Database]
-```
-
----
-
-## 5. 项目结构
+## 📁 项目结构
 
 ```
 knowledge_chat/
 ├── backend/
-│   ├── alembic/              # 数据库迁移
-│   │   ├── env.py
-│   │   └── versions/
 │   ├── app/
-│   │   ├── api/              # API 路由
-│   │   ├── auth/             # JWT 认证
-│   │   ├── core/             # 配置、日志、异常、缓存
-│   │   ├── models/           # SQLAlchemy 数据模型
-│   │   ├── prompts/          # Prompt Provider（模板管理 & 动态加载）
-│   │   ├── schemas/          # Pydantic 请求/响应模型
-│   │   ├── services/         # 业务逻辑层
-│   │   │   ├── chunking/     # 文档切分配置
-│   │   │   ├── citation/     # 引用追踪
-│   │   │   ├── embedding/    # 嵌入 Provider
-│   │   │   ├── knowledge/    # 知识库 Pipeline & 配置
-│   │   │   ├── llm/          # LLM Provider
-│   │   │   └── retrieval/    # 向量检索 & 重排序
-│   │   ├── storage/          # 数据库 & 向量存储
-│   │   └── utils/            # 工具函数
-│   ├── alembic.ini
-│   ├── requirements.txt
-│   └── tests/
+│   │   ├── api/           # API 路由 (admin/auth/chat/knowledge/...)
+│   │   ├── auth/          # JWT 认证
+│   │   ├── core/          # 配置、日志、异常、权限
+│   │   ├── models/        # SQLAlchemy 数据模型
+│   │   ├── schemas/       # Pydantic 请求/响应
+│   │   ├── services/      # 业务逻辑 (llm/knowledge/retrieval/usage/...)
+│   │   └── storage/       # 数据库 & 向量存储
+│   ├── scripts/           # 工具脚本
+│   └── tests/             # 166+ 测试
 ├── frontend/
 │   └── src/
-│       ├── api/              # API 调用层
-│       ├── components/       # UI 组件
-│       │   ├── Chat/         # 对话组件
-│       │   ├── Conversation/ # 会话列表
-│       │   ├── Documents/    # 文档管理
-│       │   ├── KnowledgeBase/# 知识库面板
-│       │   ├── Layout/       # 布局组件
-│       │   └── UI/           # 通用 UI
-│       ├── contexts/         # React Context
-│       ├── pages/            # 页面路由
-│       ├── store/            # Zustand 状态管理
-│       └── types/            # TypeScript 类型定义
-├── docs/                     # 项目文档
-└── README.md
+│       ├── api/           # API 调用层 (admin/organizations/knowledgeConfig/...)
+│       ├── components/    # UI 组件 (admin/auth/Chat/Documents/Layout/...)
+│       ├── pages/         # 27+ 页面 (admin/ai/knowledge/monitoring/organization/...)
+│       ├── store/         # Zustand 状态管理
+│       └── hooks/         # 自定义 Hooks
+├── docs/                  # 项目文档
+├── docker-compose.yml     # Docker 部署
+├── CHANGELOG.md           # v2.0.0 更新日志
+└── VERSION                # 版本号
 ```
 
 ---
 
-## 6. 快速启动
+## 🚦 快速启动
 
-### Backend
+### 环境要求
+- Python 3.12+
+- Node.js 18+
+- npm 9+
+
+### 后端
 
 ```bash
 cd backend
-
-# 创建虚拟环境
 python -m venv venv
-
-# 激活虚拟环境
-# Windows:
-venv\Scripts\activate
-# Linux / Mac:
-source venv/bin/activate
-
-# 安装依赖
+# Windows: venv\Scripts\activate
+# Linux/Mac: source venv/bin/activate
 pip install -r requirements.txt
-
-# 配置环境变量
-cp ".env copy.example" .env
-# 编辑 .env 填入 API Key
-
-# 执行数据库迁移
-alembic upgrade head
-
-# 启动后端
+cp .env.example .env   # 编辑 .env 填入 API Key
+python -m alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-首次启动会自动下载嵌入模型（约 500MB），请耐心等待。
-
-### Frontend
+### 前端
 
 ```bash
 cd frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-### 访问系统
+### 初始化系统
 
-- **前端界面**：http://localhost:5173
-- **API 文档 (Swagger)**：http://localhost:8000/docs
-- **API 文档 (ReDoc)**：http://localhost:8000/redoc
-- **健康检查**：http://localhost:8000/api/health
+```bash
+# 设置 ROOT 密码并创建 ROOT 用户
+cd backend
+set ROOT_PASSWORD=your_secure_password
+python scripts/create_root.py
+```
+
+### 访问
+- **前端界面**: http://localhost:5173
+- **API 文档**: http://localhost:8000/docs
+- **健康检查**: http://localhost:8000/api/health
+
+### Docker 部署
+
+```bash
+docker-compose up -d
+```
 
 ---
 
-## 7. 环境配置
+## 🔧 环境变量
 
-参考 `.env copy.example` 文件，配置以下环境变量：
-
-| 环境变量 | 说明 | 示例 |
-|---------|------|------|
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
 | `DATABASE_URL` | 数据库连接 | `sqlite+aiosqlite:///./knowledge.db` |
-| `LLM_PROVIDER` | LLM 提供商 | `deepseek` 或 `agens` |
-| `LLM_MODEL` | 模型名称 | `deepseek-chat` |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | `sk-xxx` |
-| `DEEPSEEK_API_BASE` | DeepSeek API 地址 | `https://api.deepseek.com` |
-| `AGENS_API_KEY` | Agens API Key | `sk-xxx` |
-| `AGENS_API_BASE` | Agens API 地址 | - |
+| `LLM_PROVIDER` | LLM 提供商 | `deepseek` |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | - |
+| `AGENS_API_KEY` | Agens API Key | - |
 | `EMBEDDING_MODEL` | 嵌入模型 | `BAAI/bge-small-zh-v1.5` |
-| `CHUNK_SIZE` | 文档切块大小 | `500` |
-| `CHUNK_OVERLAP` | 切块重叠 | `100` |
+| `CACHE_BACKEND` | 缓存后端 | `memory` |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 
 ---
 
-## 8. 数据库迁移
-
-项目使用 **Alembic** 管理数据库 Schema 版本。
-
-启动时自动执行 `alembic upgrade head`，无需手动操作。
-
-### 日常命令
+## 🧪 测试
 
 ```bash
-# 升级到最新版本
-cd backend
-alembic upgrade head
+# 后端测试 (166+ passed)
+cd backend && pytest
 
-# 创建新迁移（模型变更后）
-cd backend
-alembic revision --autogenerate -m "描述变更"
-
-# 查看当前版本
-cd backend
-alembic current
-
-# 回滚一个版本
-cd backend
-alembic downgrade -1
-```
-
-详细说明见 [docs/database_migration.md](docs/database_migration.md)。
-
----
-
-## 9. 测试
-
-### Backend
-
-```bash
-cd backend
-pytest
-```
-
-当前测试状态：**22 tests passed**
-
-### Frontend
-
-```bash
-cd frontend
-npm run build
+# 前端构建验证
+cd frontend && npm run build
 ```
 
 ---
 
-## 10. 项目截图
+## 📜 版本历史
 
-项目截图存放于 `docs/images/` 目录：
-
-```
-docs/images/
-├── chat-workspace.png      # AI Chat 工作区
-├── knowledge-base.png      # 知识库管理
-├── prompt-management.png   # Prompt 模板管理
-├── usage-tracking.png      # 用量追踪面板
-└── ...
-```
+- **v2.0.0** (2026-07-19) — 企业 AI 平台：管理后台、组织管理、安全中心、AI 中心、可观测性
+- **v1.0.0** — RAG Pipeline、多 Provider、Prompt 管理、用户隔离
 
 ---
 
-## 11. 后续规划
-
-### v1.0（已完成）
-
-- [x] RAG 全链路 Pipeline
-- [x] Multi LLM Provider（DeepSeek / Agens）
-- [x] Prompt 模板 & 版本管理
-- [x] Citation 结构化引用追踪
-- [x] LLM Usage 用量追踪
-- [x] 用户资源隔离
-- [x] JWT 认证
-
-### 未来规划
-
-- [ ] Agent Workflow（多步骤智能体）
-- [ ] Async Task（后台异步任务）
-- [ ] 更多文档解析器（PDF 表格、Excel、HTML）
-- [ ] 更多 LLM Provider（OpenAI、Gemini）
-- [ ] PostgreSQL 支持
-
----
-
-## 许可证
+## 📄 许可证
 
 MIT

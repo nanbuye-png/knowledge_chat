@@ -62,6 +62,12 @@ export interface UserListItem {
   email: string | null
   role: string
   is_active: boolean
+  is_system_account: boolean
+  last_activity_at: string | null
+  last_login_at: string | null
+  failed_login_count: number
+  locked_until: string | null
+  deleted_at: string | null
   created_at: string | null
 }
 

@@ -15,6 +15,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=True, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default=UserRole.USER, server_default=UserRole.USER)
+    is_system_account = Column(Boolean, nullable=False, default=False, server_default="0")
     is_active = Column(Boolean, nullable=False, default=True, server_default="1")
     last_activity_at = Column(DateTime, nullable=True, default=None)
     last_login_at = Column(DateTime, nullable=True, default=None)
@@ -43,8 +44,13 @@ class User(Base):
         cascade="all, delete-orphan",
     )
 
-    def to_dict(self):
-        return {
+    def to_dict(self, include_system_flag: bool = False):
+        """转换为字典。
+        
+        Args:
+            include_system_flag: 是否包含系统账号标识（仅 ROOT 可见）
+        """
+        result = {
             "id": self.id,
             "username": self.username,
             "email": self.email,
@@ -57,3 +63,6 @@ class User(Base):
             "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+        if include_system_flag:
+            result["is_system_account"] = self.is_system_account
+        return result

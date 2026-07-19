@@ -21,6 +21,7 @@ export interface UserInfo {
   username: string
   email: string | null
   role?: string | null
+  is_system_account?: boolean | null
   created_at: string | null
 }
 

@@ -1,3 +1,4 @@
+import sys
 from pydantic_settings import BaseSettings
 from typing import Optional
 from pathlib import Path
@@ -9,11 +10,12 @@ _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _make_absolute(path: str) -> str:
-    """将相对路径转换为以 backend 目录为根的绝对路径。"""
+    """将相对路径转换为以 backend 目录为根的绝对路径（使用正斜杠，兼容 SQLAlchemy URL）。"""
     p = Path(path)
     if p.is_absolute():
-        return str(p)
-    return str(_BACKEND_DIR / p)
+        # Windows 绝对路径（如 D:\xxx）转换为正斜杠，兼容 SQLAlchemy URL
+        return p.as_posix()
+    return (_BACKEND_DIR / p).as_posix()
 
 
 class Settings(BaseSettings):
@@ -121,18 +123,42 @@ if settings.DATABASE_TYPE == "postgresql":
             f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
         )
 elif settings.DATABASE_TYPE == "sqlite":
-    # 标准化 SQLite 路径
+    # SQLite：如果是相对路径（以 ./ 开头），保持原样，不做绝对路径转换。
+    # 绝对路径（如 Windows 的 D:/xxx）会导致 SQLAlchemy URL 解析报错：
+    # ValueError: too many values to unpack
     _db_url = settings.DATABASE_URL
     if _db_url.startswith("sqlite"):
         for prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
             if _db_url.startswith(prefix):
                 _db_path = _db_url[len(prefix):]
-                settings.DATABASE_URL = prefix + _make_absolute(_db_path)
+                # 仅当路径明确是绝对路径时才转换
+                if _db_path and not _db_path.startswith(".") and not _db_path.startswith("/"):
+                    settings.DATABASE_URL = prefix + _make_absolute(_db_path)
+                # 否则保持原始相对路径（如 ./knowledge.db）
                 break
 
 # 标准化其他路径
 settings.CHROMA_PERSIST_DIR = _make_absolute(settings.CHROMA_PERSIST_DIR)
 settings.UPLOAD_DIR = _make_absolute(settings.UPLOAD_DIR)
+
+# ---- DATABASE_URL 兼容性校验 ----
+if settings.DATABASE_URL and "sqlite" in settings.DATABASE_URL:
+    _url = settings.DATABASE_URL
+    # 检查是否包含 Windows 驱动器号绝对路径（如 sqlite+aiosqlite:///D:\）
+    if _url.startswith("sqlite"):
+        for _prefix in ("sqlite+aiosqlite:///", "sqlite:///"):
+            if _url.startswith(_prefix):
+                _path_part = _url[len(_prefix):]
+                # 检测 Windows 反斜杠路径
+                if "\\" in _path_part:
+                    print(
+                        "ERROR: Invalid DATABASE_URL format.\n"
+                        f"Found Windows backslash path: {_url}\n\n"
+                        "Please use forward slashes. Example:\n"
+                        "  sqlite+aiosqlite:///./knowledge.db"
+                    )
+                    sys.exit(1)
+                break
 
 # 确保目录存在
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

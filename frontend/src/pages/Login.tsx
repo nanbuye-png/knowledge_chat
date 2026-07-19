@@ -3,14 +3,20 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { LogIn, User, Lock } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
+import { redirectByRole } from '../router/roleRouter'
 
 export default function Login() {
   const navigate = useNavigate()
   const { login, fetchUser, isAuthenticated } = useAuthStore()
 
-  // Already logged in → redirect to main app
+  // Already logged in → redirect based on role
   if (isAuthenticated && localStorage.getItem('token')) {
-    navigate('/', { replace: true })
+    const userState = useAuthStore.getState().userState
+    if (userState) {
+      navigate(redirectByRole(userState.role), { replace: true })
+    } else {
+      navigate('/', { replace: true })
+    }
     return null
   }
 
@@ -36,7 +42,12 @@ export default function Login() {
     try {
       await login(username, password)
       await fetchUser()
-      navigate('/', { replace: true })
+      const userState = useAuthStore.getState().userState
+      if (userState) {
+        navigate(redirectByRole(userState.role), { replace: true })
+      } else {
+        navigate('/', { replace: true })
+      }
     } catch (err: any) {
       setError(err.message || '登录失败')
     } finally {

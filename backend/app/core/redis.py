@@ -26,12 +26,17 @@ async def get_redis():
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
+            # 强制 RESP2 协议，避免旧版 Redis 不支持 RESP3 的 HELLO 命令
+            protocol=1,
+            socket_connect_timeout=3,
+            socket_timeout=3,
         )
         # 测试连接
         await _redis_client.ping()
         return _redis_client
     except Exception:
-        # Redis 不可用，返回 None
+        # Redis 不可用，返回 None（优雅降级）
+        _redis_client = None
         return None
 
 
