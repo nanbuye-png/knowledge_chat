@@ -124,6 +124,17 @@ async def update_knowledge_base(
     return KnowledgeBaseResponse(**kb.to_dict())
 
 
+@router.patch("/{kb_id}", response_model=KnowledgeBaseResponse, summary="部分更新知识库")
+async def partial_update_knowledge_base(
+    kb_id: int,
+    request: KnowledgeBaseUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Partially update a knowledge base (PATCH alias for PUT)."""
+    return await update_knowledge_base(kb_id, request, current_user, db)
+
+
 @router.delete("/{kb_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除知识库")
 async def delete_knowledge_base(
     kb_id: int,

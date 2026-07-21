@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas.prompt_version import PromptVersionResponse
 from ..services.prompt_version_service import get_prompt_versions
+from ..auth.deps import get_current_user
+from ..core.permissions import require_admin_or_root
+from ..models.user import User
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/prompt-templates", tags=["Prompt 版本管理"])
@@ -18,6 +21,7 @@ router = APIRouter(prefix="/api/prompt-templates", tags=["Prompt 版本管理"])
 async def list_versions(
     template_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """返回指定 Prompt 模板的所有历史版本（按版本号升序）。"""
     versions = await get_prompt_versions(db, template_id)

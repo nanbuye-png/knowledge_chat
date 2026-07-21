@@ -14,6 +14,7 @@ from .core.logging import setup_logging
 from .core.exceptions import AppError, app_error_handler, http_exception_handler
 from .api.documents import router as documents_router
 from .api.chat import router as chat_router
+from .api.knowledge_query import router as knowledge_query_router
 from .api.health import router as health_router
 from .api.auth import router as auth_router
 from .api.auth_sessions import router as auth_sessions_router
@@ -147,6 +148,7 @@ app.include_router(auth_router)
 app.include_router(auth_sessions_router)
 app.include_router(knowledge_bases_router)
 app.include_router(conversation_router)
+app.include_router(knowledge_query_router)
 app.include_router(llm_model_router)
 app.include_router(prompt_template_router)
 app.include_router(prompt_version_router)

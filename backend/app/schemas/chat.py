@@ -44,13 +44,13 @@ class ModeResponse(BaseModel):
 
 
 class CreateConversationRequest(BaseModel):
-    knowledge_base_id: int = Field(..., description="知识库 ID")
+    knowledge_base_id: int | None = Field(None, description="知识库 ID（普通聊天可为空）")
 
 
 class CreateConversationResponse(BaseModel):
     id: int
     title: str
-    knowledge_base_id: int
+    knowledge_base_id: int | None = None
     created_at: str
 
 

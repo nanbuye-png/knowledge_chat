@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,11 +44,11 @@ async def create_conversation_endpoint(
 
 @router.get("", response_model=list[ConversationListItem], summary="获取会话列表")
 async def list_conversations(
-    knowledge_base_id: int,
+    knowledge_base_id: int | None = Query(None, description="知识库 ID（为空则返回用户的所有会话）"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """获取指定知识库下的所有会话，按更新时间倒序排列。"""
+    """获取会话列表。如果提供 knowledge_base_id，只返回该知识库下的会话；否则返回用户所有会话。"""
     try:
         conversations = await get_conversations(db, knowledge_base_id, current_user.id)
         return [

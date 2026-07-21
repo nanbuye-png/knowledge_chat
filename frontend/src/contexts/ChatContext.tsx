@@ -1,16 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChatState, Message, Conversation } from '../types'
+import type { Message, Conversation } from '../types'
 
-type MessagesByMode = {
-  knowledge: Message[]
-  chat: Message[]
-}
-
-interface ChatStore extends ChatState {
-  messagesByMode: MessagesByMode
+interface ChatStore {
+  messages: Message[]
+  isStreaming: boolean
   conversationList: Conversation[]
   currentConversationId: number | null
+
+  addMessage: (message: Message) => void
+  updateLastMessage: (content: string) => void
+  setStreaming: (streaming: boolean) => void
+  clearMessages: () => void
   setConversationList: (list: Conversation[]) => void
   setCurrentConversationId: (id: number | null) => void
   loadMessages: (messages: Message[]) => void
@@ -19,83 +20,44 @@ interface ChatStore extends ChatState {
 export const useChatStore = create<ChatStore>()(
   persist(
     (set) => ({
-      messagesByMode: {
-        knowledge: [],
-        chat: [],
-      },
       messages: [],
-      mode: 'knowledge',
       isStreaming: false,
       conversationList: [],
       currentConversationId: null,
 
       addMessage: (message: Message) =>
-        set((state) => {
-          const currentMode = state.mode
-          const updatedMessagesByMode = {
-            ...state.messagesByMode,
-            [currentMode]: [...state.messagesByMode[currentMode], message],
-          }
-          return {
-            messagesByMode: updatedMessagesByMode,
-            messages: updatedMessagesByMode[currentMode],
-          }
-        }),
+        set((state) => ({
+          messages: [...state.messages, message],
+        })),
 
       updateLastMessage: (content: string) =>
         set((state) => {
-          const currentMode = state.mode
-          const modeMessages = [...state.messagesByMode[currentMode]]
-          if (modeMessages.length > 0) {
-            const last = { ...modeMessages[modeMessages.length - 1] }
+          const msgs = [...state.messages]
+          if (msgs.length > 0) {
+            const last = { ...msgs[msgs.length - 1] }
             last.content = content
-            modeMessages[modeMessages.length - 1] = last
+            msgs[msgs.length - 1] = last
           }
-          return {
-            messagesByMode: {
-              ...state.messagesByMode,
-              [currentMode]: modeMessages,
-            },
-            messages: modeMessages,
-          }
+          return { messages: msgs }
         }),
-
-      setMode: (mode: 'knowledge' | 'chat') =>
-        set((state) => ({
-          mode,
-          messages: state.messagesByMode[mode] || [],
-        })),
 
       setStreaming: (isStreaming: boolean) => set({ isStreaming }),
 
-      clearMessages: () =>
-        set((state) => ({
-          messagesByMode: {
-            ...state.messagesByMode,
-            [state.mode]: [],
-          },
-          messages: [],
-        })),
+      clearMessages: () => set({ messages: [] }),
 
       setConversationList: (list: Conversation[]) => set({ conversationList: list }),
 
       setCurrentConversationId: (id: number | null) =>
         set({ currentConversationId: id }),
 
-      loadMessages: (messages: Message[]) =>
-        set((state) => ({
-          messagesByMode: {
-            ...state.messagesByMode,
-            [state.mode]: messages,
-          },
-          messages,
-        })),
+      loadMessages: (messages: Message[]) => set({ messages }),
     }),
     {
       name: 'chat-storage',
       partialize: (state) => ({
-        messagesByMode: state.messagesByMode,
-        mode: state.mode,
+        messages: state.messages,
+        conversationList: state.conversationList,
+        currentConversationId: state.currentConversationId,
       }),
     }
   )

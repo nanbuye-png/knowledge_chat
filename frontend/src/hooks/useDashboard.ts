@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as adminApi from '../api/admin'
-import type { DashboardData, DashboardOverview, SystemMonitorStatus } from '../api/admin'
+import type { DashboardData, SystemMonitorStatus } from '../api/admin'
 
 interface UseDashboardOptions {
   refreshInterval?: number
@@ -9,7 +9,8 @@ interface UseDashboardOptions {
 
 interface UseDashboardReturn {
   dashboard: DashboardData | null
-  overview: DashboardOverview | null
+  /** @deprecated Use dashboard instead */
+  overview: any | null
   system: SystemMonitorStatus | null
   loading: boolean
   error: string | null
@@ -20,7 +21,8 @@ export function useDashboard(options: UseDashboardOptions = {}): UseDashboardRet
   const { refreshInterval = 30000, autoRefresh = true } = options
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
-  const [overview, setOverview] = useState<DashboardOverview | null>(null)
+  /** @deprecated overview is kept for backward compatibility */
+  const [overview, setOverview] = useState<any | null>(null)
   const [system, setSystem] = useState<SystemMonitorStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -30,7 +32,7 @@ export function useDashboard(options: UseDashboardOptions = {}): UseDashboardRet
       setError(null)
       const [dashboardData, overviewData, systemData] = await Promise.all([
         adminApi.getDashboard(),
-        adminApi.getDashboardOverview(),
+        adminApi.getDashboardOverview().catch(() => null),
         adminApi.getSystemMonitorStatus(),
       ])
       setDashboard(dashboardData)

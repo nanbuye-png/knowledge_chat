@@ -38,14 +38,6 @@ export interface DashboardData {
   }
 }
 
-export interface DashboardOverview {
-  users_count: number
-  knowledge_bases_count: number
-  documents_count: number
-  conversations_count: number
-  messages_count: number
-}
-
 export interface SystemMonitorStatus {
   cpu_usage: number | null
   memory_usage: number | null
@@ -82,11 +74,6 @@ export interface UserOnlineItem {
 
 export async function getDashboard(): Promise<DashboardData> {
   const response = await apiClient.get('/admin/dashboard')
-  return response.data
-}
-
-export async function getDashboardOverview(): Promise<DashboardOverview> {
-  const response = await apiClient.get('/admin/dashboard/overview')
   return response.data
 }
 
@@ -130,19 +117,24 @@ export interface SystemConfigData {
   [key: string]: any
 }
 
-// ---- System Config (TODO: backend endpoint not yet registered in main.py) ----
-export async function getSystemConfig(): Promise<SystemConfigData> {
-  // TODO: register /admin/system/config in main.py
-  const response = await apiClient.get('/admin/system/config')
+// ---- Deprecated exports (kept for backward compatibility with admin pages) ----
+
+/** @deprecated Use getDashboard() instead */
+export async function getDashboardOverview(): Promise<any> {
+  console.warn('getDashboardOverview is deprecated, use getDashboard()')
+  const response = await apiClient.get('/admin/dashboard/overview')
   return response.data
 }
 
-export async function updateSystemConfig(config: Record<string, any>): Promise<void> {
-  // TODO: register /admin/system/config in main.py
-  await apiClient.put('/admin/system/config', config)
+export interface DashboardOverview {
+  users_count: number
+  knowledge_bases_count: number
+  documents_count: number
+  conversations_count: number
+  messages_count: number
 }
 
-// ---- API Keys (TODO: backend endpoint not yet registered in main.py) ----
+/** @deprecated Use /api/api-keys endpoints instead */
 export interface ApiKeyItem {
   id: number
   key: string
@@ -154,21 +146,37 @@ export interface ApiKeyItem {
   call_count: number
 }
 
+/** @deprecated */
 export async function listApiKeys(): Promise<ApiKeyItem[]> {
-  // TODO: register /admin/api-keys in main.py
+  console.warn('listApiKeys is deprecated')
   const response = await apiClient.get('/admin/api-keys')
   return response.data
 }
 
+/** @deprecated */
 export async function createApiKey(userId: number): Promise<{ key: string }> {
-  // TODO: register /admin/api-keys in main.py
+  console.warn('createApiKey is deprecated')
   const response = await apiClient.post('/admin/api-keys', { user_id: userId })
   return response.data
 }
 
+/** @deprecated */
 export async function revokeApiKey(keyId: number): Promise<void> {
-  // TODO: register /admin/api-keys in main.py
+  console.warn('revokeApiKey is deprecated')
   await apiClient.delete(`/admin/api-keys/${keyId}`)
+}
+
+/** @deprecated */
+export async function getSystemConfig(): Promise<SystemConfigData> {
+  console.warn('getSystemConfig is deprecated')
+  const response = await apiClient.get('/admin/system/config')
+  return response.data
+}
+
+/** @deprecated */
+export async function updateSystemConfig(config: Record<string, any>): Promise<void> {
+  console.warn('updateSystemConfig is deprecated')
+  await apiClient.put('/admin/system/config', config)
 }
 
 // ---- Audit Logs (actual backend: /api/admin/audit-logs) ----

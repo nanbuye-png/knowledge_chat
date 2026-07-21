@@ -1,15 +1,19 @@
 import apiClient from './client'
 import type { Conversation, ConversationMessage } from '../types'
 
-export async function listConversations(knowledgeBaseId: number): Promise<Conversation[]> {
-  const response = await apiClient.get('/conversations', {
-    params: { knowledge_base_id: knowledgeBaseId },
-  })
+export async function listConversations(knowledgeBaseId?: number | null): Promise<Conversation[]> {
+  const params: Record<string, any> = {}
+  if (knowledgeBaseId != null) {
+    params.knowledge_base_id = knowledgeBaseId
+  }
+  const response = await apiClient.get('/conversations', { params })
   return response.data
 }
 
-export async function createConversation(knowledgeBaseId: number): Promise<Conversation> {
-  const response = await apiClient.post('/conversations', { knowledge_base_id: knowledgeBaseId })
+export async function createConversation(knowledgeBaseId?: number | null): Promise<Conversation> {
+  const response = await apiClient.post('/conversations', {
+    knowledge_base_id: knowledgeBaseId ?? null,
+  })
   return response.data
 }
 

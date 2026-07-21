@@ -15,6 +15,9 @@ from ..services.llm_model_service import (
     update_llm_model,
     delete_llm_model,
 )
+from ..auth.deps import get_current_user
+from ..core.permissions import require_admin_or_root
+from ..models.user import User
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/llm-models", tags=["LLM 模型管理"])
@@ -23,6 +26,7 @@ router = APIRouter(prefix="/api/llm-models", tags=["LLM 模型管理"])
 @router.get("", response_model=list[LLMModelResponse], summary="获取模型配置列表")
 async def list_llm_models(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """返回所有已配置的 LLM 模型。"""
     models = await get_llm_models(db)
@@ -33,6 +37,7 @@ async def list_llm_models(
 async def create_model(
     data: LLMModelCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """创建一个新的 LLM 模型配置。"""
     model = await create_llm_model(db, data)
@@ -44,6 +49,7 @@ async def create_model(
 async def get_model(
     model_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """根据 ID 获取单个 LLM 模型配置。"""
     model = await get_llm_model_by_id(db, model_id)
@@ -57,6 +63,7 @@ async def update_model(
     model_id: int,
     data: LLMModelUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """更新已有的 LLM 模型配置（部分更新）。"""
     model = await update_llm_model(db, model_id, data)
@@ -70,6 +77,7 @@ async def update_model(
 async def delete_model(
     model_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """删除一个 LLM 模型配置。"""
     deleted = await delete_llm_model(db, model_id)

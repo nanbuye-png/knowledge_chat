@@ -22,14 +22,6 @@ router = APIRouter(prefix="/api/admin", tags=["管理员-Dashboard"])
 
 # ---------- Schemas ----------
 
-class DashboardOverviewResponse(BaseModel):
-    users_count: int
-    knowledge_bases_count: int
-    documents_count: int
-    conversations_count: int
-    messages_count: int
-
-
 class SystemMonitorResponse(BaseModel):
     cpu_usage: float | None
     memory_usage: float | None
@@ -189,39 +181,30 @@ async def get_dashboard(
     }
 
 
-@router.get("/dashboard/overview", response_model=DashboardOverviewResponse, summary="Dashboard Overview")
+@router.get("/dashboard/overview", summary="[保留兼容] Dashboard Overview")
 async def get_dashboard_overview(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permission("dashboard:view")),
 ):
-    """获取 Dashboard Overview 统计（需要 dashboard:view 权限）。"""
-    # Users count
+    """保留兼容的 Dashboard Overview 接口。"""
+    logger.info(f"Dashboard overview queried by admin {current_user.username}")
     users_result = await db.execute(select(func.count(User.id)).where(User.deleted_at.is_(None)))
     users_count = users_result.scalar() or 0
-
-    # Knowledge bases count
     kb_result = await db.execute(select(func.count(KnowledgeBase.id)))
     knowledge_bases_count = kb_result.scalar() or 0
-
-    # Documents count
     doc_result = await db.execute(select(func.count(Document.id)))
     documents_count = doc_result.scalar() or 0
-
-    # Conversations count
     conv_result = await db.execute(select(func.count(Conversation.id)))
     conversations_count = conv_result.scalar() or 0
-
-    # Messages count
     msg_result = await db.execute(select(func.count(Message.id)))
     messages_count = msg_result.scalar() or 0
-
-    return DashboardOverviewResponse(
-        users_count=users_count,
-        knowledge_bases_count=knowledge_bases_count,
-        documents_count=documents_count,
-        conversations_count=conversations_count,
-        messages_count=messages_count,
-    )
+    return {
+        "users_count": users_count,
+        "knowledge_bases_count": knowledge_bases_count,
+        "documents_count": documents_count,
+        "conversations_count": conversations_count,
+        "messages_count": messages_count,
+    }
 
 
 @router.get("/dashboard/system", response_model=SystemMonitorResponse, summary="System Monitor Status")

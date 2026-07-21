@@ -16,6 +16,9 @@ from ..services.prompt_template_service import (
     delete_prompt_template,
 )
 from ..services.prompt_version_service import PromptVersionService
+from ..auth.deps import get_current_user
+from ..core.permissions import require_admin_or_root
+from ..models.user import User
 from ..storage.database import get_db
 
 router = APIRouter(prefix="/api/prompt-templates", tags=["Prompt 模板管理"])
@@ -24,6 +27,7 @@ router = APIRouter(prefix="/api/prompt-templates", tags=["Prompt 模板管理"])
 @router.get("", response_model=list[PromptTemplateResponse], summary="获取模板列表")
 async def list_templates(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """返回所有 Prompt 模板。"""
     templates = await get_prompt_templates(db)
@@ -34,6 +38,7 @@ async def list_templates(
 async def create_template(
     data: PromptTemplateCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """创建一个新的 Prompt 模板。"""
     template = await create_prompt_template(db, data)
@@ -45,6 +50,7 @@ async def create_template(
 async def get_template(
     template_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """根据 ID 获取单个 Prompt 模板。"""
     template = await get_prompt_template_by_id(db, template_id)
@@ -58,6 +64,7 @@ async def update_template(
     template_id: int,
     data: PromptTemplateUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """更新已有的 Prompt 模板（部分更新）。"""
     template = await update_prompt_template(db, template_id, data)
@@ -71,6 +78,7 @@ async def update_template(
 async def delete_template(
     template_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """删除一个 Prompt 模板。"""
     deleted = await delete_prompt_template(db, template_id)
@@ -89,6 +97,7 @@ async def rollback_version(
     template_id: int,
     version: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin_or_root),
 ):
     """将 Prompt 模板回滚到指定历史版本。
 

@@ -20,13 +20,11 @@ async def _verify_kb_ownership(db: AsyncSession, knowledge_base_id: int, user_id
 
 
 async def _verify_conversation_ownership(db: AsyncSession, conversation_id: int, user_id: int) -> Conversation:
-    """Verify the conversation belongs to the user (via KB ownership). Raises ValueError."""
+    """Verify the conversation belongs to the user. Raises ValueError."""
     result = await db.execute(
-        select(Conversation)
-        .join(KnowledgeBase, Conversation.knowledge_base_id == KnowledgeBase.id)
-        .where(
+        select(Conversation).where(
             Conversation.id == conversation_id,
-            KnowledgeBase.user_id == user_id,
+            Conversation.user_id == user_id,
         )
     )
     conv = result.scalar_one_or_none()
@@ -35,24 +33,48 @@ async def _verify_conversation_ownership(db: AsyncSession, conversation_id: int,
     return conv
 
 
-async def create_conversation(db: AsyncSession, knowledge_base_id: int, user_id: int) -> dict:
-    """Create a new conversation under the given knowledge base (must belong to user)."""
-    await _verify_kb_ownership(db, knowledge_base_id, user_id)
-    conversation = Conversation(user_id=user_id, knowledge_base_id=knowledge_base_id)
+async def create_conversation(db: AsyncSession, knowledge_base_id: int | None, user_id: int) -> dict:
+    """Create a new conversation.
+    
+    If knowledge_base_id is provided, it must belong to the user.
+    If knowledge_base_id is None, creates a general chat conversation (no KB).
+    """
+    if knowledge_base_id is not None:
+        await _verify_kb_ownership(db, knowledge_base_id, user_id)
+    conversation = Conversation(
+        user_id=user_id,
+        knowledge_base_id=knowledge_base_id,
+    )
     db.add(conversation)
     await db.commit()
     await db.refresh(conversation)
     return conversation.to_dict()
 
 
-async def get_conversations(db: AsyncSession, knowledge_base_id: int, user_id: int) -> list[dict]:
-    """List all conversations under the given knowledge base (must belong to user), ordered by updated_at DESC."""
-    await _verify_kb_ownership(db, knowledge_base_id, user_id)
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.knowledge_base_id == knowledge_base_id)
-        .order_by(Conversation.updated_at.desc())
-    )
+async def get_conversations(db: AsyncSession, knowledge_base_id: int | None, user_id: int) -> list[dict]:
+    """List all conversations.
+    
+    If knowledge_base_id is provided, filter by that KB (must belong to user).
+    If knowledge_base_id is None, return all conversations for the user.
+    Ordered by updated_at DESC.
+    """
+    if knowledge_base_id is not None:
+        await _verify_kb_ownership(db, knowledge_base_id, user_id)
+        stmt = (
+            select(Conversation)
+            .where(
+                Conversation.knowledge_base_id == knowledge_base_id,
+                Conversation.user_id == user_id,
+            )
+            .order_by(Conversation.updated_at.desc())
+        )
+    else:
+        stmt = (
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+        )
+    result = await db.execute(stmt)
     conversations = result.scalars().all()
     return [conv.to_dict() for conv in conversations]
 

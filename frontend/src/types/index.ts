@@ -44,17 +44,6 @@ export interface ConversationMessage {
   created_at: string
 }
 
-export interface ChatState {
-  messages: Message[]
-  mode: 'knowledge' | 'chat'
-  isStreaming: boolean
-  addMessage: (message: Message) => void
-  updateLastMessage: (content: string) => void
-  setMode: (mode: 'knowledge' | 'chat') => void
-  setStreaming: (streaming: boolean) => void
-  clearMessages: () => void
-}
-
 export interface ThemeState {
   theme: 'light' | 'dark'
   toggleTheme: () => void
