@@ -165,7 +165,7 @@ export default function KnowledgeChatPage() {
                         border-b border-slate-200 dark:border-slate-700 flex items-center px-4 z-40">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/knowledge')}
+            onClick={() => navigate('/workspace')}
             className="p-1 rounded-lg text-slate-400 hover:text-primary-500 
                        hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >

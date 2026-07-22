@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { LayoutDashboard, MessageSquare, BookOpen, FileText } from 'lucide-react'
 import WorkspaceOverview from './WorkspaceOverview'
 import ChatPage from '../chat/ChatPage'
+import KnowledgePage from '../knowledge/KnowledgePage'
+import DocumentPage from '../documents/DocumentPage'
 
 type WorkspaceTab = 'overview' | 'chat' | 'knowledge' | 'documents'
 
@@ -44,16 +46,8 @@ export default function WorkspacePage() {
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'overview' && <WorkspaceOverview />}
         {activeTab === 'chat' && <ChatPage />}
-        {activeTab === 'knowledge' && (
-          <div className="p-8 text-sm text-slate-500">
-            <p>知识库管理页面（复用现有 KnowlegeBaseList 组件）</p>
-          </div>
-        )}
-        {activeTab === 'documents' && (
-          <div className="p-8 text-sm text-slate-500">
-            <p>文档管理页面（复用现有 DocumentList 组件）</p>
-          </div>
-        )}
+        {activeTab === 'knowledge' && <KnowledgePage />}
+        {activeTab === 'documents' && <DocumentPage />}
       </div>
     </div>
   )

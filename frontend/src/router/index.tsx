@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ChatPage from '../pages/chat/ChatPage'
+import KnowledgeChatPage from '../pages/knowledge/KnowledgeChatPage'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
 import Usage from '../pages/Usage'
@@ -236,6 +237,7 @@ export default function AppRouter() {
       {/* Home - role based redirect */}
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
+      <Route path="/knowledge/:id/chat" element={<ProtectedRoute><KnowledgeChatPage /></ProtectedRoute>} />
     </Routes>
   )
 }
