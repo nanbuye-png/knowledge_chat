@@ -8,7 +8,7 @@
 
 ## 🚀 产品概述
 
-knowledge_chat v2.0 是一套面向企业的 AI 知识库平台，从最初的 RAG 问答工具，演进为具备 **企业管理后台、组织管理、安全中心、AI 能力中心、可观测性中心** 的完整企业 AI 平台。
+knowledge_chat v1.0.1 是一套面向企业的 AI 知识库平台，从最初的 RAG 问答工具，演进为具备 **企业管理后台、组织管理、安全中心、AI 能力中心、可观测性中心** 的完整企业 AI 平台。
 
 | 模块 | 说明 |
 |------|------|
@@ -40,27 +40,27 @@ knowledge_chat v2.0 是一套面向企业的 AI 知识库平台，从最初的 R
 Document → Parser → Chunker → Embedding → VectorStore → Retriever → Citation → LLM
 ```
 
-### 🏢 企业管理 (v2.0 新增)
+### 🏢 企业管理 (v1.0.1 新增)
 - Organization Console：组织信息与功能入口
 - Members Management：组织成员管理与角色分配
 - Departments：部门管理结构
 - Knowledge ACL：知识库 4 级访问权限
 - Quota Management：资源配额监控
 
-### 🔐 安全中心 (v2.0 新增)
+### 🔐 安全中心 (v1.0.1 新增)
 - Security Dashboard：安全状态总览
 - Audit Logs：系统操作审计日志
 - API Key 管理：密钥创建、撤销
 - RBAC：ROOT / ADMIN / USER 三级权限
 
-### 🤖 AI 能力中心 (v2.0 新增)
+### 🤖 AI 能力中心 (v1.0.1 新增)
 - Model Registry：AI 模型注册表管理
 - Provider Management：多 Provider 状态查看
 - Prompt Templates：提示词模板 CRUD 与版本管理
 - AI Configuration：运行时配置概览
 - Agents / Workflows / Tools：AI Agent 平台框架
 
-### 📊 可观测性中心 (v2.0 新增)
+### 📊 可观测性中心 (v1.0.1 新增)
 - Monitoring Dashboard：系统 + AI 健康度监控
 - AI Metrics：AI 调用指标与模型排行
 - Token Analytics：Token 消耗趋势分析
