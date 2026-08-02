@@ -97,6 +97,9 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 | 组件 | 技术 |
 |------|------|
 | 容器化 | Docker + Docker Compose |
+| 编排 | Helm / Kubernetes (k8s) |
+| 反向代理 | Nginx (HTTP/HTTPS) |
+| 可观测性 | Prometheus + Grafana (monitoring/) |
 | CI/CD | GitHub Actions |
 
 ---
@@ -112,26 +115,33 @@ knowledge_chat/
 │   │   ├── core/          # 配置、日志、异常、权限
 │   │   ├── models/        # SQLAlchemy 数据模型
 │   │   ├── schemas/       # Pydantic 请求/响应
-│   │   ├── services/      # 业务逻辑 (llm/knowledge/retrieval/usage/...)
+│   │   ├── services/      # 业务逻辑 (llm/knowledge/retrieval/usage/tasks/...)
 │   │   └── storage/       # 数据库 & 向量存储
-│   ├── scripts/           # 工具脚本
-│   └── tests/             # 166+ 测试
+│   ├── scripts/           # 工具脚本 (create_root.py 等)
+│   └── tests/             # 测试
 ├── frontend/
 │   └── src/
-│       ├── api/           # API 调用层 (admin/organizations/knowledgeConfig/...)
-│       ├── components/    # UI 组件 (admin/auth/Chat/Documents/Layout/...)
-│       ├── pages/         # 27+ 页面 (admin/ai/knowledge/monitoring/organization/...)
+│       ├── api/           # API 调用层
+│       ├── components/    # UI 组件
+│       ├── pages/         # 页面 (admin/ai/knowledge/monitoring/organization/...)
 │       ├── store/         # Zustand 状态管理
 │       └── hooks/         # 自定义 Hooks
-├── docs/                  # 项目文档
-├── docker-compose.yml     # Docker 部署
-├── CHANGELOG.md           # v2.0.0 更新日志
+├── docs/                  # 架构、RAG、Provider 等文档
+├── docker-compose.yml     # Docker Compose（开发）
+├── docker-compose.prod.yml# Docker Compose（生产）
+├── Dockerfile.backend     # 后端镜像
+├── Dockerfile.frontend    # 前端镜像
+├── nginx/                 # Nginx 反向代理配置 (HTTP / HTTPS)
+├── helm/knowledge-chat/   # Helm Chart
+├── k8s/                   # Kubernetes 部署清单
+├── monitoring/            # Prometheus + Grafana 监控配置
+├── CHANGELOG.md           # 更新日志
 └── VERSION                # 版本号
 ```
 
 ---
 
-## 🚦 快速启动
+## 🚦 快速启动（本地开发）
 
 ### 环境要求
 - Python 3.12+
@@ -173,32 +183,190 @@ python scripts/create_root.py
 - **API 文档**: http://localhost:8000/docs
 - **健康检查**: http://localhost:8000/api/health
 
-### Docker 部署
+---
+
+## 🐳 Docker 部署
+
+### 一、开发环境（Docker Compose）
+
+开发版使用 Docker 运行 **PostgreSQL + Redis + Backend + Frontend + Nginx**，统一通过 `http://localhost` 访问。
 
 ```bash
-docker-compose up -d
+# 1. 配置环境变量（LLM API Key 等）
+cp .env.example .env
+# 编辑 .env，填写 DEEPSEEK_API_KEY / AGENS_API_KEY
+
+# 2. 构建并启动
+docker compose up -d --build
+
+# 3. 初始化 ROOT 用户
+docker compose exec backend python scripts/create_root.py
+# Windows PowerShell 传入环境变量示例：
+docker compose exec -e ROOT_PASSWORD=your_secure_password backend python scripts/create_root.py
 ```
+
+- **前端界面**: http://localhost
+- **API 文档**: http://localhost/api/ (经 Nginx) 或 http://localhost:8000/docs
+- **健康检查**: http://localhost/api/health
+
+### 二、生产环境（Docker Compose）
+
+生产版额外提供基于 `.env.production` 的配置文件管理与镜像标签。
+
+```bash
+# 1. 准备生产环境变量（基于模板创建，禁止直接修改模板）
+cp .env.production .env.production.local
+
+# 2. 编辑 .env.production.local，至少替换以下占位值：
+#    - POSTGRES_PASSWORD        数据库密码
+#    - DEEPSEEK_API_KEY         LLM API Key
+#    - SECRET_KEY               JWT 密钥（openssl rand -hex 32 生成）
+#    - CORS_ORIGINS             替换为实际访问域名
+
+# 3. 构建并启动
+docker compose --env-file .env.production.local -f docker-compose.prod.yml up -d --build
+
+# 4. 初始化 ROOT 用户
+docker compose -f docker-compose.prod.yml exec backend python scripts/create_root.py
+# Windows PowerShell 传入环境变量示例：
+docker compose -f docker-compose.prod.yml exec -e ROOT_PASSWORD=your_secure_password backend python scripts/create_root.py
+
+# 5. 查看状态与日志
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f backend
+```
+
+#### 生产环境 HTTPS（可选）
+
+1. 将证书放入 `./certs/`（`fullchain.pem` / `privkey.pem`）
+2. 编辑 `docker-compose.prod.yml`：
+   - 取消 `nginx` 服务 `443` 端口注释
+   - 取消 `./certs` 挂载注释
+   - 将挂载配置从 `nginx.conf` 切换为 `nginx.ssl.conf`
+3. 重启：`docker compose --env-file .env.production.local -f docker-compose.prod.yml up -d`
+
+#### 生产环境常用命令
+
+```bash
+# 查看所有服务状态
+docker compose -f docker-compose.prod.yml ps
+
+# 查看后端日志
+docker compose -f docker-compose.prod.yml logs -f backend
+
+# 更新部署（拉取最新代码后重新构建）
+git pull
+docker compose --env-file .env.production.local -f docker-compose.prod.yml up -d --build
+
+# 停止服务（保留数据卷）
+docker compose -f docker-compose.prod.yml down
+
+# 停止并删除数据卷（⚠️ 会清空数据库、向量数据、上传文件）
+docker compose -f docker-compose.prod.yml down -v
+
+# 数据库备份（PostgreSQL）
+docker compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres knowledge_chat > backup.sql
+
+# 数据库恢复（PostgreSQL）
+docker compose -f docker-compose.prod.yml exec -T postgres psql -U postgres knowledge_chat < backup.sql
+```
+
+#### 生产环境架构
+
+```
+                          ┌─────────────────────────────┐
+         HTTP/HTTPS       │  Nginx (80/443)             │
+      Browser ───────────►│  - /api/* → backend:8000    │
+                          │  - /ws/*  → backend:8000    │
+                          │  - /*     → frontend:80     │
+                          └──────────┬──────────────────┘
+                                     │
+                 ┌───────────────────┼───────────────────┐
+                 │                   │                   │
+        ┌────────▼────────┐ ┌────────▼────────┐ ┌────────▼────────┐
+        │ backend:8000    │ │ frontend:80     │ │ redis:6379      │
+        │ FastAPI + RAG   │ │ 静态文件 (Nginx) │ │ 缓存/会话        │
+        └────────┬────────┘ └──────────────────┘ └─────────────────┘
+                 │
+        ┌────────▼────────┐
+        │ postgres:5432   │   + 命名卷：uploads / chroma_db
+        │ 业务数据         │
+        └─────────────────┘
+```
+
+### 三、镜像构建与发布
+
+```bash
+# 构建
+docker build -f Dockerfile.backend -t ghcr.io/nanbuye-png/knowledge_chat/backend:1.0.1 .
+docker build -f Dockerfile.frontend -t ghcr.io/nanbuye-png/knowledge_chat/frontend:1.0.1 .
+
+# 推送（需登录 GHCR）
+docker login ghcr.io
+docker push ghcr.io/nanbuye-png/knowledge_chat/backend:1.0.1
+docker push ghcr.io/nanbuye-png/knowledge_chat/frontend:1.0.1
+```
+
+### 四、Kubernetes / Helm 部署
+
+项目提供了 Kubernetes 清单（`k8s/`）与 Helm Chart（`helm/knowledge-chat/`）：
+
+```bash
+# 方式一：原生 k8s 清单
+kubectl apply -f k8s/secret.yaml      # 先修改为真实密钥
+kubectl apply -f k8s/configmap.yaml   # 修改 CORS_ORIGINS 等
+kubectl apply -f k8s/backend-deployment.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/hpa.yaml
+
+# 方式二：Helm
+helm install knowledge-chat ./helm/knowledge-chat \
+  --set secrets.postgresPassword=xxx \
+  --set secrets.deepseekApiKey=xxx \
+  --set secrets.secretKey=xxx \
+  --set ingress.host=your-domain.com
+```
+
+> 注：k8s/Helm 部署依赖 PostgreSQL 与 Redis 实例（可通过外部服务或云厂商托管），
+> 部署前请根据 `k8s/configmap.yaml` 与 `helm/knowledge-chat/values.yaml` 调整连接地址。
 
 ---
 
 ## 🔧 环境变量
 
+### 根目录 `.env`（Docker Compose 开发）
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DATABASE_URL` | 数据库连接 | `sqlite+aiosqlite:///./knowledge.db` |
 | `LLM_PROVIDER` | LLM 提供商 | `deepseek` |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | - |
+| `DEEPSEEK_API_BASE` | DeepSeek API 地址 | `https://api.deepseek.com` |
 | `AGENS_API_KEY` | Agens API Key | - |
+| `AGENS_API_BASE` | Agens API 地址 | - |
+| `LLM_MODEL` | LLM 模型 | `deepseek-chat` |
 | `EMBEDDING_MODEL` | 嵌入模型 | `BAAI/bge-small-zh-v1.5` |
-| `CACHE_BACKEND` | 缓存后端 | `memory` |
+| `SECRET_KEY` | JWT 密钥 | 默认值仅限开发 |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | 数据库账号配置 | `postgres` |
+
+### 生产 `.env.production.local`
+| 变量 | 说明 | 是否必填 |
+|------|------|----------|
+| `POSTGRES_PASSWORD` | PostgreSQL 密码 | ✅ |
+| `DEEPSEEK_API_KEY` | DeepSeek API Key | ✅ |
+| `SECRET_KEY` | JWT 密钥（随机长字符串） | ✅ |
+| `LLM_PROVIDER` | LLM 提供商 | 否 |
+| `AGENS_API_KEY` / `AGENS_API_BASE` | Agens 配置（切换 Provider 时） | 否 |
+| `CORS_ORIGINS` | 允许的跨域来源 | 否 |
+| `CACHE_BACKEND` | 缓存后端 `memory` / `redis` | 否 |
+| `REDIS_HOST` / `REDIS_PORT` | Redis 连接（Compose 内为 `redis`） | 否 |
+| `ACCESS_TOKEN_EXPIRE_HOURS` | Token 过期时间（小时） | 否 |
 
 ---
 
 ## 🧪 测试
 
 ```bash
-# 后端测试 (166+ passed)
+# 后端测试
 cd backend && pytest
 
 # 前端构建验证
@@ -207,7 +375,7 @@ cd frontend && npm run build
 
 ---
 
-## � 1.0.1 Release Notes
+## 📦 v1.0.1 Release Notes
 
 ### 版本定位
 v1.0.1 是面向首次上线与生产试运行的稳定发布版本，重点提升平台的可用性、部署体验与企业级能力的完整性。
