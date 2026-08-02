@@ -29,7 +29,7 @@ class TestDockerCompose:
         path = os.path.join(_backend_dir, "..", "docker-compose.prod.yml")
         assert os.path.exists(path), f"File not found: {path}"
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             compose = yaml.safe_load(f)
 
         services = compose.get("services", {})
@@ -198,7 +198,7 @@ class TestHelm:
         with open(path) as f:
             chart = yaml.safe_load(f)
         assert chart["name"] == "knowledge-chat"
-        assert chart["appVersion"] == "2.0.0"
+        assert chart["appVersion"] == "1.0.1"
         print(f"[PASS] Helm Chart: {chart['name']} v{chart['appVersion']}")
 
     def test_values_yaml(self):

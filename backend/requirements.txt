@@ -16,6 +16,9 @@ sentence-transformers>=3.0.0
 transformers>=4.40.0
 torch>=2.2.0
 passlib[bcrypt]>=1.7.4
+# passlib 1.7.4 依赖 bcrypt.__about__ 检测版本，且新版 bcrypt(>=4.1) 对 72 字节上限
+# 直接抛 ValueError，导致 passlib 初始化 detect_wrap_bug 失败。锁定 bcrypt<4.1。
+bcrypt>=4.0,<4.1
 PyJWT>=2.8.0
 redis>=5.0.0
 psutil>=5.9.0
