@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { UserPlus, User, Lock, Mail, ArrowLeft } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
+import { PASSWORD_MIN_LENGTH, validatePasswordStrength } from '../utils/password'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -24,8 +25,14 @@ export default function Register() {
       setError('请输入用户名和密码')
       return
     }
-    if (password.length < 6) {
-      setError('密码至少 6 位')
+    if (username.trim().length < 3) {
+      setError('用户名至少 3 个字符')
+      return
+    }
+    // 密码强度规则与后端 password_policy 一致，提前给出具体原因
+    const passwordErrors = validatePasswordStrength(password)
+    if (passwordErrors.length > 0) {
+      setError(passwordErrors.join('；'))
       return
     }
 
@@ -98,6 +105,7 @@ export default function Register() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="请输入用户名"
+                maxLength={100}
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 
                            bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white
                            focus:ring-2 focus:ring-primary-500 focus:border-transparent 
@@ -137,7 +145,7 @@ export default function Register() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="请输入密码（至少 6 位）"
+                placeholder="请输入密码（至少 12 位）"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 
                            bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white
                            focus:ring-2 focus:ring-primary-500 focus:border-transparent 
@@ -145,6 +153,9 @@ export default function Register() {
                 disabled={loading}
               />
             </div>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+              需至少 {PASSWORD_MIN_LENGTH} 位，且包含大写字母、小写字母、数字和特殊字符
+            </p>
           </div>
 
           <button

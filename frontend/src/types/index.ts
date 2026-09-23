@@ -61,6 +61,7 @@ export interface DocumentState {
 export interface Conversation {
   id: number
   title: string
+  knowledge_base_id?: number | null
   created_at: string
   updated_at: string
 }

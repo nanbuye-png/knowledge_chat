@@ -1,5 +1,18 @@
 # 更新日志
 
+## v1.0.1 (2026-09-22)
+
+### LLM 模型升级：agnes-2.5-flash
+
+- **默认模型切换** — `LLM_PROVIDER=agens` + `LLM_MODEL=agnes-2.5-flash`（`.env` / `backend/.env` / `.env.production.local`）
+- **配置自检** — 新增 `Settings.check_llm_config()`，启动时校验 Provider / 模型名前缀 / API Key 一致性并输出告警；启动日志新增当前 LLM 模型
+- **推理型模型适配** — `AgensProvider` 忽略 `reasoning_content` 增量并去除正文首部前导换行（流式 + 非流式）
+- **日志健壮性** — 控制台日志在 GBK 环境下自动切换 UTF-8，修复 emoji 触发的 `UnicodeEncodeError` 日志中断
+- **配套更新** — 前端模型名称/占位符、Docker Compose、K8s ConfigMap/Secret、Helm values、README、`docs/provider_system.md`
+- **测试** — 新增 `backend/tests/test_llm_config.py`（19 个用例），后端全量 209 个用例通过
+
+详细报告：`docs/AGNES_2.5_FLASH_UPGRADE_REPORT.md`
+
 ## v1.0.1 (2026-07-22)
 
 ### 版本概述

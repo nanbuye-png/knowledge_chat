@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from loguru import logger
 
 from ..auth.jwt import create_access_token
@@ -71,7 +72,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
             detail="；".join(errors),
         )
 
-    # Check if username already exists (including soft-deleted)
+    # Check if username already exists (soft-deleted users are excluded)
     result = await db.execute(select(User).where(User.username == request.username, active_user_filter()))
     existing = result.scalar_one_or_none()
     if existing is not None:
@@ -80,13 +81,34 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
             detail="用户名已存在",
         )
 
+    # 邮箱查重（仅在提供了邮箱时校验）。
+    # users.email 上有唯一索引，若不先查重，重复邮箱会在 commit 时抛
+    # IntegrityError 并返回 500，前端只能看到"请求失败/服务器内部错误"。
+    if request.email:
+        email_result = await db.execute(
+            select(User).where(User.email == request.email, active_user_filter())
+        )
+        if email_result.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="邮箱已被注册",
+            )
+
     user = User(
         username=request.username,
         email=request.email,
         password_hash=hash_password(request.password),
     )
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 兜底：并发注册，或被软删除账号占用了同一用户名/邮箱（软删除不过滤唯一索引）
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="用户名或邮箱已被占用",
+        )
     await db.refresh(user)
 
     logger.info(f"User registered: {user.username} (id={user.id})")

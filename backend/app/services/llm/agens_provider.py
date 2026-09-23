@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Union
 
 from openai import AsyncOpenAI
 
-from .base import LLMProvider
+from .base import LLMProvider, build_llm_http_client
 
 
 class AgensProvider(LLMProvider):
@@ -18,17 +18,32 @@ class AgensProvider(LLMProvider):
     **not** read environment variables, config files, or the database.
     """
 
-    def __init__(self, api_key: str, base_url: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        disable_proxy: bool = False,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+    ) -> None:
         """Initialize the Agens provider.
 
         Args:
             api_key: Agens API key (required, injected from config).
             base_url: API base URL (required, injected from config).
             model: Default model name (required, injected from config).
+            disable_proxy: When ``True``, bypass the system/environment proxy
+                (``trust_env=False``) for LLM requests.
+            timeout: Read/write timeout in seconds for LLM requests.
+            connect_timeout: Connect/pool timeout in seconds for LLM requests.
         """
         self._api_key = api_key
         self._base_url = base_url
         self._model = model
+        self._disable_proxy = disable_proxy
+        self._timeout = timeout
+        self._connect_timeout = connect_timeout
         self._client: AsyncOpenAI | None = None
 
     @property
@@ -42,6 +57,11 @@ class AgensProvider(LLMProvider):
             self._client = AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
+                http_client=build_llm_http_client(
+                    disable_proxy=self._disable_proxy,
+                    timeout=self._timeout,
+                    connect_timeout=self._connect_timeout,
+                ),
             )
         return self._client
 
@@ -81,8 +101,9 @@ class AgensProvider(LLMProvider):
             max_tokens=max_tokens,
             **kwargs,
         )
-        content = response.choices[0].message.content
-        return content or ""
+        content = response.choices[0].message.content or ""
+        # Agens 推理型模型（如 agnes-2.5-flash）正文前会带前导换行，去掉以免前端出现空白段落
+        return content.lstrip()
 
     async def _stream_response(
         self,
@@ -102,6 +123,7 @@ class AgensProvider(LLMProvider):
             **kwargs,
         )
         try:
+            is_first_chunk = True
             async for chunk in stream_obj:
                 if not chunk.choices:
                     continue
@@ -114,8 +136,18 @@ class AgensProvider(LLMProvider):
 
                 content = getattr(delta, "content", None)
 
-                if content:
-                    yield content
+                if not content:
+                    continue
+
+                # Agens 推理型模型（如 agnes-2.5-flash）会先输出 reasoning_content，
+                # 正文首个 chunk 带前导换行，这里在首块去除，避免前端出现空白段落。
+                if is_first_chunk:
+                    content = content.lstrip()
+                    if not content:
+                        continue
+                    is_first_chunk = False
+
+                yield content
         finally:
             close = getattr(stream_obj, "close", None)
 

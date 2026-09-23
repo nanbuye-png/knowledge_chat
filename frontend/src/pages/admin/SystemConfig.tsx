@@ -23,8 +23,8 @@ function SystemConfig() {
         {
           title: 'LLM Provider', icon: Cpu,
           fields: [
-            { key: 'llm_provider', label: 'Provider', type: 'text', value: data.llm_provider || 'deepseek' },
-            { key: 'llm_model', label: 'Model', type: 'text', value: data.llm_model || 'deepseek-chat' },
+            { key: 'llm_provider', label: 'Provider', type: 'text', value: data.llm_provider || 'agens' },
+            { key: 'llm_model', label: 'Model', type: 'text', value: data.llm_model || 'agnes-2.5-flash' },
           ],
         },
         {

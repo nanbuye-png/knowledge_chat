@@ -73,13 +73,17 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
     logger.info(f"✅ {settings.APP_NAME} 启动完成")
     logger.info(f"📡 API 文档: http://localhost:8000/docs")
-    logger.info(f"🔗 LLM Provider: {settings.LLM_PROVIDER}")
+    logger.info(f"🔗 LLM Provider: {settings.LLM_PROVIDER} | 🤖 LLM 模型: {settings.LLM_MODEL}")
     
     # 动态显示当前 Provider 的 endpoint
     if settings.LLM_PROVIDER == "deepseek":
         logger.info(f"🔗 DeepSeek API: {settings.DEEPSEEK_API_BASE}")
     elif settings.LLM_PROVIDER == "agens":
         logger.info(f"🔗 Agens API: {settings.AGENS_API_BASE}")
+
+    # LLM 配置自检（Provider / 模型 / API Key 是否匹配）
+    for issue in settings.check_llm_config():
+        logger.warning(f"⚠️  LLM 配置检查: {issue}")
     
     logger.info(f"🗄️  数据库: {settings.DATABASE_URL}")
     logger.info(f"📦 向量存储: {settings.VECTOR_STORE_TYPE}")

@@ -194,7 +194,9 @@ python scripts/create_root.py
 ```bash
 # 1. 配置环境变量（LLM API Key 等）
 cp .env.example .env
-# 编辑 .env，填写 DEEPSEEK_API_KEY / AGENS_API_KEY
+# 编辑 .env：
+#   - 使用 Agens：LLM_PROVIDER=agens、LLM_MODEL=agnes-2.5-flash、AGENS_API_KEY=sk-xxx
+#   - 使用 DeepSeek：LLM_PROVIDER=deepseek、LLM_MODEL=deepseek-chat、DEEPSEEK_API_KEY=sk-xxx
 
 # 2. 构建并启动
 docker compose up -d --build
@@ -219,7 +221,8 @@ cp .env.production .env.production.local
 
 # 2. 编辑 .env.production.local，至少替换以下占位值：
 #    - POSTGRES_PASSWORD        数据库密码
-#    - DEEPSEEK_API_KEY         LLM API Key
+#    - AGENS_API_KEY            Agens API Key（LLM_PROVIDER=agens 时必填）
+#    - DEEPSEEK_API_KEY         DeepSeek API Key（LLM_PROVIDER=deepseek 时必填）
 #    - SECRET_KEY               JWT 密钥（openssl rand -hex 32 生成）
 #    - CORS_ORIGINS             替换为实际访问域名
 
@@ -322,7 +325,7 @@ kubectl apply -f k8s/hpa.yaml
 # 方式二：Helm
 helm install knowledge-chat ./helm/knowledge-chat \
   --set secrets.postgresPassword=xxx \
-  --set secrets.deepseekApiKey=xxx \
+  --set secrets.agensApiKey=xxx \
   --set secrets.secretKey=xxx \
   --set ingress.host=your-domain.com
 ```
@@ -337,16 +340,23 @@ helm install knowledge-chat ./helm/knowledge-chat \
 ### 根目录 `.env`（Docker Compose 开发）
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `LLM_PROVIDER` | LLM 提供商 | `deepseek` |
+| `LLM_PROVIDER` | LLM 提供商（`deepseek` / `agens`） | `deepseek` |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | - |
 | `DEEPSEEK_API_BASE` | DeepSeek API 地址 | `https://api.deepseek.com` |
 | `AGENS_API_KEY` | Agens API Key | - |
-| `AGENS_API_BASE` | Agens API 地址 | - |
-| `LLM_MODEL` | LLM 模型 | `deepseek-chat` |
+| `AGENS_API_BASE` | Agens API 地址 | `https://apihub.agnes-ai.com/v1` |
+| `LLM_MODEL` | LLM 模型（须与 `LLM_PROVIDER` 匹配） | `deepseek-chat` |
 | `EMBEDDING_MODEL` | 嵌入模型 | `BAAI/bge-small-zh-v1.5` |
 | `SECRET_KEY` | JWT 密钥 | 默认值仅限开发 |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | 数据库账号配置 | `postgres` |
+
+> **切换 LLM 模型**：只需修改 `LLM_PROVIDER` + `LLM_MODEL`，无需改动代码。
+> - Agens：`LLM_PROVIDER=agens`、`LLM_MODEL=agnes-2.5-flash`（可选 `agnes-2.5-pro` / `agnes-3.0-flash` / `agnes-2.0-flash`）
+> - DeepSeek：`LLM_PROVIDER=deepseek`、`LLM_MODEL=deepseek-chat`
+>
+> 模型名必须与 Provider 匹配。后端启动时会打印当前 `LLM Provider` 与 `LLM 模型`，
+> 若 Provider 与模型名不匹配或 API Key / Base URL 缺失，会在日志中输出 `⚠️ LLM 配置检查` 告警。
 
 ### 生产 `.env.production.local`
 | 变量 | 说明 | 是否必填 |
@@ -355,7 +365,8 @@ helm install knowledge-chat ./helm/knowledge-chat \
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | ✅ |
 | `SECRET_KEY` | JWT 密钥（随机长字符串） | ✅ |
 | `LLM_PROVIDER` | LLM 提供商 | 否 |
-| `AGENS_API_KEY` / `AGENS_API_BASE` | Agens 配置（切换 Provider 时） | 否 |
+| `LLM_MODEL` | LLM 模型（须与 Provider 匹配，如 `agnes-2.5-flash`） | 否 |
+| `AGENS_API_KEY` / `AGENS_API_BASE` | Agens 配置（使用 `LLM_PROVIDER=agens` 时必填） | 否 |
 | `CORS_ORIGINS` | 允许的跨域来源 | 否 |
 | `CACHE_BACKEND` | 缓存后端 `memory` / `redis` | 否 |
 | `REDIS_HOST` / `REDIS_PORT` | Redis 连接（Compose 内为 `redis`） | 否 |

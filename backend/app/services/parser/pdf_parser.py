@@ -57,8 +57,8 @@ class PdfParser(DocumentParser):
         logger.debug(f"  filename: {file_path}")
         logger.debug(f"  type: pdf")
         logger.debug(f"  PDF pages: {page_count}")
-        if page_count > 0:
-            first_page_text = doc[0].get_text() if hasattr(doc, '__getitem__') and page_count > 0 else page_texts[0] if page_texts else ""
+        if page_count > 0 and page_texts:
+            first_page_text = page_texts[0]
             logger.debug(f"  page1 chars: {len(first_page_text)}")
             logger.debug(f"  page1 preview: {repr(first_page_text[:200])}")
         logger.debug(f"  paragraph_count: {content.count(chr(10)) + 1}")

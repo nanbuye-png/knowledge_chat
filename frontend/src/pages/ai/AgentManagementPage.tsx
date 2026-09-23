@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Bot, Plus, Play, Trash2, Cpu, BookOpen, Settings, Power, PowerOff } from 'lucide-react'
 
 const placeholderAgents = [
-  { id: 1, name: '知识问答助手', description: '基于知识库的 RAG 问答 Agent', model: 'agnes-2.0-flash', kb: '默认知识库', status: 'active', updated: '2026-07-19' },
+  { id: 1, name: '知识问答助手', description: '基于知识库的 RAG 问答 Agent', model: 'agnes-2.5-flash', kb: '默认知识库', status: 'active', updated: '2026-07-19' },
 ]
 
 export default function AgentManagementPage() {

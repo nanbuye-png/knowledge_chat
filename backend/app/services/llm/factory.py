@@ -177,12 +177,18 @@ class LLMProviderFactory:
                 api_key=settings.DEEPSEEK_API_KEY,
                 base_url=settings.DEEPSEEK_API_BASE,
                 model=model_name,
+                disable_proxy=settings.LLM_DISABLE_PROXY,
+                timeout=settings.LLM_TIMEOUT,
+                connect_timeout=settings.LLM_CONNECT_TIMEOUT,
             )
         if provider_name == "agens":
             return provider_cls(
                 api_key=settings.AGENS_API_KEY,
                 base_url=settings.AGENS_API_BASE,
                 model=model_name,
+                disable_proxy=settings.LLM_DISABLE_PROXY,
+                timeout=settings.LLM_TIMEOUT,
+                connect_timeout=settings.LLM_CONNECT_TIMEOUT,
             )
 
         # Generic fallback for future providers that follow the convention

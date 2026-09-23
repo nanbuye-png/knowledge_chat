@@ -26,7 +26,8 @@ export default function ChatPage() {
   const fetchConversations = useCallback(async () => {
     try {
       const data = await conversationsApi.listConversations()
-      setConversationList(data)
+      // 只保留普通聊天会话，排除知识库会话（避免知识库标题串到 AI 对话页）
+      setConversationList(data.filter((c) => !c.knowledge_base_id))
     } catch {}
   }, [])
 

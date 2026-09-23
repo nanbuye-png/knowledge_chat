@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Union
 
 from openai import AsyncOpenAI
 
-from .base import LLMProvider
+from .base import LLMProvider, build_llm_http_client
 
 
 class DeepSeekProvider(LLMProvider):
@@ -18,17 +18,32 @@ class DeepSeekProvider(LLMProvider):
     **not** read environment variables, config files, or the database.
     """
 
-    def __init__(self, api_key: str, base_url: str, model: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        disable_proxy: bool = False,
+        timeout: float | None = None,
+        connect_timeout: float | None = None,
+    ) -> None:
         """Initialize the DeepSeek provider.
 
         Args:
             api_key: DeepSeek API key (required, injected from config).
             base_url: API base URL (required, injected from config).
             model: Default model name (required, injected from config).
+            disable_proxy: When ``True``, bypass the system/environment proxy
+                (``trust_env=False``) for LLM requests.
+            timeout: Read/write timeout in seconds for LLM requests.
+            connect_timeout: Connect/pool timeout in seconds for LLM requests.
         """
         self._api_key = api_key
         self._base_url = base_url
         self._model = model
+        self._disable_proxy = disable_proxy
+        self._timeout = timeout
+        self._connect_timeout = connect_timeout
         self._client: AsyncOpenAI | None = None
 
     @property
@@ -42,6 +57,11 @@ class DeepSeekProvider(LLMProvider):
             self._client = AsyncOpenAI(
                 api_key=self._api_key,
                 base_url=self._base_url,
+                http_client=build_llm_http_client(
+                    disable_proxy=self._disable_proxy,
+                    timeout=self._timeout,
+                    connect_timeout=self._connect_timeout,
+                ),
             )
         return self._client
 

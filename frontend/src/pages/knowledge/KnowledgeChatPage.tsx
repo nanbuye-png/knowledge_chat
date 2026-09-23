@@ -165,7 +165,8 @@ export default function KnowledgeChatPage() {
                         border-b border-slate-200 dark:border-slate-700 flex items-center px-4 z-40">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('/workspace')}
+            onClick={() => navigate('/workspace?tab=knowledge')}
+            title="返回知识库"
             className="p-1 rounded-lg text-slate-400 hover:text-primary-500 
                        hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
@@ -181,6 +182,14 @@ export default function KnowledgeChatPage() {
           </span>
         </div>
         <div className="flex-1" />
+        <button
+          onClick={handleNewChat}
+          className="text-xs px-3 py-1.5 rounded-lg bg-primary-50 text-primary-600 
+                     hover:bg-primary-100 dark:bg-primary-900/20 dark:text-primary-400 
+                     dark:hover:bg-primary-900/30 transition-colors"
+        >
+          + 新对话
+        </button>
       </header>
 
       <div className="flex flex-1 overflow-hidden">

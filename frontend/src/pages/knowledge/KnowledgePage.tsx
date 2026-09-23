@@ -139,7 +139,7 @@ export default function KnowledgePage() {
             onClick={() => {
               const input = document.createElement('input')
               input.type = 'file'
-              input.accept = '.pdf,.docx,.doc,.md,.txt'
+              input.accept = '.pdf,.docx,.doc,.md,.txt,.xlsx,.csv'
               input.onchange = (e) => {
                 const file = (e.target as HTMLInputElement).files?.[0]
                 if (file) handleUpload(file)

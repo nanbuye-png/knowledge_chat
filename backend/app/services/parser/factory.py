@@ -8,7 +8,10 @@ from .base import DocumentParser
 from .text_parser import TextParser
 from .markdown_parser import MarkdownParser
 from .docx_parser import DocxParser
+from .doc_parser import DocParser
 from .pdf_parser import PdfParser
+from .xlsx_parser import XlsxParser
+from .csv_parser import CsvParser
 
 
 class ParserFactory:
@@ -18,8 +21,10 @@ class ParserFactory:
         ".txt": TextParser,
         ".md": MarkdownParser,
         ".docx": DocxParser,
-        ".doc": DocxParser,
+        ".doc": DocParser,
         ".pdf": PdfParser,
+        ".xlsx": XlsxParser,
+        ".csv": CsvParser,
     }
 
     @classmethod

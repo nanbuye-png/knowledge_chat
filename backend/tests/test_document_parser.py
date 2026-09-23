@@ -165,6 +165,67 @@ class TestDocxParser:
             os.remove(path)
 
 
+# ── DOC Parser Tests (legacy .doc, via olefile) ────────────────────
+
+
+def _make_minimal_doc(text: str, is_unicode: bool = True) -> bytes:
+    """Build a minimal WordDocument stream (FIB header + body)."""
+    import struct
+
+    body = text.encode("utf-16-le") if is_unicode else text.encode("gb18030")
+    fc_min = 0x20
+    fc_mac = fc_min + len(body)
+
+    fib = bytearray(32)
+    struct.pack_into("<H", fib, 0x00, 0xA5EC)  # wIdent
+    struct.pack_into("<H", fib, 0x02, 0x00C1)  # nFib (Word 97)
+    struct.pack_into("<H", fib, 0x0A, 0x1000 if is_unicode else 0x0000)  # flags
+    struct.pack_into("<I", fib, 0x18, fc_min)
+    struct.pack_into("<I", fib, 0x1C, fc_mac)
+    return bytes(fib) + body
+
+
+class TestDocParser:
+    """Test legacy .doc parsing via DocParser."""
+
+    def test_extract_unicode_body(self):
+        from app.services.parser.doc_parser import DocParser
+
+        stream = _make_minimal_doc("门诊时间：08:00-12:00\r下午 14:00-17:30")
+        content = DocParser()._extract_body(stream)
+        assert "门诊时间" in content
+        assert "08:00-12:00" in content
+        assert "14:00-17:30" in content
+
+    def test_extract_single_byte_body(self):
+        from app.services.parser.doc_parser import DocParser
+
+        stream = _make_minimal_doc("金额：100元\r完成度：50%", is_unicode=False)
+        content = DocParser()._extract_body(stream)
+        assert "100元" in content
+        assert "50%" in content
+
+    def test_clean_text_normalises_control_chars(self):
+        from app.services.parser.doc_parser import DocParser
+
+        cleaned = DocParser._clean_text("A\rB\x0bC\x0cD\x07E")
+        assert "\r" not in cleaned
+        assert "\x07" not in cleaned
+        assert " | " in cleaned
+
+    def test_decode_single_byte_prefers_gbk(self):
+        from app.services.parser.doc_parser import DocParser
+
+        decoded = DocParser._decode_single_byte("中文测试".encode("gbk"))
+        assert "中文测试" in decoded
+
+    def test_looks_like_text_filters_garbage(self):
+        from app.services.parser.doc_parser import DocParser
+
+        assert DocParser._looks_like_text("一、核心技术") is True
+        assert DocParser._looks_like_text("\x00\x01") is False
+
+
 # ── PDF Parser Tests (if PyMuPDF available) ───────────────────────
 
 
@@ -172,26 +233,20 @@ class TestPdfParser:
     """Test .pdf parsing.  Requires PyMuPDF (fitz)."""
 
     def _create_simple_pdf(self) -> str:
-        try:
-            from reportlab.lib.pagesizes import A4  # type: ignore
-            from reportlab.pdfgen import canvas  # type: ignore
-        except ImportError:
-            return None  # reportlab not installed, skip
+        import fitz  # PyMuPDF — declared in requirements.txt
 
         fd, path = tempfile.mkstemp(suffix=".pdf")
         os.close(fd)
 
-        c = canvas.Canvas(path, pagesize=A4)
-        c.drawString(100, 750, "门诊时间：")
-        c.drawString(100, 730, "上午 08:00-12:00")
-        c.drawString(100, 710, "下午 14:00-17:30")
-        c.save()
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72), "Time: 08:00-12:00\nAfternoon: 14:00-17:30")
+        doc.save(path)
+        doc.close()
         return path
 
     def test_pdf_text_preserved(self):
         path = self._create_simple_pdf()
-        if path is None:
-            return  # reportlab not available
         try:
             result = ParserFactory.get_parser(path).parse(path)
             content = result["content"]
@@ -204,6 +259,54 @@ class TestPdfParser:
             os.remove(path)
 
 
+# ── XLSX Parser Tests ─────────────────────────────────────────────
+
+
+class TestXlsxParser:
+    """Test .xlsx parsing via openpyxl."""
+
+    def test_rows_preserved(self):
+        from openpyxl import Workbook
+
+        fd, path = tempfile.mkstemp(suffix=".xlsx")
+        os.close(fd)
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "数据"
+        ws.append(["时间", "上午", "下午"])
+        ws.append(["周一", "08:00", "14:00"])
+        wb.save(path)
+        try:
+            result = ParserFactory.get_parser(path).parse(path)
+            content = result["content"]
+            assert "08:00" in content
+            assert "14:00" in content
+            assert "时间 | 上午 | 下午" in content, f"Header missing in:\n{content}"
+            assert result["metadata"]["type"] == "xlsx"
+        finally:
+            os.remove(path)
+
+
+# ── CSV Parser Tests ──────────────────────────────────────────────
+
+
+class TestCsvParser:
+    """Test .csv parsing via the standard-library csv module."""
+
+    def test_rows_preserved(self):
+        content = "时间,上午,下午\n周一,08:00,14:00\n"
+        path = _make_temp_file(content, ".csv")
+        try:
+            result = ParserFactory.get_parser(path).parse(path)
+            parsed = result["content"]
+            assert "08:00" in parsed
+            assert "14:00" in parsed
+            assert "时间 | 上午 | 下午" in parsed, f"Header missing in:\n{parsed}"
+            assert result["metadata"]["type"] == "csv"
+        finally:
+            os.remove(path)
+
+
 # ── Factory Tests ─────────────────────────────────────────────────
 
 
@@ -212,13 +315,18 @@ class TestParserFactory:
         from app.services.parser.text_parser import TextParser
         from app.services.parser.markdown_parser import MarkdownParser
         from app.services.parser.docx_parser import DocxParser
+        from app.services.parser.doc_parser import DocParser
         from app.services.parser.pdf_parser import PdfParser
+        from app.services.parser.xlsx_parser import XlsxParser
+        from app.services.parser.csv_parser import CsvParser
 
         assert isinstance(ParserFactory.get_parser("a.txt"), TextParser)
         assert isinstance(ParserFactory.get_parser("a.md"), MarkdownParser)
         assert isinstance(ParserFactory.get_parser("a.docx"), DocxParser)
-        assert isinstance(ParserFactory.get_parser("a.doc"), DocxParser)
+        assert isinstance(ParserFactory.get_parser("a.doc"), DocParser)
         assert isinstance(ParserFactory.get_parser("a.pdf"), PdfParser)
+        assert isinstance(ParserFactory.get_parser("a.xlsx"), XlsxParser)
+        assert isinstance(ParserFactory.get_parser("a.csv"), CsvParser)
 
     def test_unsupported_extension_raises(self):
         import pytest

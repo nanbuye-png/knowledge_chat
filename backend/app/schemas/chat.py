@@ -57,6 +57,7 @@ class CreateConversationResponse(BaseModel):
 class ConversationListItem(BaseModel):
     id: int
     title: str
+    knowledge_base_id: int | None = None
     created_at: str
     updated_at: str
 

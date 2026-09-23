@@ -18,6 +18,30 @@ def _make_absolute(path: str) -> str:
     return (_BACKEND_DIR / p).as_posix()
 
 
+# ---- LLM Provider / 模型元数据（用于配置校验与文档提示） ----
+# 已支持的 Provider
+LLM_PROVIDERS: tuple[str, ...] = ("deepseek", "agens")
+
+# 每个 Provider 的模型名前缀（用于校验 LLM_PROVIDER 与 LLM_MODEL 是否匹配）
+PROVIDER_MODEL_PREFIXES: dict[str, str] = {
+    "deepseek": "deepseek",
+    "agens": "agnes",
+}
+
+# 各 Provider 的已知模型名（可通过 GET {AGENS_API_BASE}/models 查询）
+KNOWN_MODELS: dict[str, tuple[str, ...]] = {
+    "deepseek": ("deepseek-chat", "deepseek-reasoner"),
+    "agens": (
+        "agnes-2.0-flash",
+        "agnes-2.5-flash",
+        "agnes-2.5-pro",
+        "agnes-2.5-pro-beta",
+        "agnes-2.5-pro-alpha",
+        "agnes-3.0-flash",
+    ),
+}
+
+
 class Settings(BaseSettings):
     # 应用
     APP_NAME: str = "智能知识库问答系统"
@@ -31,11 +55,22 @@ class Settings(BaseSettings):
     # DeepSeek 配置
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_API_BASE: str = "https://api.deepseek.com"
+
+    # 当前使用的模型（随 LLM_PROVIDER 切换），如 deepseek-chat / agnes-2.5-flash
     LLM_MODEL: str = "deepseek-chat"
 
     # Agens 配置
     AGENS_API_KEY: str = ""
-    AGENS_API_BASE: str = ""
+    AGENS_API_BASE: str = "https://apihub.agnes-ai.com/v1"
+
+    # ---- LLM HTTP 客户端（代理开关 / 超时）----
+    # 当系统代理（如 Clash 的 127.0.0.1:7897）干扰 LLM API 连接时设为 True，
+    # 让 LLM 请求绕过系统/环境代理直连（trust_env=False）。
+    LLM_DISABLE_PROXY: bool = False
+    # LLM 请求超时（秒）：作用于流式响应的 read/write 阶段
+    LLM_TIMEOUT: float = 120.0
+    # LLM 连接/连接池超时（秒）
+    LLM_CONNECT_TIMEOUT: float = 10.0
 
     # ---- 数据库 ----
     # 数据库类型: "sqlite" 或 "postgresql"
@@ -78,7 +113,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
     MAX_FILE_SIZE: int = 50 * 1024 * 1024  # 50MB
     ALLOWED_EXTENSIONS: set = {
-        ".pdf", ".docx", ".md", ".txt", ".doc"
+        ".pdf", ".docx", ".doc", ".md", ".txt", ".xlsx", ".csv"
     }
 
     # 分块
@@ -108,6 +143,57 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+
+    def check_llm_config(self) -> list[str]:
+        """校验 LLM Provider / 模型 / API Key 组合，返回警告信息列表。
+
+        返回空列表表示配置自洽（Provider、模型名前缀、API Key 均匹配）。
+        该方法只读取配置，不修改任何状态，可在启动时安全调用。
+
+        Returns:
+            list[str]: 人类可读的配置警告；空列表代表未发现明显问题。
+        """
+        issues: list[str] = []
+        provider = (self.LLM_PROVIDER or "").strip().lower()
+        model = (self.LLM_MODEL or "").strip()
+
+        if provider not in LLM_PROVIDERS:
+            issues.append(
+                f"LLM_PROVIDER='{self.LLM_PROVIDER}' 不受支持，"
+                f"可选值: {', '.join(LLM_PROVIDERS)}"
+            )
+            return issues
+
+        if not model:
+            issues.append("LLM_MODEL 为空，无法确定要调用的模型名")
+            return issues
+
+        # Provider 与模型名前缀匹配校验（例如 agens 只能用 agnes-* 模型）
+        expected_prefix = PROVIDER_MODEL_PREFIXES[provider]
+        if not model.startswith(expected_prefix):
+            issues.append(
+                f"LLM_PROVIDER='{provider}' 与 LLM_MODEL='{model}' 不匹配："
+                f"{provider} 的模型名应以 '{expected_prefix}' 开头"
+            )
+        elif model not in KNOWN_MODELS.get(provider, ()):
+            issues.append(
+                f"LLM_MODEL='{model}' 不在已知模型列表 {KNOWN_MODELS.get(provider)} 中，"
+                f"请确认 Provider 侧确实提供该模型"
+            )
+
+        # API Key / Base URL 校验
+        if provider == "agens":
+            if not (self.AGENS_API_KEY or "").strip():
+                issues.append("AGENS_API_KEY 未配置，Agens 接口调用将返回 401")
+            if not (self.AGENS_API_BASE or "").strip():
+                issues.append("AGENS_API_BASE 未配置，无法定位 Agens 接口地址")
+        elif provider == "deepseek":
+            if not (self.DEEPSEEK_API_KEY or "").strip():
+                issues.append("DEEPSEEK_API_KEY 未配置，DeepSeek 接口调用将返回 401")
+            if not (self.DEEPSEEK_API_BASE or "").strip():
+                issues.append("DEEPSEEK_API_BASE 未配置，无法定位 DeepSeek 接口地址")
+
+        return issues
 
 
 settings = Settings()

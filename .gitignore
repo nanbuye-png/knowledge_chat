@@ -32,7 +32,18 @@ frontend/node_modules/
 frontend/dist/
 
 # 虚拟环境
+.venv/
+venv/
 backend/venv/
+
+# 测试缓存
+.pytest_cache/
+
+# 临时诊断脚本
+_*_tmp.py
+
+# 个人材料（不提交到公开仓库）
+docs/INTERVIEW_GUIDE.md
 
 # Docker
 *.log

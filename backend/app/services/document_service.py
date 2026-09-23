@@ -23,8 +23,6 @@ class DocumentService:
     :class:`KnowledgePipeline`.
     """
 
-    ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".md", ".txt"}
-
     def __init__(self):
         self._pipeline = KnowledgePipeline()
 

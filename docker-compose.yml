@@ -73,6 +73,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:80","http://localhost","http://frontend"]}
 
       # LLM Provider 配置（复制 .env.example 为 .env 后，Docker Compose 会自动读取）
+      # 当前推荐：LLM_PROVIDER=agens + LLM_MODEL=agnes-2.5-flash（需同时配置 AGENS_API_KEY）
       LLM_PROVIDER: ${LLM_PROVIDER:-deepseek}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_API_BASE: ${DEEPSEEK_API_BASE:-https://api.deepseek.com}

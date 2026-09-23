@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { LayoutDashboard, MessageSquare, BookOpen, FileText } from 'lucide-react'
 import WorkspaceOverview from './WorkspaceOverview'
@@ -12,8 +13,19 @@ type WorkspaceTab = 'overview' | 'chat' | 'knowledge' | 'documents'
  * USER 工作空间页面。
  * 包含 Overview Dashboard + Chat + Knowledge + Documents 标签切换。
  */
+const VALID_TABS: WorkspaceTab[] = ['overview', 'chat', 'knowledge', 'documents']
+
 export default function WorkspacePage() {
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab') as WorkspaceTab | null
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(
+    tabParam && VALID_TABS.includes(tabParam) ? tabParam : 'overview'
+  )
+
+  const handleTabChange = (tab: WorkspaceTab) => {
+    setActiveTab(tab)
+    setSearchParams({ tab }, { replace: true })
+  }
 
   const tabs = [
     { key: 'overview' as WorkspaceTab, label: '概览', icon: LayoutDashboard },
@@ -29,7 +41,7 @@ export default function WorkspacePage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setActiveTab(t.key)}
+            onClick={() => handleTabChange(t.key)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-t-lg transition-colors
               ${activeTab === t.key
                 ? 'bg-slate-50 dark:bg-slate-700 text-primary-600 dark:text-primary-400 font-medium border-b-2 border-primary-500'

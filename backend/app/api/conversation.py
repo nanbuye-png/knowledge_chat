@@ -55,6 +55,7 @@ async def list_conversations(
             ConversationListItem(
                 id=c["id"],
                 title=c["title"],
+                knowledge_base_id=c["knowledge_base_id"],
                 created_at=c["created_at"],
                 updated_at=c["updated_at"],
             )
@@ -129,6 +130,7 @@ async def rename_conversation_endpoint(
         return ConversationListItem(
             id=conv["id"],
             title=conv["title"],
+            knowledge_base_id=conv["knowledge_base_id"],
             created_at=conv["created_at"],
             updated_at=conv["updated_at"],
         )
