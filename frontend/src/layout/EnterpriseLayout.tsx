@@ -2,7 +2,7 @@ import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Building2, Settings, Key, Shield,
-  Brain, Cpu, Database, Bot, BarChart3, BookOpen, MessageSquare,
+  Brain, Cpu, Bot, BarChart3, BookOpen, MessageSquare, Server, Wrench,
   LogOut, Sun, Moon, ChevronRight, FileText, GitBranch
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
@@ -54,12 +54,17 @@ const NAV_ITEMS: NavItem[] = [
     label: 'AI Console',
     icon: Brain,
     path: '/ai/models',
-    roles: ['ROOT', 'ADMIN', 'USER'],
+    // 注意：roles 必须与 router/index.tsx 中 ManagerRoute（ROOT + ADMIN）保持一致，
+    // 子项 path 必须是真实存在的路由，否则点击后会被守卫静默弹回首页。
+    roles: ['ROOT', 'ADMIN'],
     children: [
-      { label: 'Models', icon: Cpu, path: '/ai/models', roles: ['ROOT', 'ADMIN', 'USER'] },
-      { label: 'Embedding', icon: Database, path: '/ai/embedding', roles: ['ROOT', 'ADMIN', 'USER'] },
-      { label: 'Retrieval', icon: Bot, path: '/ai/retrieval', roles: ['ROOT', 'ADMIN', 'USER'] },
-      { label: 'Agent', icon: Bot, path: '/ai/agent', roles: ['ROOT', 'ADMIN', 'USER'] },
+      { label: 'Models', icon: Cpu, path: '/ai/models', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Providers', icon: Server, path: '/ai/providers', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Prompts', icon: FileText, path: '/ai/prompts', roles: ['ROOT', 'ADMIN'] },
+      { label: 'AI Config', icon: Settings, path: '/ai/config', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Agents', icon: Bot, path: '/ai/agents', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Workflows', icon: GitBranch, path: '/ai/workflows', roles: ['ROOT', 'ADMIN'] },
+      { label: 'Tools', icon: Wrench, path: '/ai/tools', roles: ['ROOT', 'ADMIN'] },
     ],
   },
   { label: 'Monitoring', icon: BarChart3, path: '/monitoring', roles: ['ROOT'] },

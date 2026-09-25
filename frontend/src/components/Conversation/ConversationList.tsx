@@ -95,7 +95,7 @@ export default function ConversationList({
           className="px-4 py-2 text-xs font-medium text-white bg-gradient-to-r from-emerald-500 to-teal-500 rounded-lg
                      shadow-sm hover:shadow-md transition-all duration-200 active:scale-[0.98]"
         >
-          开始新的知识库问答
+          开始新对话
         </button>
       </div>
     )

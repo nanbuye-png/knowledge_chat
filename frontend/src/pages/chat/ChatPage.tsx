@@ -8,6 +8,7 @@ import * as conversationsApi from '../../api/conversations'
 import type { Message, Conversation } from '../../types'
 import ChatMessage from './ChatMessage'
 import InputBox from './InputBox'
+import ConversationList from '../../components/Conversation/ConversationList'
 
 export default function ChatPage() {
   const { fetchUser } = useAuthStore()
@@ -18,7 +19,14 @@ export default function ChatPage() {
 
   const [showClearConfirm, setShowClearConfirm] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<Conversation | null>(null)
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const showMessage = useCallback((msg: string) => {
+    setActionMsg(msg)
+    setTimeout(() => setActionMsg(null), 3000)
+  }, [])
 
   useEffect(() => { fetchUser() }, [fetchUser])
 
@@ -28,8 +36,10 @@ export default function ChatPage() {
       const data = await conversationsApi.listConversations()
       // 只保留普通聊天会话，排除知识库会话（避免知识库标题串到 AI 对话页）
       setConversationList(data.filter((c) => !c.knowledge_base_id))
-    } catch {}
-  }, [])
+    } catch (err: any) {
+      showMessage(`会话列表加载失败：${err?.message || '未知错误'}`)
+    }
+  }, [setConversationList, showMessage])
 
   useEffect(() => { fetchConversations() }, [fetchConversations])
 
@@ -85,8 +95,10 @@ export default function ChatPage() {
       setCurrentConversationId(conv.id)
       await fetchConversations()
       clearMessages()
-    } catch {}
-  }, [setCurrentConversationId, fetchConversations, clearMessages])
+    } catch (err: any) {
+      showMessage(`新建会话失败：${err?.message || '未知错误'}`)
+    }
+  }, [setCurrentConversationId, fetchConversations, clearMessages, showMessage])
 
   const handleSelectConversation = useCallback(async (conv: Conversation) => {
     setCurrentConversationId(conv.id)
@@ -96,10 +108,13 @@ export default function ChatPage() {
         id: m.id, role: m.role, content: m.content, timestamp: new Date(m.created_at).getTime(),
       }))
       loadMessages(converted)
-    } catch {}
-  }, [setCurrentConversationId, loadMessages])
+    } catch (err: any) {
+      showMessage(`会话内容加载失败：${err?.message || '未知错误'}`)
+    }
+  }, [setCurrentConversationId, loadMessages, showMessage])
 
-  const handleDeleteConversation = useCallback(async (conv: Conversation) => {
+  // 会话列表的删除按钮 → 打开二次确认弹窗（原先该回调未被任何 UI 调用，导致会话无法删除）
+  const handleDeleteConversation = useCallback((conv: Conversation) => {
     setShowDeleteConfirm(conv)
   }, [])
 
@@ -114,15 +129,21 @@ export default function ChatPage() {
         setCurrentConversationId(null)
         clearMessages()
       }
-    } catch {}
-  }, [showDeleteConfirm, currentConversationId, fetchConversations, clearMessages])
+      showMessage(`会话「${conv.title || '未命名'}」已删除`)
+    } catch (err: any) {
+      showMessage(`删除失败：${err?.message || '未知错误'}`)
+    }
+  }, [showDeleteConfirm, currentConversationId, fetchConversations, clearMessages, showMessage])
 
   const handleRenameConversation = useCallback(async (id: number, title: string) => {
     try {
       await conversationsApi.renameConversation(id, title)
       await fetchConversations()
-    } catch {}
-  }, [fetchConversations])
+      showMessage('会话已重命名')
+    } catch (err: any) {
+      showMessage(`重命名失败：${err?.message || '未知错误'}`)
+    }
+  }, [fetchConversations, showMessage])
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 
@@ -146,24 +167,36 @@ export default function ChatPage() {
         </button>
       </header>
 
+      {actionMsg && (
+        <div className="flex-shrink-0 px-4 py-2 text-xs border-b border-slate-200 dark:border-slate-700
+                        bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+          {actionMsg}
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         {/* Conversation list sidebar */}
         <aside className="w-64 flex-shrink-0 bg-white/50 dark:bg-slate-900/50 
                           border-r border-slate-200 dark:border-slate-700 overflow-y-auto">
-          <div className="p-3 space-y-1">
-            {conversationList.map((conv) => (
-              <div
-                key={conv.id}
-                onClick={() => handleSelectConversation(conv)}
-                className={`px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                  conv.id === currentConversationId
-                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                }`}
-              >
-                <div className="truncate">{conv.title}</div>
-              </div>
-            ))}
+          <div className="p-3 space-y-2">
+            <input
+              type="text"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              placeholder="搜索会话..."
+              className="w-full px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700
+                         bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200
+                         placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+            />
+            <ConversationList
+              conversationList={conversationList}
+              searchKeyword={searchKeyword}
+              onSelectConversation={handleSelectConversation}
+              currentConversationId={currentConversationId}
+              onDeleteConversation={handleDeleteConversation}
+              onRenameConversation={handleRenameConversation}
+              onNewChat={handleNewChat}
+            />
           </div>
         </aside>
 

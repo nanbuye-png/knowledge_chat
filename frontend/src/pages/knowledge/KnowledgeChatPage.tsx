@@ -37,9 +37,9 @@ export default function KnowledgeChatPage() {
       .then((list) => {
         const kb = list.find(k => k.id === knowledgeBaseId)
         if (kb) setKnowledgeBase(kb)
-        else navigate('/knowledge', { replace: true })
+        else navigate('/workspace?tab=knowledge', { replace: true })
       })
-      .catch(() => navigate('/knowledge', { replace: true }))
+      .catch(() => navigate('/workspace?tab=knowledge', { replace: true }))
   }, [knowledgeBaseId])
 
   useEffect(() => {

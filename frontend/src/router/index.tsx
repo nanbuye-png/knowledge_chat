@@ -25,10 +25,6 @@ import KnowledgeSettingsPage from '../pages/knowledge/KnowledgeSettingsPage'
 import QuotaPage from '../pages/quota/QuotaPage'
 import SystemConfig from '../pages/admin/SystemConfig'
 import ApiKeys from '../pages/admin/ApiKeys'
-import AIModels from '../pages/ai/Models'
-import AIEmbedding from '../pages/ai/Embedding'
-import AIRetrieval from '../pages/ai/Retrieval'
-import AIAgent from '../pages/ai/Agent'
 import ModelRegistryPage from '../pages/ai/ModelRegistryPage'
 import ProviderManagementPage from '../pages/ai/ProviderManagementPage'
 import PromptManagementPage from '../pages/ai/PromptManagementPage'
@@ -43,11 +39,10 @@ import TokenAnalyticsPage from '../pages/monitoring/TokenAnalyticsPage'
 import APIPerformancePage from '../pages/monitoring/APIPerformancePage'
 import ErrorTrackingPage from '../pages/monitoring/ErrorTrackingPage'
 import EnterpriseLayout from '../layout/EnterpriseLayout'
-import WorkspaceLayout from '../layouts/WorkspaceLayout'
 import { useAuthStore } from '../store/auth'
-import { usePermission } from '../hooks/usePermission'
 import RoleRoute from './RoleRoute'
 import ForbiddenPage from '../pages/error/403'
+import NotFoundPage from '../pages/error/404'
 import PlatformPage from '../pages/platform/PlatformPage'
 import WorkspacePage from '../pages/workspace/WorkspacePage'
 import AccountLayout from '../layouts/AccountLayout'
@@ -238,6 +233,9 @@ export default function AppRouter() {
       <Route path="/" element={<HomeRedirect />} />
       <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       <Route path="/knowledge/:id/chat" element={<ProtectedRoute><KnowledgeChatPage /></ProtectedRoute>} />
+
+      {/* Catch-all：未定义的路径显示 404（此前会整页空白） */}
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
 }
