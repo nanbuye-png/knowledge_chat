@@ -160,6 +160,14 @@ class DocumentService:
         except Exception as e:
             logger.warning(f"Vector store deletion warning: {e}")
 
+        # Delete from sparse (BM25) index
+        try:
+            from .retrieval.sparse_index import get_sparse_index
+
+            await get_sparse_index().delete_document(document_id)
+        except Exception as e:
+            logger.warning(f"Sparse index deletion warning: {e}")
+
         # Delete uploaded file
         for ext in settings.ALLOWED_EXTENSIONS:
             file_path = os.path.join(settings.UPLOAD_DIR, f"{document_id}{ext}")

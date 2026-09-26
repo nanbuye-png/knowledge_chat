@@ -122,6 +122,23 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100
 
+    # ---- 检索模式（Phase 1 §5.2 Hybrid Retrieval）----
+    # vector = 仅向量检索（**Phase 2 评测的 Baseline**）
+    # hybrid = 向量 + BM25 稀疏检索加权融合
+    RETRIEVAL_MODE: str = "hybrid"
+    # 融合权重（可配置；默认等权）
+    HYBRID_VECTOR_WEIGHT: float = 0.5
+    HYBRID_BM25_WEIGHT: float = 0.5
+    # 每条召回通道的候选数（Recall 阶段），最终 top_k 由 Context 阶段决定
+    HYBRID_RECALL_K: int = 20
+    # 稀疏索引（倒排）持久化文件；与向量库同级存放
+    SPARSE_INDEX_PATH: str = "./chroma_db/sparse_index.db"
+    # BM25 参数
+    SPARSE_BM25_K1: float = 1.5
+    SPARSE_BM25_B: float = 0.75
+    # 稀疏索引不可用时是否允许回退为纯向量检索（保证服务不中断）
+    SPARSE_INDEX_FALLBACK: bool = True
+
     # ---- Query Rewrite（Phase 1 §5.1）----
     # 用 LLM 把用户提问改写为更适合检索的独立查询（补全指代、省略主语）。
     # 任何失败（超时/异常/输出非法）都会回退到原始 Query，不影响问答。
@@ -241,6 +258,7 @@ elif settings.DATABASE_TYPE == "sqlite":
 # 标准化其他路径
 settings.CHROMA_PERSIST_DIR = _make_absolute(settings.CHROMA_PERSIST_DIR)
 settings.UPLOAD_DIR = _make_absolute(settings.UPLOAD_DIR)
+settings.SPARSE_INDEX_PATH = _make_absolute(settings.SPARSE_INDEX_PATH)
 
 # ---- DATABASE_URL 兼容性校验 ----
 if settings.DATABASE_URL and "sqlite" in settings.DATABASE_URL:

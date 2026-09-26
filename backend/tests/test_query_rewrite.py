@@ -237,7 +237,7 @@ class TestRetrievalPipelineIntegration:
                 )
 
         class _StubRetriever:
-            async def retrieve(self, embedding, knowledge_base_id, top_k=5):
+            async def retrieve(self, embedding, knowledge_base_id, top_k=5, query=None):
                 return []
 
         pipeline = RetrievalPipeline()
@@ -281,7 +281,7 @@ class TestRetrievalPipelineIntegration:
                 )
 
         class _StubRetriever:
-            async def retrieve(self, embedding, knowledge_base_id, top_k=5):
+            async def retrieve(self, embedding, knowledge_base_id, top_k=5, query=None):
                 return []
 
         pipeline = RetrievalPipeline()

@@ -161,6 +161,14 @@ async def delete_knowledge_base(
     except Exception as e:
         logger.warning(f"Failed to delete vectors for knowledge base {kb_id}: {e}")
 
+    # 1b. Delete all sparse (BM25) index entries for this knowledge base
+    try:
+        from ..services.retrieval.sparse_index import get_sparse_index
+
+        await get_sparse_index().delete_knowledge_base(kb_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete sparse index for knowledge base {kb_id}: {e}")
+
     # 2. Delete all conversations under this KB (cascades to messages via DB FK)
     await db.execute(sa_delete(Conversation).where(
         Conversation.knowledge_base_id == kb_id,

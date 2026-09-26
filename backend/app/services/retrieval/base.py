@@ -55,13 +55,16 @@ class BaseRetriever(ABC):
         embedding: list[float],
         knowledge_base_id: int,
         top_k: int = 5,
+        query: str | None = None,
     ) -> list[dict]:
-        """Search for documents matching the given query embedding.
+        """Search for documents matching the given query.
 
         Args:
             embedding: The query embedding vector (from embedding service).
             knowledge_base_id: Filter results to this knowledge base.
             top_k: Maximum number of results to return (default 5).
+            query: 原始检索查询文本（可选）。向量检索可忽略；
+                稀疏/混合检索需要它做关键词匹配。
 
         Returns:
             A list of result dicts.  Each dict MUST contain at least:

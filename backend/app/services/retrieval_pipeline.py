@@ -112,11 +112,12 @@ class RetrievalPipeline:
             logger.warning("Query embedding 为空，检索中止")
             return self._empty_result(question, search_query, rewrite, base_metadata)
 
-        # 2. Retrieve via retriever abstraction
+        # 2. Retrieve via retriever abstraction（混合检索需要 query 文本）
         raw_results = await self._retriever.retrieve(
             embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
             top_k=top_k,
+            query=search_query,
         )
         logger.info(
             f"Retriever search: kb_id={knowledge_base_id}, top_k={top_k}, "

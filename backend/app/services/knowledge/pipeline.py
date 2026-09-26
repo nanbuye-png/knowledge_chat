@@ -173,6 +173,23 @@ class KnowledgePipeline:
                 user_id=user_id,
             )
 
+            # ── 8b. Store in sparse (BM25) index ───────────────────────
+            # 混合检索的关键词通道；失败只降级为纯向量检索，不影响入库结果。
+            try:
+                from ..retrieval.sparse_index import get_sparse_index
+
+                await get_sparse_index().add_document_chunks(
+                    document_id=context.document_id,
+                    filename=context.filename,
+                    chunks=chunks,
+                    knowledge_base_id=context.knowledge_base_id,
+                    user_id=user_id,
+                )
+            except Exception as exc:  # noqa: BLE001 - 稀疏索引失败必须可降级
+                logger.warning(
+                    f"稀疏索引写入失败（该文档将只能被向量检索命中）: {exc}"
+                )
+
             logger.info(
                 f"Document processed successfully: {context.filename} "
                 f"({len(chunks)} chunks)"

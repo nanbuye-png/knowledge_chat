@@ -18,6 +18,7 @@ class VectorRetriever(BaseRetriever):
         embedding: list[float],
         knowledge_base_id: int,
         top_k: int = 5,
+        query: str | None = None,
     ) -> list[dict]:
         """Search ChromaDB with the given query embedding.
 
@@ -25,6 +26,7 @@ class VectorRetriever(BaseRetriever):
             embedding: Query embedding vector.
             knowledge_base_id: Restrict results to this knowledge base.
             top_k: Maximum results to return.
+            query: 未使用（向量检索只需要 embedding），仅为接口一致性保留。
 
         Returns:
             A list of result dicts from the vector store.
