@@ -62,6 +62,14 @@ export default function ChatPage() {
     setStreaming(true)
 
     try {
+      // 懒创建：首次发送时才在服务端创建会话，避免点一下按钮就堆积一条空会话
+      let conversationId = currentConversationId
+      if (conversationId == null) {
+        const conv = await conversationsApi.createConversation(null)
+        conversationId = conv.id
+        setCurrentConversationId(conv.id)
+      }
+
       let fullContent = ''
       const history = messages.slice(-10).map(m => ({
         role: m.role, content: m.content,
@@ -76,29 +84,26 @@ export default function ChatPage() {
         },
         () => {
           setStreaming(false)
+          // 服务端已按首条消息自动生成标题，刷新列表即可看到
           fetchConversations()
         },
         (error) => {
           updateLastMessage(`抱歉，对话出错：${error}`)
           setStreaming(false)
-        }
+        },
+        conversationId
       )
     } catch (error: any) {
       updateLastMessage(`抱歉，处理请求时出错：${error.message || '未知错误'}`)
       setStreaming(false)
     }
-  }, [isStreaming, messages, addMessage, updateLastMessage, setStreaming, fetchConversations])
+  }, [isStreaming, messages, addMessage, updateLastMessage, setStreaming, fetchConversations, currentConversationId, setCurrentConversationId])
 
-  const handleNewChat = useCallback(async () => {
-    try {
-      const conv = await conversationsApi.createConversation(null)
-      setCurrentConversationId(conv.id)
-      await fetchConversations()
-      clearMessages()
-    } catch (err: any) {
-      showMessage(`新建会话失败：${err?.message || '未知错误'}`)
-    }
-  }, [setCurrentConversationId, fetchConversations, clearMessages, showMessage])
+  // 懒创建：这里只重置本地状态，真正发送第一条消息时才在服务端创建会话
+  const handleNewChat = useCallback(() => {
+    setCurrentConversationId(null)
+    clearMessages()
+  }, [setCurrentConversationId, clearMessages])
 
   const handleSelectConversation = useCallback(async (conv: Conversation) => {
     setCurrentConversationId(conv.id)

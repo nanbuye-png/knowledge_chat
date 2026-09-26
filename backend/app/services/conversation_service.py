@@ -1,8 +1,12 @@
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.conversation import Conversation
 from ..models.knowledge_base import KnowledgeBase
+
+# 新建会话的默认标题；标题仍为默认值时才根据首条用户消息自动生成标题
+DEFAULT_TITLES = {"New Chat", "新对话"}
 
 
 async def _verify_kb_ownership(db: AsyncSession, knowledge_base_id: int, user_id: int) -> KnowledgeBase:
@@ -91,6 +95,31 @@ async def update_conversation_title(db: AsyncSession, conversation_id: int, titl
     await db.commit()
     await db.refresh(conversation)
     return conversation.to_dict()
+
+
+def generate_conversation_title(text: str, max_length: int = 30) -> str:
+    """Generate a conversation title from the first user message."""
+    title = text.strip()
+    if len(title) > max_length:
+        title = title[:max_length]
+    return title
+
+
+async def auto_update_conversation_title(db: AsyncSession, conversation_id: int, text: str) -> None:
+    """Update conversation title from the first user message if it is still the default.
+
+    Shared by both chat flows (general chat and RAG knowledge query).
+    """
+    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
+    conversation = result.scalar_one_or_none()
+    if conversation is None:
+        return
+    if conversation.title in DEFAULT_TITLES:
+        new_title = generate_conversation_title(text)
+        try:
+            await update_conversation_title(db, conversation_id, new_title)
+        except Exception:
+            logger.exception(f"Failed to auto-update title for conversation_id={conversation_id}")
 
 
 async def delete_conversation(db: AsyncSession, conversation_id: int, user_id: int) -> bool:

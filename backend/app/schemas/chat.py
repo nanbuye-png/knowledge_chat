@@ -28,6 +28,7 @@ class QueryResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000, description="用户消息")
+    conversation_id: Optional[int] = Field(default=None, description="会话 ID（可选，提供时保存用户消息与回答）")
     history: list[dict] = []
 
 

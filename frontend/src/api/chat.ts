@@ -7,9 +7,14 @@ import apiClient from './client'
 
 export async function chatMessage(
   message: string,
-  history: { role: string; content: string }[] = []
+  history: { role: string; content: string }[] = [],
+  conversationId: number | null = null
 ): Promise<string> {
-  const response = await apiClient.post('/chat/chat', { message, history })
+  const response = await apiClient.post('/chat/chat', {
+    message,
+    history,
+    conversation_id: conversationId,
+  })
   return response.data.answer
 }
 
@@ -19,7 +24,8 @@ export function createStreamChat(
   history: { role: string; content: string }[],
   onToken: (token: string) => void,
   onDone: () => void,
-  onError: (error: string) => void
+  onError: (error: string) => void,
+  conversationId: number | null = null
 ): AbortController {
   const controller = new AbortController()
 
@@ -30,7 +36,7 @@ export function createStreamChat(
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, conversation_id: conversationId }),
     signal: controller.signal,
   })
     .then(async (response) => {

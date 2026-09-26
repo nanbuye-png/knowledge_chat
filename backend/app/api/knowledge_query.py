@@ -15,8 +15,7 @@ from ..schemas.chat import (
 )
 from ..services.chat_service import chat_service
 from ..services.message_service import create_user_message, create_assistant_message
-from ..services.conversation_service import update_conversation_title, _verify_conversation_ownership
-from ..models.conversation import Conversation
+from ..services.conversation_service import auto_update_conversation_title, _verify_conversation_ownership
 from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db, async_session
 from ..auth.deps import get_current_user
@@ -26,30 +25,6 @@ from ..models.user import User
 from ..services.user_service import update_user_activity
 
 router = APIRouter(prefix="/api/knowledge", tags=["知识库问答"])
-
-DEFAULT_TITLES = {"New Chat", "新对话"}
-
-
-def _generate_title(text: str, max_length: int = 30) -> str:
-    """Generate a conversation title from the first user message."""
-    title = text.strip()
-    if len(title) > max_length:
-        title = title[:max_length]
-    return title
-
-
-async def _auto_update_title(db: AsyncSession, conversation_id: int, text: str):
-    """Update conversation title from the first user message if it's still the default."""
-    result = await db.execute(select(Conversation).where(Conversation.id == conversation_id))
-    conversation = result.scalar_one_or_none()
-    if conversation is None:
-        return
-    if conversation.title in DEFAULT_TITLES:
-        new_title = _generate_title(text)
-        try:
-            await update_conversation_title(db, conversation_id, new_title)
-        except Exception:
-            logger.exception(f"Failed to auto-update title for conversation_id={conversation_id}")
 
 
 async def verify_knowledge_base_access(
@@ -97,7 +72,7 @@ async def query_knowledge(
         try:
             await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
             await create_user_message(db, request.conversation_id, request.question)
-            await _auto_update_title(db, request.conversation_id, request.question)
+            await auto_update_conversation_title(db, request.conversation_id, request.question)
         except ValueError:
             raise HTTPException(status_code=403, detail="无权访问该会话")
         except Exception:
@@ -143,7 +118,7 @@ async def stream_query_knowledge(
                 try:
                     await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
                     await create_user_message(db, request.conversation_id, request.question)
-                    await _auto_update_title(db, request.conversation_id, request.question)
+                    await auto_update_conversation_title(db, request.conversation_id, request.question)
                     user_msg_saved = True
                 except ValueError:
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该会话'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
