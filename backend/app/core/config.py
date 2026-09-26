@@ -162,6 +162,15 @@ class Settings(BaseSettings):
     # 分数来源：auto（优先 rerank_score，缺失回退 score）/ rerank / retrieval
     CONTEXT_SCORE_SOURCE: str = "auto"
 
+    # ---------- 异步入库（P0-4）----------
+    # Worker 并发上限（每个任务一个后台线程，超出则排队）
+    WORKER_MAX_CONCURRENCY: int = 4
+
+    # ---- 异步入库（P0-4）----
+    # True：上传后立即返回，由后台 Worker 完成解析/切分/向量化（默认）
+    # False：在请求内同步处理（便于少数需要确定性结果的场景/测试）
+    DOCUMENT_PROCESSING_ASYNC: bool = True
+
     # ---- Abstention / 拒答（Phase 1 §5.6）----
     # 无足够依据时拒答，而不是让 LLM 猜测
     ABSTENTION_ENABLED: bool = True

@@ -56,7 +56,11 @@ async def upload_document(
             detail={"filename": doc.filename, "kb_id": knowledge_base_id}, status="SUCCESS",
         )
         return UploadResponse(
-            message="文档上传成功，正在处理中",
+            message=(
+                "文档上传成功，正在后台处理中"
+                if getattr(settings, "DOCUMENT_PROCESSING_ASYNC", True)
+                else "文档上传成功，正在处理中"
+            ),
             document_id=doc.id,
             filename=doc.filename,
             status=doc.status,

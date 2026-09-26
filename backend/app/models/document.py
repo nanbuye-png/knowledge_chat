@@ -11,7 +11,8 @@ class Base(DeclarativeBase):
 
 
 class DocumentStatus(str, enum.Enum):
-    PROCESSING = "processing"
+    PENDING = "pending"        # 已落盘，等待后台处理
+    PROCESSING = "processing"  # 后台处理中（解析/切分/向量化）
     COMPLETED = "completed"
     FAILED = "failed"
 

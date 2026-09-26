@@ -11,7 +11,7 @@ from ..models.knowledge_base import KnowledgeBase
 from ..schemas.document import DocumentResponse, DocumentListResponse
 from ..storage.vector_store import vector_store
 
-from .knowledge.context import KnowledgePipelineContext
+from .knowledge.context import KnowledgePipelineContext  # noqa: F401 - 对外可见（兼容既有引用）
 from .knowledge.pipeline import KnowledgePipeline
 
 
@@ -61,20 +61,58 @@ class DocumentService:
 
         file_size = len(content)
 
-        # Create document record
+        # Create document record（PENDING：等待后台 Worker 处理）
         doc = Document(
             id=file_id,
             filename=file.filename,
             file_size=file_size,
             file_type=file_ext,
-            status=DocumentStatus.PROCESSING.value,
+            status=DocumentStatus.PENDING.value,
             knowledge_base_id=knowledge_base_id,
         )
         db.add(doc)
         await db.commit()
         await db.refresh(doc)
 
-        # Process via KnowledgePipeline
+        # Dispatch processing (P0-4)
+        if getattr(settings, "DOCUMENT_PROCESSING_ASYNC", True):
+            self._dispatch_async(doc, file_path, knowledge_base_id)
+        else:
+            await self._process_inline(doc, file_path, knowledge_base_id, db)
+
+        return doc
+
+    def _dispatch_async(self, doc, file_path: str, knowledge_base_id: int) -> None:
+        """把处理任务交给后台 Worker；提交失败则降级为请求内同步处理。"""
+        from .tasks import DocumentProcessingTask, submit_task
+
+        try:
+            task = DocumentProcessingTask(
+                document_id=doc.id,
+                file_path=file_path,
+                filename=doc.filename,
+                knowledge_base_id=knowledge_base_id,
+            )
+            task_id = submit_task(task)
+            logger.info(
+                f"文档已加入后台处理队列: {doc.filename} "
+                f"(document_id={doc.id}, task_id={task_id})"
+            )
+        except Exception as exc:  # noqa: BLE001 - 提交失败必须可降级
+            logger.warning(
+                f"后台任务提交失败（将退回同步处理）: {exc}"
+            )
+            import asyncio
+
+            asyncio.get_event_loop().create_task(
+                self._process_inline(doc, file_path, knowledge_base_id, None)
+            )
+
+    async def _process_inline(self, doc, file_path: str, knowledge_base_id: int, db):
+        """在请求内同步处理（DOCUMENT_PROCESSING_ASYNC=false 或降级路径）。"""
+        from .knowledge.context import KnowledgePipelineContext
+
+        doc.status = DocumentStatus.PROCESSING.value
         try:
             context = KnowledgePipelineContext(
                 file_path=file_path,
@@ -84,18 +122,16 @@ class DocumentService:
             )
             chunk_count = await self._pipeline.process_document(context)
 
-            # Update document status to completed
             doc.status = DocumentStatus.COMPLETED.value
             doc.chunk_count = chunk_count
-            await db.commit()
 
         except Exception as e:
             doc.status = DocumentStatus.FAILED.value
             doc.error_message = str(e)[:500]
-            await db.commit()
-            logger.error(f"Document processing failed: {file.filename} - {e}")
+            logger.error(f"Document processing failed: {doc.filename} - {e}")
 
-        return doc
+        if db is not None:
+            await db.commit()
 
     async def _validate_file(self, file: UploadFile):
         """Validate file type and size."""

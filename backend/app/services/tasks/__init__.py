@@ -7,17 +7,22 @@ Task worker package.
 from typing import Optional
 
 from .base import TaskBase, TaskStatus
+from .document_task import DocumentEmbeddingTask, DocumentProcessingTask
 from .local_worker import LocalWorker
 
 # 默认使用本地 Worker
 _worker_instance: Optional[LocalWorker] = None
 
 
-def get_worker():
+def get_worker() -> LocalWorker:
     """获取当前 Worker 实例。"""
     global _worker_instance
     if _worker_instance is None:
-        _worker_instance = LocalWorker()
+        from ...core.config import settings
+
+        _worker_instance = LocalWorker(
+            max_concurrency=getattr(settings, "WORKER_MAX_CONCURRENCY", 4)
+        )
     return _worker_instance
 
 
@@ -36,6 +41,8 @@ __all__ = [
     "TaskBase",
     "TaskStatus",
     "LocalWorker",
+    "DocumentEmbeddingTask",
+    "DocumentProcessingTask",
     "get_worker",
     "set_worker",
     "submit_task",
