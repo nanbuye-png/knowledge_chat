@@ -29,6 +29,9 @@ class QueryResponse(BaseModel):
     # §5.5：结构化引用（document_id / chunk_id / source / page / section）
     citations: list[dict] = []
     has_knowledge: bool = True
+    # §5.6：拒答标记与原因（无足够依据时不调用 LLM）
+    abstained: bool = False
+    abstention_reason: Optional[str] = None
 
 
 class ChatRequest(BaseModel):

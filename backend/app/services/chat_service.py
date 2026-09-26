@@ -11,6 +11,7 @@ from ..prompts.base import BasePromptProvider
 from ..prompts.resolver import resolve_prompt_provider
 from ..schemas.chat import QueryResponse, SourceReference
 from .citation.validator import validate_citations
+from .retrieval.abstention import AbstentionDecision, create_abstention_decider
 
 from .llm.factory import LLMProviderFactory
 from .retrieval_pipeline import RetrievalPipeline
@@ -44,6 +45,7 @@ class ChatService:
         self._current_mode = "knowledge"  # knowledge or chat
         self._llm = LLMProviderFactory.create(settings)
         self._retrieval = RetrievalPipeline()
+        self._abstention = create_abstention_decider()
         self.prompt_provider = prompt_provider
 
     async def get_mode(self) -> str:
@@ -130,10 +132,19 @@ class ChatService:
                 history=history,
             )
 
-            if not retrieval_result.has_results:
+            # §5.6：无足够依据 → 拒答（不调用 LLM，避免无依据生成）
+            # 无上下文（no_context）也走这里，文案由 ABSTENTION_MESSAGE 配置
+            abstention = self._abstention.decide(retrieval_result)
+            if abstention.should_abstain:
+                logger.info(
+                    f"知识库问答拒答: reason={abstention.reason}, "
+                    f"details={abstention.details}"
+                )
                 return QueryResponse(
-                    answer="抱歉，当前知识库中暂无相关资料。",
+                    answer=abstention.message,
                     has_knowledge=False,
+                    abstained=True,
+                    abstention_reason=abstention.reason,
                 )
 
             # 2. Build RAG prompt with retrieved context
@@ -291,11 +302,22 @@ class ChatService:
                 yield json.dumps({"type": "error", "message": "抱歉，检索文档时出现错误，请稍后重试。"}, ensure_ascii=False)
                 return
 
-            if not retrieval_result.has_results:
-                yield json.dumps({
-                    "type": "no_result",
-                    "message": "抱歉，当前知识库中暂无相关资料。"
-                }, ensure_ascii=False)
+            # §5.6：无足够依据 → 拒答（不调用 LLM）
+            # 复用 no_result 控制帧以保持前端契约兼容，额外字段携带拒答信号与 Debug 信息
+            abstention = self._abstention.decide(retrieval_result)
+            if abstention.should_abstain:
+                logger.info(
+                    f"知识库问答拒答: reason={abstention.reason}, "
+                    f"details={abstention.details}"
+                )
+                yield json.dumps(
+                    {
+                        "type": "no_result",
+                        "message": abstention.message,
+                        **abstention.to_dict(),
+                    },
+                    ensure_ascii=False,
+                ) + "\n"
                 return
 
             # 2. Send sources + structured citations first（§5.5）

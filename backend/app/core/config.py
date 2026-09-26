@@ -162,6 +162,17 @@ class Settings(BaseSettings):
     # 分数来源：auto（优先 rerank_score，缺失回退 score）/ rerank / retrieval
     CONTEXT_SCORE_SOURCE: str = "auto"
 
+    # ---- Abstention / 拒答（Phase 1 §5.6）----
+    # 无足够依据时拒答，而不是让 LLM 猜测
+    ABSTENTION_ENABLED: bool = True
+    ABSTENTION_MESSAGE: str = "当前知识库中没有找到足够的信息来回答该问题。"
+    # 有效上下文 chunk 数下限（低于则拒答）
+    ABSTENTION_MIN_CONTEXT_CHUNKS: int = 1
+    # 最高召回分下限；<= 0 表示不按分数拒答（仅保留"无上下文"拒答）
+    ABSTENTION_SCORE_THRESHOLD: float = 0.0
+    # 最高重排分下限；<= 0 表示不启用
+    ABSTENTION_RERANK_THRESHOLD: float = 0.0
+
     # ---- Query Rewrite（Phase 1 §5.1）----
     # 用 LLM 把用户提问改写为更适合检索的独立查询（补全指代、省略主语）。
     # 任何失败（超时/异常/输出非法）都会回退到原始 Query，不影响问答。
