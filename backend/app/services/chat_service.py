@@ -10,6 +10,7 @@ from ..prompts import get_prompt_provider
 from ..prompts.base import BasePromptProvider
 from ..prompts.resolver import resolve_prompt_provider
 from ..schemas.chat import QueryResponse, SourceReference
+from .citation.validator import validate_citations
 
 from .llm.factory import LLMProviderFactory
 from .retrieval_pipeline import RetrievalPipeline
@@ -169,11 +170,30 @@ class ChatService:
                     filename=s["filename"],
                     chunk_index=s["chunk_index"],
                     text=s["text"],
+                    page=s.get("page"),
+                    section=s.get("section"),
                 )
                 for s in retrieval_result.sources
             ]
 
-            return QueryResponse(answer=answer, sources=sources, has_knowledge=True)
+            # §5.5：结构化引用 + 一致性校验（禁止模型自造引用）
+            citations = [c.to_dict() for c in retrieval_result.citations]
+            validation = validate_citations(
+                retrieval_result.citations,
+                retrieval_result.results,
+                answer=answer,
+            )
+            if validation.has_fabricated_references:
+                logger.warning(
+                    f"答案引用了不存在的来源编号: {validation.invalid_reference_indices}"
+                )
+
+            return QueryResponse(
+                answer=answer,
+                sources=sources,
+                citations=citations,
+                has_knowledge=True,
+            )
 
         except Exception as e:
             logger.error(f"Knowledge query failed: {e}")
@@ -278,8 +298,15 @@ class ChatService:
                 }, ensure_ascii=False)
                 return
 
-            # 2. Send sources first
-            yield json.dumps({"type": "sources", "sources": retrieval_result.sources}, ensure_ascii=False) + "\n"
+            # 2. Send sources + structured citations first（§5.5）
+            yield json.dumps(
+                {
+                    "type": "sources",
+                    "sources": retrieval_result.sources,
+                    "citations": [c.to_dict() for c in retrieval_result.citations],
+                },
+                ensure_ascii=False,
+            ) + "\n"
 
             # 3. Build RAG prompt with retrieved context
             prompt_provider = await self.get_prompt_provider(session)

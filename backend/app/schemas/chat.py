@@ -18,11 +18,16 @@ class SourceReference(BaseModel):
     filename: str
     chunk_index: int
     text: str
+    # §5.5：引用追溯字段（PDF 页号 / 章节标题；无法定位时为 None）
+    page: Optional[int] = None
+    section: Optional[str] = None
 
 
 class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceReference] = []
+    # §5.5：结构化引用（document_id / chunk_id / source / page / section）
+    citations: list[dict] = []
     has_knowledge: bool = True
 
 

@@ -159,6 +159,19 @@ class KnowledgePipeline:
                 kb = kb_result.scalar_one_or_none()
                 user_id = kb.user_id if kb else None
 
+            # ── 7b. 定位 page / section（§5.5 引用追溯）─────────────────
+            from ..citation.locator import resolve_pages, resolve_sections
+
+            pages = resolve_pages(chunks)
+            sections = resolve_sections(chunks)
+            chunk_metadatas = [
+                {"page": pages[i], "section": sections[i]} for i in range(len(chunks))
+            ]
+            logger.debug(
+                f"引用定位: pages={pages[:5]}{'…' if len(pages) > 5 else ''}, "
+                f"sections={sections[:3]}{'…' if len(sections) > 3 else ''}"
+            )
+
             # ── 8. Store in vector DB ──────────────────────────────────
             logger.info(
                 f"Storing {len(chunks)} chunks in vector store "
@@ -171,6 +184,7 @@ class KnowledgePipeline:
                 embeddings=embeddings,
                 knowledge_base_id=context.knowledge_base_id,
                 user_id=user_id,
+                chunk_metadatas=chunk_metadatas,
             )
 
             # ── 8b. Store in sparse (BM25) index ───────────────────────
@@ -184,6 +198,8 @@ class KnowledgePipeline:
                     chunks=chunks,
                     knowledge_base_id=context.knowledge_base_id,
                     user_id=user_id,
+                    pages=pages,
+                    sections=sections,
                 )
             except Exception as exc:  # noqa: BLE001 - 稀疏索引失败必须可降级
                 logger.warning(

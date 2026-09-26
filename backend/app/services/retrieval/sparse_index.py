@@ -44,7 +44,9 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
         filename     TEXT NOT NULL,
         chunk_index  INTEGER NOT NULL,
         length       INTEGER NOT NULL,
-        text         TEXT NOT NULL
+        text         TEXT NOT NULL,
+        page         INTEGER,
+        section      TEXT
     )
     """,
     "CREATE INDEX IF NOT EXISTS ix_sparse_docs_kb ON sparse_docs(kb_id)",
@@ -100,7 +102,20 @@ class SparseIndex:
     def _ensure_schema(self, conn: sqlite3.Connection) -> None:
         for statement in SCHEMA_STATEMENTS:
             conn.execute(statement)
+        self._migrate_schema(conn)
         conn.commit()
+
+    @staticmethod
+    def _migrate_schema(conn: sqlite3.Connection) -> None:
+        """为既有索引文件补列（引用追溯的 page / section，§5.5）。
+
+        稀疏索引是可重建的派生产物，因此这里做轻量 ALTER TABLE 迁移，
+        而不是引入独立的迁移框架。
+        """
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(sparse_docs)")}
+        for column, ddl in (("page", "INTEGER"), ("section", "TEXT")):
+            if column not in existing:
+                conn.execute(f"ALTER TABLE sparse_docs ADD COLUMN {column} {ddl}")
 
     async def initialize(self) -> None:
         """Create the index schema if needed (idempotent)."""
@@ -129,8 +144,14 @@ class SparseIndex:
         chunks: list[str],
         knowledge_base_id: Optional[int] = None,
         user_id: Optional[int] = None,
+        pages: Optional[list] = None,
+        sections: Optional[list] = None,
     ) -> int:
         """Index *chunks* for *document_id*（幂等：先删旧记录再写）。
+
+        Args:
+            pages: 逐 chunk 的页码（§5.5 引用追溯），长度应与 chunks 一致。
+            sections: 逐 chunk 的章节名，长度应与 chunks 一致。
 
         Returns:
             写入的 chunk 数量。
@@ -153,6 +174,8 @@ class SparseIndex:
                     index,
                     len(tokens),
                     chunk,
+                    (pages or [None] * len(chunks))[index],
+                    (sections or [None] * len(chunks))[index],
                 )
             )
             for term, tf in Counter(tokens).items():
@@ -172,7 +195,8 @@ class SparseIndex:
                 conn.executemany(
                     "INSERT INTO sparse_docs "
                     "(chunk_id, kb_id, user_id, document_id, filename, "
-                    " chunk_index, length, text) VALUES (?,?,?,?,?,?,?,?)",
+                    " chunk_index, length, text, page, section) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
                     rows,
                 )
                 conn.executemany(
@@ -312,8 +336,9 @@ class SparseIndex:
                 chunk_ids = [cid for cid, _ in ranked]
                 meta_placeholders = ",".join("?" for _ in chunk_ids)
                 meta_rows = conn.execute(
-                    f"SELECT chunk_id, document_id, filename, chunk_index, text "
-                    f"FROM sparse_docs WHERE chunk_id IN ({meta_placeholders})",
+                    f"SELECT chunk_id, document_id, filename, chunk_index, text, "
+                    f"page, section FROM sparse_docs "
+                    f"WHERE chunk_id IN ({meta_placeholders})",
                     chunk_ids,
                 ).fetchall()
                 meta = {row[0]: row for row in meta_rows}
@@ -330,6 +355,8 @@ class SparseIndex:
                         "filename": row[2],
                         "chunk_index": row[3],
                         "text": row[4],
+                        "page": row[5],
+                        "section": row[6],
                         "score": score,
                     }
                 )

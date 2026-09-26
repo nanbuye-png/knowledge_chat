@@ -59,7 +59,7 @@ class VectorStore:
             logger.error(f"Failed to initialize vector store: {e}")
             raise
 
-    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]], knowledge_base_id: int = None, user_id: int = None):
+    async def add_document_chunks(self, document_id: str, filename: str, chunks: list[str], embeddings: list[list[float]], knowledge_base_id: int = None, user_id: int = None, chunk_metadatas: list[dict] = None):
         """Add document chunks to vector store.
 
         Args:
@@ -69,6 +69,8 @@ class VectorStore:
             embeddings: Embedding vectors.
             knowledge_base_id: Knowledge base ID for isolation.
             user_id: User ID for isolation.
+            chunk_metadatas: 可选的逐 chunk 附加 metadata（如 page / section，
+                §5.5 引用追溯需要）。``None`` 值会被丢弃（Chroma 不接受 None）。
         """
         if not self._initialized:
             logger.error("Vector store not initialized")
@@ -76,8 +78,9 @@ class VectorStore:
 
         try:
             ids = [f"{document_id}_{i}" for i in range(len(chunks))]
-            metadatas = [
-                {
+            metadatas = []
+            for i in range(len(chunks)):
+                metadata = {
                     "document_id": document_id,
                     "filename": filename,
                     "chunk_index": i,
@@ -85,8 +88,11 @@ class VectorStore:
                     "knowledge_base_id": knowledge_base_id,
                     "user_id": user_id,
                 }
-                for i in range(len(chunks))
-            ]
+                extra = (chunk_metadatas or [None] * len(chunks))[i] or {}
+                metadata.update({k: v for k, v in extra.items() if v is not None})
+                metadatas.append(
+                    {k: v for k, v in metadata.items() if v is not None}
+                )
 
             # ------------------------------------------------
             # 写入前：确认 Python metadata 中包含 knowledge_base_id
@@ -150,13 +156,17 @@ class VectorStore:
             items = []
             if results["ids"][0]:
                 for i in range(len(results["ids"][0])):
+                    metadata = results["metadatas"][0][i] or {}
                     items.append({
                         "id": results["ids"][0][i],
-                        "document_id": results["metadatas"][0][i].get("document_id", ""),
-                        "filename": results["metadatas"][0][i].get("filename", ""),
-                        "chunk_index": results["metadatas"][0][i].get("chunk_index", 0),
+                        "document_id": metadata.get("document_id", ""),
+                        "filename": metadata.get("filename", ""),
+                        "chunk_index": metadata.get("chunk_index", 0),
                         "text": results["documents"][0][i],
                         "score": 1 - results["distances"][0][i] if results["distances"] else 0,
+                        # §5.5：引用追溯字段（缺失时为 None）
+                        "page": metadata.get("page"),
+                        "section": metadata.get("section"),
                     })
 
             return items

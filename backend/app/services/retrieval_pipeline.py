@@ -187,6 +187,9 @@ class RetrievalPipeline:
                 "filename": r["filename"],
                 "chunk_index": r["chunk_index"],
                 "text": r["text"][:200],
+                # §5.5：引用追溯定位信息
+                "page": r.get("page"),
+                "section": r.get("section"),
             })
 
         return RetrievalResult(
