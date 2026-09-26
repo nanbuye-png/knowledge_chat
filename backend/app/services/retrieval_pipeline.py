@@ -16,11 +16,13 @@ from loguru import logger
 
 from ..services.citation.builder import CitationBuilder
 from ..services.embedding_service import embedding_service
+from ..core.config import settings
 from ..storage.database import async_session
 from .knowledge.runtime_config import KnowledgeRuntimeConfigService
 from .query.factory import create_query_rewriter
 from .retrieval.factory import RetrieverFactory
 from .retrieval.models import RetrievalResult
+from .retrieval.reranker import create_reranker_service
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -49,6 +51,7 @@ class RetrievalPipeline:
         self._runtime_config_service = KnowledgeRuntimeConfigService()
         self._citation_builder = CitationBuilder()
         self._rewriter = create_query_rewriter()
+        self._reranker = create_reranker_service()
 
     # ------------------------------------------------------------------
     # Public API
@@ -113,35 +116,51 @@ class RetrievalPipeline:
             return self._empty_result(question, search_query, rewrite, base_metadata)
 
         # 2. Retrieve via retriever abstraction（混合检索需要 query 文本）
+        #    候选规模：开启 Reranker 时先按 Recall 取更多候选（默认 20）
+        candidates_k = top_k
+        if self._reranker.enabled:
+            candidates_k = max(top_k, getattr(settings, "RERANKER_CANDIDATES", 20))
+
         raw_results = await self._retriever.retrieve(
             embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
-            top_k=top_k,
+            top_k=candidates_k,
             query=search_query,
         )
         logger.info(
-            f"Retriever search: kb_id={knowledge_base_id}, top_k={top_k}, "
+            f"Retriever search: kb_id={knowledge_base_id}, candidates_k={candidates_k}, "
             f"results={len(raw_results)}"
         )
 
         if not raw_results:
             return self._empty_result(question, search_query, rewrite, base_metadata)
 
-        # 3. Score‑filter
+        # 3. 召回分阈值过滤（阈值作用于召回分数的既有语义保持不变）
         relevant = [r for r in raw_results if r.get("score", 0) >= min_score]
 
         if not relevant:
             logger.info(f"所有 {len(raw_results)} 条结果低于阈值 {min_score}，视为无结果")
             return self._empty_result(question, search_query, rewrite, base_metadata)
 
-        # 4. Build citations
-        citations = self._citation_builder.build(relevant)
+        # 4. Rerank（Precision；超时/异常自动回退召回顺序，永不抛异常）
+        rerank_outcome = await self._reranker.rerank(
+            search_query, relevant, top_k=top_k
+        )
+        final_chunks = rerank_outcome.results or relevant[:top_k]
 
-        # 5. Build context & sources (backward‑compatible)
+        base_metadata["rerank"] = rerank_outcome.to_dict()
+        base_metadata["retrieval_candidates"] = len(raw_results)
+        base_metadata["after_threshold"] = len(relevant)
+        base_metadata["final_context"] = len(final_chunks)
+
+        # 5. Build citations
+        citations = self._citation_builder.build(final_chunks)
+
+        # 6. Build context & sources (backward‑compatible)
         context_parts: list[str] = []
         sources: list[dict[str, Any]] = []
 
-        for i, r in enumerate(relevant):
+        for i, r in enumerate(final_chunks):
             context_parts.append(
                 f"[来源{i+1}] 文件名：{r['filename']} (段落{r['chunk_index']})\n"
                 f"内容：{r['text']}"
@@ -154,7 +173,7 @@ class RetrievalPipeline:
             })
 
         return RetrievalResult(
-            results=relevant,
+            results=final_chunks,
             context="\n\n".join(context_parts),
             sources=sources,
             citations=citations,

@@ -139,6 +139,21 @@ class Settings(BaseSettings):
     # 稀疏索引不可用时是否允许回退为纯向量检索（保证服务不中断）
     SPARSE_INDEX_FALLBACK: bool = True
 
+    # ---- Reranker（Phase 1 §5.3）----
+    # Retriever 负责 Recall，Reranker 负责 Precision
+    RERANKER_ENABLED: bool = True
+    # lexical（零依赖词项重叠，默认，CI 可稳定运行）
+    # cross_encoder（本地 bge-reranker，精度更高，需下载模型）
+    RERANKER_TYPE: str = "lexical"
+    RERANKER_MODEL: str = "BAAI/bge-reranker-base"
+    # 送入重排的候选数（Recall 阶段规模）
+    RERANKER_CANDIDATES: int = 20
+    # 重排后进入 Context 的数量
+    RERANKER_TOP_K: int = 5
+    # 单次重排超时（秒）——超时即回退召回顺序
+    RERANKER_TIMEOUT: float = 10.0
+    RERANKER_BATCH_SIZE: int = 16
+
     # ---- Query Rewrite（Phase 1 §5.1）----
     # 用 LLM 把用户提问改写为更适合检索的独立查询（补全指代、省略主语）。
     # 任何失败（超时/异常/输出非法）都会回退到原始 Query，不影响问答。
