@@ -6,7 +6,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 
 from .document import Base
 
@@ -65,10 +65,10 @@ class TokenBlacklist(Base):
         comment="记录创建时间",
     )
 
-    __table_args__ = (
-        Index("ix_token_blacklist_user_id", "user_id"),
-        Index("ix_token_blacklist_jti", "jti"),
-    )
+    # 注意：user_id / jti 的索引已由上面的 index=True 生成同名索引
+    # （ix_token_blacklist_user_id / ix_token_blacklist_jti）。
+    # 原先重复声明同名 Index(...) 会让 Base.metadata.create_all() 抛
+    # "index ... already exists"，已删除重复声明。
 
     def to_dict(self) -> dict:
         return {

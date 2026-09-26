@@ -98,20 +98,42 @@ class TestMetrics:
     """Step 3: Prometheus Metrics"""
 
     def test_metrics_service(self):
-        """Metrics service 存在"""
-        path = os.path.join(_backend_dir, "app", "services", "metrics.py")
-        assert os.path.exists(path)
+        """埋点函数真实可用（原断言 ``_metrics_available in [True, False]`` 恒真）。
 
-        from app.services.metrics import _metrics_available
-        assert _metrics_available in [True, False]  # 兼容 prometheus_client 是否安装
-        print(f"[PASS] Metrics service: file exists, lazy import configured")
+        P0-5：改为真实调用 ``track_request`` / ``track_llm_call`` 并校验
+        Prometheus 指标文本发生变化 —— 否则"埋点是否存在"根本无从验证。
+        """
+        from app.services import metrics
+
+        if not metrics._metrics_available:
+            try:
+                metrics._ensure_metrics()
+                raise AssertionError("未安装 prometheus_client 时应抛 RuntimeError")
+            except AssertionError:
+                raise
+            except RuntimeError:
+                print("[PASS] prometheus_client 未安装 → _ensure_metrics 显式失败")
+            return
+
+        from prometheus_client import generate_latest
+
+        before = generate_latest()
+        metrics.track_request("GET", "/__p0_5_test__", 200, 0.01)
+        metrics.track_llm_call("p0-5-model", prompt_tokens=10, completion_tokens=5, latency=0.2)
+        after = generate_latest()
+
+        assert after != before, "埋点必须真实写入 Prometheus 指标"
+        assert b"knowledge_request_total" in after
+        assert b"knowledge_llm_tokens_total" in after
+        print("[PASS] track_request / track_llm_call 真实写入指标")
 
     def test_metrics_endpoint(self):
-        """/metrics 路由存在"""
+        """/metrics 路由存在于 metrics router 中。"""
         from app.services.metrics import router
+
         routes = [r.path for r in router.routes]
         assert "/metrics" in routes
-        print(f"[PASS] /metrics endpoint registered")
+        print("[PASS] /metrics route defined")
 
 
 class TestMonitoring:
@@ -134,15 +156,16 @@ class TestLogging:
     """Step 5: Logging System"""
 
     def test_logging_config(self):
-        """结构化日志配置"""
-        from app.core.logging import setup_logging
-        import tempfile
-        import os
-
-        # Verify JSON log format can be configured
+        """setup_logging 必须真实配置 sink（原断言 ``logger is not None`` 恒真）。"""
         from loguru import logger
-        assert logger is not None
-        print(f"[PASS] Structured logging configured with loguru")
+
+        from app.core.logging import setup_logging
+
+        setup_logging()
+        handlers = logger._core.handlers  # noqa: SLF001 - loguru 唯一可用的 sink 视图
+        assert len(handlers) >= 2, f"应至少配置控制台 + 文件两个 sink，实际 {len(handlers)}"
+        logger.info("P0-5 logging smoke test")
+        print(f"[PASS] setup_logging 配置了 {len(handlers)} 个 sink")
 
 
 class TestKubernetes:

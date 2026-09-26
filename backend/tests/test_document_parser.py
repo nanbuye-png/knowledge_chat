@@ -4,6 +4,8 @@ import os
 import tempfile
 import sys
 
+import pytest
+
 # Ensure the backend root is on sys.path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -119,12 +121,16 @@ class TestDocxParser:
     """Test .docx parsing.  Requires python-docx."""
 
     def _create_simple_docx(self) -> str:
-        """Create a .docx with a paragraph and a table, return its path."""
+        """Create a .docx with a paragraph and a table, return its path.
+
+        P0-5：依赖缺失时用 ``pytest.skip`` 显式跳过，而不是静默 ``return``
+        （静默返回会让用例"永远通过但从不验证"）。
+        """
         try:
             from docx import Document
-            from docx.shared import Inches
+            from docx.shared import Inches  # noqa: F401 - 触发依赖检查
         except ImportError:
-            return None  # skip
+            pytest.skip("python-docx 未安装，跳过 DOCX 解析测试")
 
         fd, path = tempfile.mkstemp(suffix=".docx")
         os.close(fd)
@@ -147,8 +153,6 @@ class TestDocxParser:
 
     def test_paragraphs_and_tables(self):
         path = self._create_simple_docx()
-        if path is None:
-            return  # python-docx not installed, skip
         try:
             result = ParserFactory.get_parser(path).parse(path)
             content = result["content"]

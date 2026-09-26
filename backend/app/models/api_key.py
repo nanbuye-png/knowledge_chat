@@ -51,8 +51,10 @@ class ApiKey(Base):
         comment="创建时间",
     )
 
+    # key_hash 只有 unique=True（唯一约束），因此这里的显式索引是必要的；
+    # 而 user_id 的索引已由 index=True 生成（ix_api_keys_user_id），
+    # 原先重复声明同名 Index 会让 create_all() 报 "index already exists"。
     __table_args__ = (
-        Index("ix_api_keys_user_id", "user_id"),
         Index("ix_api_keys_key_hash", "key_hash"),
     )
 

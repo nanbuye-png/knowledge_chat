@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, Index
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import DeclarativeBase
 
 from .document import Base
@@ -20,11 +20,10 @@ class UserSession(Base):
     expires_at = Column(DateTime, nullable=False, comment="过期时间")
     revoked_at = Column(DateTime, nullable=True, index=True, comment="注销时间，NULL 表示未注销")
 
-    __table_args__ = (
-        Index("ix_user_sessions_user_id", "user_id"),
-        Index("ix_user_sessions_token_hash", "token_hash"),
-        Index("ix_user_sessions_revoked_at", "revoked_at"),
-    )
+    # 注意：user_id / token_hash / revoked_at 的索引已由上面的 index=True 生成。
+    # 这里原先还重复声明了同名 Index(...)，导致 Base.metadata.create_all()
+    # 抛 "index ix_user_sessions_user_id already exists"（SQLite），
+    # 使 storage/database.py 的建表回退路径静默失效。已删除重复声明。
 
     def to_dict(self) -> dict:
         return {
