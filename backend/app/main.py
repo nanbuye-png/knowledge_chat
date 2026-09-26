@@ -45,6 +45,21 @@ async def lifespan(app: FastAPI):
     logger.info(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 正在启动...")
     logger.info("=" * 60)
 
+    # 初始化基础设施 Provider（Cache / Worker）+ 启动自检（P0-1）
+    try:
+        from .services.factory import bootstrap_infrastructure
+
+        infra = await bootstrap_infrastructure()
+        logger.info(
+            f"✅ 基础设施初始化: cache={infra.cache_type}({infra.cache_backend}), "
+            f"worker={infra.worker_type}({infra.worker_backend}), "
+            f"redis_reachable={infra.redis_reachable}"
+        )
+        if infra.details:
+            logger.warning(f"⚠️  {infra.details}")
+    except Exception as e:
+        logger.warning(f"⚠️ 基础设施初始化失败: {e}")
+
     # 初始化数据库
     try:
         await init_db()
