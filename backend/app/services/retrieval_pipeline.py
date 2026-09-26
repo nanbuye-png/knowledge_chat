@@ -21,6 +21,7 @@ from ..storage.database import async_session
 from .knowledge.runtime_config import KnowledgeRuntimeConfigService
 from .query.factory import create_query_rewriter
 from .retrieval.factory import RetrieverFactory
+from .retrieval.context_filter import ContextFilter
 from .retrieval.models import RetrievalResult
 from .retrieval.reranker import create_reranker_service
 
@@ -52,6 +53,10 @@ class RetrievalPipeline:
         self._citation_builder = CitationBuilder()
         self._rewriter = create_query_rewriter()
         self._reranker = create_reranker_service()
+        self._context_filter = ContextFilter(
+            threshold=getattr(settings, "CONTEXT_SCORE_THRESHOLD", 0.0),
+            score_source=getattr(settings, "CONTEXT_SCORE_SOURCE", "auto"),
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -151,12 +156,24 @@ class RetrievalPipeline:
         base_metadata["rerank"] = rerank_outcome.to_dict()
         base_metadata["retrieval_candidates"] = len(raw_results)
         base_metadata["after_threshold"] = len(relevant)
+
+        # 5. Context Filtering（§5.4）：低于阈值的 chunk 不进入 LLM，并记录明细
+        filter_outcome = self._context_filter.apply(final_chunks)
+        final_chunks = filter_outcome.chunks
+        base_metadata["context_filter"] = filter_outcome.to_dict()
         base_metadata["final_context"] = len(final_chunks)
 
-        # 5. Build citations
+        if not final_chunks:
+            logger.info(
+                "Context filtering 过滤掉全部候选 "
+                f"(threshold={filter_outcome.threshold}, status={filter_outcome.status})"
+            )
+            return self._empty_result(question, search_query, rewrite, base_metadata)
+
+        # 6. Build citations
         citations = self._citation_builder.build(final_chunks)
 
-        # 6. Build context & sources (backward‑compatible)
+        # 7. Build context & sources (backward‑compatible)
         context_parts: list[str] = []
         sources: list[dict[str, Any]] = []
 

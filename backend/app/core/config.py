@@ -154,6 +154,14 @@ class Settings(BaseSettings):
     RERANKER_TIMEOUT: float = 10.0
     RERANKER_BATCH_SIZE: int = 16
 
+    # ---- Context Filtering（Phase 1 §5.4）----
+    # 低于该分数的 chunk 不进入 LLM；<= 0 表示不启用过滤。
+    # 分数区间：rerank_score ∈ [0,1]（lexical 重叠率 / cross-encoder sigmoid），
+    # 召回 score 为融合分（∈[0,1]）。建议启用时取 0.1~0.3。
+    CONTEXT_SCORE_THRESHOLD: float = 0.0
+    # 分数来源：auto（优先 rerank_score，缺失回退 score）/ rerank / retrieval
+    CONTEXT_SCORE_SOURCE: str = "auto"
+
     # ---- Query Rewrite（Phase 1 §5.1）----
     # 用 LLM 把用户提问改写为更适合检索的独立查询（补全指代、省略主语）。
     # 任何失败（超时/异常/输出非法）都会回退到原始 Query，不影响问答。
