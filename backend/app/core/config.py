@@ -122,6 +122,19 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 100
 
+    # ---- Query Rewrite（Phase 1 §5.1）----
+    # 用 LLM 把用户提问改写为更适合检索的独立查询（补全指代、省略主语）。
+    # 任何失败（超时/异常/输出非法）都会回退到原始 Query，不影响问答。
+    QUERY_REWRITE_ENABLED: bool = True
+    # 单次改写的超时（秒）——超时即回退，绝不阻塞问答链路
+    QUERY_REWRITE_TIMEOUT: float = 10.0
+    # 参与改写的最近对话轮数（每轮 = 一条 user/assistant 消息）
+    QUERY_REWRITE_MAX_HISTORY: int = 4
+    # 短于该长度的查询直接跳过改写（信息量不足以改写）
+    QUERY_REWRITE_MIN_CHARS: int = 4
+    # 改写结果的最大长度，超出视为非法输出并回退
+    QUERY_REWRITE_MAX_CHARS: int = 200
+
     # JWT 认证
     SECRET_KEY: str = "knowledge-chat-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24

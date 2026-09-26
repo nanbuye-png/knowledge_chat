@@ -58,5 +58,14 @@ class RetrievalResult:
     metadata: dict[str, Any] = field(default_factory=dict)
     """Reserved for future pipeline metadata (latency per step, recall count, …)."""
 
+    original_query: str = ""
+    """用户原始提问（**永不被改写覆盖**，用于引用与排查）。"""
+
+    search_query: str = ""
+    """实际用于检索的查询（默认等于 original_query，Query Rewrite 成功时不同）。"""
+
+    rewrite_status: str = ""
+    """Query Rewrite 终态：rewritten / fallback / skipped / disabled。"""
+
     has_results: bool = False
     """Convenience flag: ``True`` when at least one relevant chunk was found."""

@@ -126,6 +126,7 @@ class ChatService:
             retrieval_result = await self._retrieval.retrieve(
                 question=question,
                 knowledge_base_id=knowledge_base_id,
+                history=history,
             )
 
             if not retrieval_result.has_results:
@@ -263,6 +264,7 @@ class ChatService:
                 retrieval_result = await self._retrieval.retrieve(
                     question=question,
                     knowledge_base_id=knowledge_base_id,
+                    history=history,
                 )
             except Exception as e:
                 logger.exception(f"Retrieval failed for query '{question[:50]}...': {e}")
