@@ -1,18 +1,24 @@
 """Default Embedding Provider — local model via SentenceTransformer.
 
 Uses HuggingFace SentenceTransformer / Transformers with a local model
-(BAAI/bge-small-zh-v1.5 by default).  Falls back to random embeddings
-if the model fails to load.
+(BAAI/bge-small-zh-v1.5 by default).
+
+**No random-vector fallback** (P0-2): if the model cannot be loaded or
+encoding fails, an :class:`EmbeddingError` is raised.  Silently returning
+random vectors used to make broken ingestion look successful while
+poisoning the vector index.
 
 This is a migration of the original :class:`DefaultEmbeddingProvider`
 into the ``providers/`` sub‑package.
+
+Note: the default runtime path for ``EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5``
+is :class:`BgeEmbeddingProvider`; this class remains as the generic
+local-model implementation.
 """
 
-import numpy as np
 from loguru import logger
-import torch
 
-from ..base import EmbeddingProvider
+from ..base import EmbeddingError, EmbeddingProvider
 
 
 class DefaultEmbeddingProvider(EmbeddingProvider):
@@ -61,16 +67,11 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
             logger.info(f"✅ Embedding model loaded: {self._model_name}")
         except ImportError:
             logger.warning("sentence-transformers not installed, trying transformers...")
-            try:
-                await self._init_transformers()
-            except Exception as e:
-                logger.error(f"Failed to load embedding model: {e}")
-                logger.warning("Will use fallback embeddings (random vectors)")
-                self._initialized = True
+            await self._init_transformers()
         except Exception as e:
-            logger.error(f"Failed to load embedding model: {e}")
-            logger.warning("Will use fallback embeddings (random vectors)")
-            self._initialized = True
+            raise EmbeddingError(
+                f"加载嵌入模型失败（{self._model_name}）: {e}"
+            ) from e
 
     async def _init_transformers(self) -> None:
         """Fallback: load model via raw ``transformers`` + ``torch``."""
@@ -103,7 +104,10 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
             text: The text to embed.
 
         Returns:
-            A normalized embedding vector, or an empty list on failure.
+            A normalized embedding vector.
+
+        Raises:
+            EmbeddingError: If the model is unavailable.
         """
         return await self.embed_query(text)
 
@@ -114,7 +118,10 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
             text: The text to embed (e.g. a user question).
 
         Returns:
-            A normalized embedding vector, or an empty list on failure.
+            A normalized embedding vector.
+
+        Raises:
+            EmbeddingError: If the model is unavailable.
         """
         embeddings = await self.embed_documents([text])
         return embeddings[0] if embeddings else []
@@ -127,16 +134,16 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
 
         Returns:
             A list of embedding vectors, one per input text.
+
+        Raises:
+            EmbeddingError: If the model is unavailable or encoding fails.
         """
         if not self._initialized or self._model is None:
-            logger.warning("Embedding model not loaded, using fallback")
-            return self._fallback_embeddings(texts)
+            raise EmbeddingError(
+                "嵌入模型未就绪：请先调用 initialize()（不再返回随机向量兜底）"
+            )
 
-        try:
-            return await self._encode(texts)
-        except Exception as e:
-            logger.error(f"Embedding failed: {e}")
-            return self._fallback_embeddings(texts)
+        return await self._encode(texts)
 
     # ------------------------------------------------------------------
     # Internal encoding
@@ -146,7 +153,7 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
         """Encode texts via SentenceTransformer or raw transformers.
 
         Raises:
-            Exception: If encoding fails (caught by :meth:`embed_documents`).
+            Exception: If encoding fails (propagated to the caller).
         """
         # SentenceTransformer path
         if hasattr(self._model, "encode"):
@@ -184,14 +191,8 @@ class DefaultEmbeddingProvider(EmbeddingProvider):
         )
 
     # ------------------------------------------------------------------
-    # Fallback
+    # (removed) random-vector fallback
     # ------------------------------------------------------------------
-
-    def _fallback_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Generate deterministic fallback random embeddings."""
-        logger.warning(f"Using fallback embeddings for {len(texts)} texts")
-        rng = np.random.default_rng(42)
-        return [
-            rng.uniform(-0.1, 0.1, self._embedding_dim).tolist()
-            for _ in texts
-        ]
+    # P0-2: ``_fallback_embeddings()`` returned deterministic *random*
+    # vectors when the model was unavailable, which silently poisoned the
+    # vector index.  Failures now raise ``EmbeddingError`` instead.

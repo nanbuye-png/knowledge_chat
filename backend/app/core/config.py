@@ -104,7 +104,9 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: Optional[str] = None
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     COLLECTION_NAME: str = "documents"
-    EMBEDDING_DIM: int = 768
+    # bge-small-zh-v1.5 的输出维度是 512（原先误写为 768）。
+    # 该值仅作为提供者默认维度使用；向量库按实际写入维度建索引。
+    EMBEDDING_DIM: int = 512
 
     # 嵌入
     EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"

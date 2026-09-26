@@ -3,6 +3,7 @@ from typing import Optional
 
 from .base import EmbeddingProvider
 from .providers import (
+    BGE_SMALL_ZH_DIM,
     BgeEmbeddingProvider,
     JinaEmbeddingProvider,
     OpenAIEmbeddingProvider,
@@ -25,7 +26,7 @@ class EmbeddingProviderFactory:
         provider_name: str = "bge",
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
-        embedding_dim: int = 768,
+        embedding_dim: int = BGE_SMALL_ZH_DIM,
     ) -> EmbeddingProvider:
         """Create an embedding provider by name.
 

@@ -5,11 +5,12 @@ cloud APIs (OpenAI Embeddings, Voyage, Jina), and custom backends
 without changing any consumer code.
 """
 
-from .base import EmbeddingProvider
+from .base import EmbeddingError, EmbeddingProvider
 from .default_provider import DefaultEmbeddingProvider
 from .factory import EmbeddingProviderFactory
 
 __all__ = [
+    "EmbeddingError",
     "EmbeddingProvider",
     "DefaultEmbeddingProvider",
     "EmbeddingProviderFactory",
