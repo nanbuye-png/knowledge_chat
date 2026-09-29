@@ -261,6 +261,30 @@ class TestChatServiceAbstention:
         assert response.citations
         print("[PASS] 有答案时正常生成")
 
+    def test_llm_failure_is_reported_not_leaked_as_answer(self, monkeypatch):
+        """LLM 报错必须与"拒答"区分，且**不得把 provider 异常原文当回答**返回。
+
+        实测教训：免费额度 429 时旧实现返回 `抱歉，查询过程中出现错误：{内部报文}`，
+        既泄漏内部信息，又让评测把系统故障算成"模型答错"。
+        """
+        service, _ = _patch_chat_service(
+            monkeypatch, _result([_chunk(score=0.9, rerank_score=0.8)])
+        )
+
+        class _FailingLLM:
+            async def chat(self, messages, stream=False, **kwargs):
+                raise RuntimeError("Error code: 429 - API rate limit for free users")
+
+        monkeypatch.setattr(service, "_llm", _FailingLLM())
+        response = asyncio.run(service.query_knowledge("门诊时间？", 1))
+
+        assert response.abstained is False, "系统故障不是拒答"
+        assert response.error and "429" in response.error, "故障细节应放进 error 字段"
+        assert "429" not in response.answer, "面向用户的文案不能泄漏 provider 报文"
+        assert "抱歉" in response.answer
+        assert response.has_knowledge is False
+        print(f"[PASS] LLM 故障已隔离: answer={response.answer!r}")
+
     def test_stream_abstention_frame(self, monkeypatch):
         """流式路径：拒答应发出 no_result 控制帧（兼容前端契约）且不调用 LLM。"""
         service, llm = _patch_chat_service(monkeypatch, _result([]))

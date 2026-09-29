@@ -1,0 +1,635 @@
+{
+  "version": "1.0",
+  "created": "2026-09-29",
+  "description": "Knowledge Chat RAG 评测集 v1：检索指标（离线可复现）+ 生成指标（真实 LLM 裁判）。ground truth 的 evidence_keywords 必须在语料中真实出现，probe_terms 必须不出现，由 tests/test_evaluation.py 强制校验，防止编造标注。",
+  "corpus_manifest": "../corpus/manifest.json",
+  "items": [
+    {
+      "id": "faq-01",
+      "category": "faq",
+      "answerable": true,
+      "question": "无锡市工人文化宫的职能定位是什么？",
+      "reference_answer": "国家公共文化服务体系的有机组成部分，职能定位是「职工的学校和乐园」，是开展职工教育培训、提升综合文化素质的重要平台。",
+      "evidence_keywords": ["职工的学校和乐园", "公共文化服务体系的有机组成部分"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-02",
+      "category": "faq",
+      "answerable": true,
+      "question": "我可以参加工人文化宫的哪些活动？",
+      "reference_answer": "艺术和手作课程、象棋和电竞培训课程、篮球和台球比赛等职工体育嘉年华活动、相亲联谊活动、送关爱送法律送文化演出，以及职工歌手大赛等。",
+      "evidence_keywords": ["职工歌手大赛", "象棋和电竞"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-03",
+      "category": "faq",
+      "answerable": true,
+      "question": "工人文化宫的活动需要收费吗？",
+      "reference_answer": "除职工大讲堂部分课程收取少量报名费用外，大部分活动免费参加。",
+      "evidence_keywords": ["少量报名费用", "大部分的活动都是免费参加"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-04",
+      "category": "faq",
+      "answerable": true,
+      "question": "职工医疗互助怎么参加？可以个人参保吗？",
+      "reference_answer": "无锡市市区企事业单位、机关团体在职并参加医保的职工均可参加「住院+重疾+意外」互助保障项目，由所在单位统一办理参保手续，不接受个人参保。",
+      "evidence_keywords": ["不接受个人参保", "住院+重疾+意外"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-05",
+      "category": "faq",
+      "answerable": true,
+      "question": "生病住院后职工医疗互助怎么理赔？",
+      "reference_answer": "住院费用理赔一般不需要职工提交申请，出院次月月底自动到账；重疾理赔需通过无锡市总工会小程序互助保障专区上传疾病证明材料；在外地就医需先办好异地就医备案。",
+      "evidence_keywords": ["出院的次月月底即可自动到账", "异地就医备案"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-06",
+      "category": "faq",
+      "answerable": true,
+      "question": "想参加专升本学历提升应该联系谁，咨询电话是多少？",
+      "reference_answer": "报名无锡市总工会学历提升班，咨询电话 82821727。",
+      "evidence_keywords": ["82821727", "学历提升班"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-07",
+      "category": "faq",
+      "answerable": true,
+      "question": "文化宫有手工制作类的课程吗？",
+      "reference_answer": "每个月都有很多此类课程，例如手工编织、首饰 DIY、非遗体验等，通过「无锡市工人文化宫」公众号报名。",
+      "evidence_keywords": ["首饰DIY", "非遗体验"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-08",
+      "category": "faq",
+      "answerable": true,
+      "question": "文化宫有展览或者电影可以看吗？",
+      "reference_answer": "三楼有职工艺术展览中心，经常举办书法、摄影等展览且免费参观；公众号设有 VR 展厅可在线看展；文化宫还会不定期发放电影券。",
+      "evidence_keywords": ["职工艺术展览中心", "VR展厅"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-09",
+      "category": "faq",
+      "answerable": true,
+      "question": "职工书屋可以借书回家吗？",
+      "reference_answer": "目前只能在观山书屋里阅读，暂时没有开放外借服务。",
+      "evidence_keywords": ["暂时还没有开放外借服务", "观山书屋"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-10",
+      "category": "faq",
+      "answerable": true,
+      "question": "文化宫哪里可以打篮球？",
+      "reference_answer": "文化宫西南角有一个露天篮球场，可以进去打篮球。",
+      "evidence_keywords": ["西南角", "露天篮球场"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-11",
+      "category": "faq",
+      "answerable": true,
+      "question": "我想加入无锡职工合唱团，年龄要求和报名电话是什么？",
+      "reference_answer": "要求年龄 18 至 50 周岁的声乐爱好者，音乐专业者放宽到 55 周岁；报名电话 0510-68500566；该团 2021 年被全总评为「全国最佳职工合唱团队」。",
+      "evidence_keywords": ["18至50周岁", "0510-68500566", "全国最佳职工合唱团队"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-12",
+      "category": "faq",
+      "answerable": true,
+      "question": "无锡市工人文化宫的总建筑面积大约是多少？",
+      "reference_answer": "总建筑面积大约 53000 平方米，拥有体育中心、职工剧场、办公楼、观山书屋、露天活动广场等主要场所。",
+      "evidence_keywords": ["53000平方米"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-13",
+      "category": "faq",
+      "answerable": true,
+      "question": "在文化宫停车怎么收费？新能源车有优惠吗？",
+      "reference_answer": "车辆可免费停放 45 分钟，新能源车额外再多免费 1 小时；超过免费时段后两小时内收费 5 元，之后每小时 3 元，24 小时内不超过 35 元。",
+      "evidence_keywords": ["免费停放45分钟", "新能源车"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-14",
+      "category": "faq",
+      "answerable": true,
+      "question": "介绍一下无锡市工人文化宫的发展历史。",
+      "reference_answer": "1954 年 2 月 3 日（春节）落成对外开放，原址清扬路 1 号；2013 年迁移到观山路 299 号；2021 年深化事业单位改革，无锡新华中等专业学校与无锡市总工会职工服务中心整建制并入，形成新的无锡市工人文化宫。",
+      "evidence_keywords": ["1954年2月3日", "观山路299号", "清扬路1号"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "faq-15",
+      "category": "faq",
+      "answerable": true,
+      "question": "相亲联谊活动怎么报名？",
+      "reference_answer": "关注「无锡市工人文化宫」公众号，每次活动前会发布活动预告，预告中包含详细报名步骤。",
+      "evidence_keywords": ["活动预告", "相亲联谊活动"],
+      "gold_docs": ["wuxi_culture_palace_faq.txt"]
+    },
+    {
+      "id": "rag-01",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "知识库文档的写入链路包含哪些步骤？",
+      "reference_answer": "上传文件 → 校验用户与知识库权限 → 保存文件和数据库记录 → ParserFactory 选择解析器 → 提取纯文本 → Chunker 切分 → Embedding Provider 批量向量化 → Vector Store 写入向量/文本/metadata → 更新文档处理状态。",
+      "evidence_keywords": ["ParserFactory 选择解析器", "Chunker 切分文本"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-02",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "Chunk 切得太大或太小分别有什么问题？",
+      "reference_answer": "太小：上下文不完整，单个片段可能失去语义；太大：包含无关信息，Embedding 表达被稀释并消耗更多上下文窗口。没有通用最佳值，应通过目标文档和问题集做评测确定。",
+      "evidence_keywords": ["单个片段可能失去语义", "Embedding 表达被稀释"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-03",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "Chunk 的 overlap 参数有什么作用？",
+      "reference_answer": "让相邻 Chunk 共享部分文字，避免答案跨越切分边界时被割裂。",
+      "evidence_keywords": ["避免答案跨边界时被割裂"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-04",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "ChromaDB 里到底保存了哪些字段？",
+      "reference_answer": "通常包含 id（documentId_chunkIndex）、embedding（Chunk 向量）、document（Chunk 原文）和 metadata（document_id、filename、chunk_index、knowledge_base_id、user_id 等）。",
+      "evidence_keywords": ["documentId_chunkIndex"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-05",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "删除一篇文档时为什么必须同时处理数据库记录、上传文件和向量 Chunk？",
+      "reference_answer": "只删数据库，向量仍可能被召回；只删向量，管理页面仍显示文档。因此删除要同时覆盖三处，保证一致性。",
+      "evidence_keywords": ["若只删数据库，向量仍可能被召回", "若只删向量，管理页面仍显示文档"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-06",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "RAG 里的 Citation 引用来源有什么价值？",
+      "reference_answer": "让用户可以验证回答，降低「模型说了就信」的风险。Citation 不保证答案一定正确，但提供可追溯依据。",
+      "evidence_keywords": ["模型说了就信", "提供可追溯依据"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-07",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "知识库检索不到相关内容时应该怎么处理？",
+      "reference_answer": "明确告知知识库中没有足够依据，不要把模型通用知识伪装成文档答案；可以建议用户换个问法、上传资料或切换普通聊天模式。",
+      "evidence_keywords": ["不要把模型通用知识伪装成文档答案"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-08",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "Prompt Provider 由哪些模块组成，各自负责什么？",
+      "reference_answer": "base.py 定义 System Prompt 和 RAG Prompt 接口；default.py 是默认模板；database.py 从数据库解析模板并在失败时回退默认模板；resolver.py 选择当前 Provider；prompt_cache.py 负责 Prompt 缓存与并发保护。",
+      "evidence_keywords": ["prompt_cache.py"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-09",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "为什么要抽象 LLM Provider？",
+      "reference_answer": "业务层只关心 chat(messages, stream)，不应该依赖某一家厂商的 SDK；Factory 根据配置创建 DeepSeek、Agens 或其他实现。",
+      "evidence_keywords": ["不应该依赖某一家厂商的 SDK", "业务层只关心"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-10",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "为什么 Embedding Provider 也需要抽象？",
+      "reference_answer": "不同 Provider 的模型、维度、批量限制、鉴权方式不同；抽象后可以替换模型，但更换维度时要考虑向量重建。",
+      "evidence_keywords": ["批量限制", "更换维度时要考虑向量重建"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-11",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "为什么向量检索也必须按 knowledge_base_id 过滤？",
+      "reference_answer": "业务查询必须同时包含资源 ID 和所有者/授权条件；向量检索同样必须按 knowledge_base_id 过滤，否则会发生跨知识库召回。",
+      "evidence_keywords": ["否则会发生跨知识库召回", "向量检索同样必须按"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-12",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "RAG 能完全消除幻觉吗？",
+      "reference_answer": "不能。RAG 不是绝对消除幻觉，只是提供更可靠上下文；检索质量通常比 Prompt 花哨程度更重要。",
+      "evidence_keywords": ["RAG 不是绝对消除幻觉", "检索质量通常比 Prompt 花哨程度更重要"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-13",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "Top-K 和 min_score 设置不当会带来什么问题？",
+      "reference_answer": "K 太小可能漏掉关键上下文；K 太大噪声增加、Prompt 变长、费用和延迟上升；阈值太高经常无结果；阈值太低无关文本进入上下文，增加幻觉风险。",
+      "evidence_keywords": ["增加幻觉风险", "阈值太高：经常无结果"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-14",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "RAG 查询链路的核心文件有哪些？",
+      "reference_answer": "chat_service.py、retrieval_pipeline.py、retrieval/vector_retriever.py、citation/builder.py、api/knowledge_query.py。",
+      "evidence_keywords": ["retrieval_pipeline.py", "vector_retriever.py"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-15",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "手册认为 Knowledge Chat 在 RAG 评测方面还缺什么？",
+      "reference_answer": "手册把它列为待优化项：需要建立问题—期望文档—期望答案评测集，以及系统化的 RAG Eval 数据集和量化指标。",
+      "evidence_keywords": ["建立问题—期望文档—期望答案评测集", "建立系统化 RAG Eval 数据集和量化指标"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-16",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "用户提问之后，知识库问答的查询链路依次经过哪些环节？",
+      "reference_answer": "验证用户拥有知识库访问权 → Query Embedding → Retriever 在指定 KB 检索 Top-K → min_score 过滤 → CitationBuilder 构造引用 → 拼接 context → Prompt Provider 构造 RAG System Prompt → 加入历史消息和当前问题 → LLM Provider 生成回答 → 返回答案与 sources。",
+      "evidence_keywords": ["min_score 过滤", "CitationBuilder 构造引用"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-17",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "更换 Embedding 模型之后通常还需要做什么？",
+      "reference_answer": "更换模型后通常需要重建历史向量；另外文档和问题必须使用兼容的 Embedding 模型，向量维度必须一致。",
+      "evidence_keywords": ["更换模型后通常需要重建历史向量", "向量维度必须一致"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "rag-18",
+      "category": "rag_pipeline",
+      "answerable": true,
+      "question": "向量相似度高是否代表检索到的内容一定正确？",
+      "reference_answer": "不一定。相似度高只表示语义接近，不保证内容一定正确；Embedding 也不是加密，更不是模型生成答案。",
+      "evidence_keywords": ["不保证内容一定正确", "相似度高只表示语义接近"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-01",
+      "category": "commerce",
+      "answerable": true,
+      "question": "Commerce Core 和 AI Service 的职责边界是什么？",
+      "reference_answer": "Commerce Core 负责 JWT、权限、商品、库存、购物车、订单、支付、售后，不负责自由生成自然语言；AI Service 负责意图解析、工具编排、Prompt、Provider、SSE，不允许绕过 Core 直接写数据库。",
+      "evidence_keywords": ["自由生成自然语言", "绕过 Core 直接写数据库"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-02",
+      "category": "commerce",
+      "answerable": true,
+      "question": "商品搜索的意图解析到底是不是 AI？",
+      "reference_answer": "当前解析器主要用关键词、同义词和正则表达式提取价格区间，属于确定性 NLP/规则解析，不应描述为模型自动规划；优点是稳定、便宜、容易测试、不会因模型随机性破坏 CI，限制是理解复杂语义、否定、组合条件和上下文指代的能力有限。",
+      "evidence_keywords": ["确定性 NLP/规则解析", "不会因模型随机性破坏 CI"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-03",
+      "category": "commerce",
+      "answerable": true,
+      "question": "为什么不能信任请求体里的 userId？",
+      "reference_answer": "JWT 验证后的 Principal 才是认证身份；请求体、前端状态和模型输出都属于不可信输入，攻击者可以在浏览器开发者工具中修改 JSON，因此 Core 必须覆盖或忽略外部 userId。",
+      "evidence_keywords": ["JWT 验证后的 Principal 才是认证身份"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-04",
+      "category": "commerce",
+      "answerable": true,
+      "question": "SSE 协议里有哪几类事件？",
+      "reference_answer": "四类：message 输出文本 token，meta 承载商品、确认和工具结果，error 表示可公开错误，done 表示请求正常结束。",
+      "evidence_keywords": ["add_to_cart_result", "四类事件"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-05",
+      "category": "commerce",
+      "answerable": true,
+      "question": "为什么前端处理 SSE 必须维护 buffer，一次网络读取不等于一个事件？",
+      "reference_answer": "TCP/HTTP 流只保证字节顺序，不保证业务消息边界，一个 JSON 可能拆成多次读取，多个事件也可能一次到达；因此要把新数据追加到 buffer，按空行分割完整 frame 解析，剩余半帧保留到下次读取。",
+      "evidence_keywords": ["剩余半帧保留到下次读取", "不保证业务消息边界"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-06",
+      "category": "commerce",
+      "answerable": true,
+      "question": "SPU 和 SKU 有什么区别，价格和库存落在哪一层？",
+      "reference_answer": "SPU 是一种标准商品（如某款蓝牙耳机），SKU 是具体可售规格（如黑色 256GB）；价格和库存通常落在 SKU，而不是只落在 SPU。",
+      "evidence_keywords": ["价格和库存通常落在 SKU"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-07",
+      "category": "commerce",
+      "answerable": true,
+      "question": "库存为什么需要预留，流程是怎样的？",
+      "reference_answer": "直接下单后立刻永久扣减，支付失败时难以恢复；完全不锁库存又会超卖。流程是创建订单、预留库存、支付成功后确认扣减、超时或取消后释放预留。",
+      "evidence_keywords": ["超时/取消后释放预留", "完全不锁库存又会超卖"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-08",
+      "category": "commerce",
+      "answerable": true,
+      "question": "支付回调为什么要做幂等？",
+      "reference_answer": "支付平台可能重试通知，同一个支付成功事件可能到达多次；服务端必须通过业务单号、支付单状态或唯一约束保证重复回调不会重复扣库存、重复记账或重复触发履约。",
+      "evidence_keywords": ["重复触发履约", "同一个支付成功事件可能到达多次"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-09",
+      "category": "commerce",
+      "answerable": true,
+      "question": "JWT 的 Payload 可以用来存密码或 API Key 吗？",
+      "reference_answer": "不可以。Payload 只是 Base64URL 编码，不是加密，不能放密码、API Key 等敏感信息；Signature 用来验证内容是否被篡改。",
+      "evidence_keywords": ["Payload 只是 Base64URL 编码"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "com-10",
+      "category": "commerce",
+      "answerable": true,
+      "question": "加购为什么也要二次确认？",
+      "reference_answer": "加购虽然不是付款，但会改变用户账户状态，且可能影响后续结算；确认机制体现了对「模型建议」和「业务写操作」边界的理解。",
+      "evidence_keywords": ["会改变用户账户状态"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-01",
+      "category": "engineering",
+      "answerable": true,
+      "question": "TTFT 和总耗时分别指什么？",
+      "reference_answer": "TTFT 是从请求开始到第一个 token 到达的时间；总耗时是从请求开始到完成或失败的时间。",
+      "evidence_keywords": ["从请求开始到第一个 token 到达的时间"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-02",
+      "category": "engineering",
+      "answerable": true,
+      "question": "为什么延迟指标要看 P95 而不是平均值？P95 是什么含义？",
+      "reference_answer": "P95 表示 95% 请求的指标不超过该值，比平均值更能暴露慢请求；当前指标只是单实例内存统计，不等于生产监控平台。",
+      "evidence_keywords": ["比平均值更能暴露慢请求", "单实例内存统计"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-03",
+      "category": "engineering",
+      "answerable": true,
+      "question": "Redis 缓存穿透、击穿、雪崩分别是什么，怎么缓解？",
+      "reference_answer": "穿透是查询不存在的数据，可用空值缓存、布隆过滤器；击穿是热点 Key 失效，可用互斥重建、逻辑过期；雪崩是大量 Key 同时失效，可加随机过期、限流和降级。",
+      "evidence_keywords": ["布隆过滤器", "逻辑过期", "随机过期"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-04",
+      "category": "engineering",
+      "answerable": true,
+      "question": "事务的 ACID 分别指什么？",
+      "reference_answer": "原子性：全部成功或全部失败；一致性：业务约束在事务前后成立；隔离性：并发事务互相影响受到控制；持久性：提交后的结果不会因普通故障丢失。",
+      "evidence_keywords": ["提交后的结果不会因普通故障丢失"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-05",
+      "category": "engineering",
+      "answerable": true,
+      "question": "并发事务会带来哪些隔离问题？",
+      "reference_answer": "脏读（读到未提交数据）、不可重复读（同一事务两次读取同一行结果不同）、幻读（同一条件两次查询行数不同）。",
+      "evidence_keywords": ["不可重复读", "幻读"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-06",
+      "category": "engineering",
+      "answerable": true,
+      "question": "FastAPI 里用了 async/await 就一定更快吗？CPU 密集任务怎么处理？",
+      "reference_answer": "异步不等于自动变快；异步的价值是在等待网络、数据库、模型流时释放事件循环。CPU 密集任务会阻塞事件循环，应放到线程池、进程池或任务队列。",
+      "evidence_keywords": ["异步不等于自动变快", "CPU 密集任务会阻塞事件循环"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-07",
+      "category": "engineering",
+      "answerable": true,
+      "question": "项目里的测试层级有哪几类，各自验证什么？",
+      "reference_answer": "单元测试验证单个函数/类，如 Intent Parser、Action Policy、Parser；集成测试验证模块协作，如 Controller + Service + DB/Mock；E2E 验证用户可见流程，如登录、AI 搜索、确认加购；AI Eval 验证 AI/策略任务指标，如意图、字段、安全策略、检索质量。",
+      "evidence_keywords": ["Intent Parser、Action Policy、Parser", "AI/策略任务指标"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-08",
+      "category": "engineering",
+      "answerable": true,
+      "question": "AI 电商项目的 CI 流程包含哪些环节？",
+      "reference_answer": "Java Maven Test、三端前端 Lint/Build、Customer Vitest、Python Pytest、AI Eval、Docker Compose、Playwright E2E。",
+      "evidence_keywords": ["Playwright E2E", "Java Maven Test"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-09",
+      "category": "engineering",
+      "answerable": true,
+      "question": "Agent 和 Workflow 的区别是什么？有聊天框就算 Agent 吗？",
+      "reference_answer": "Workflow 是多个步骤、条件分支、状态和失败处理的组合；Agent 通常包含动态规划、工具选择和循环，不是有聊天框就叫 Agent。",
+      "evidence_keywords": ["不是有聊天框就叫 Agent", "动态规划、工具选择"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "eng-10",
+      "category": "engineering",
+      "answerable": true,
+      "question": "数据库索引有哪些代价和注意事项？",
+      "reference_answer": "索引提升读取但增加写成本和存储；联合索引要关注最左前缀；低区分度字段单独建索引可能收益有限。",
+      "evidence_keywords": ["最左前缀", "低区分度字段"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "hb-01",
+      "category": "handbook",
+      "answerable": true,
+      "question": "手册里标注的三种状态分别是什么含义？",
+      "reference_answer": "[已实现] 表示当前代码中真实存在，可以结合源码和演示讲解；[需掌握] 表示项目涉及这个概念但需要补足原理；[可优化] 表示当前没有完整实现，只能作为改进方向，不能包装成已有能力。",
+      "evidence_keywords": ["[需掌握]", "[可优化]"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "hb-02",
+      "category": "handbook",
+      "answerable": true,
+      "question": "手册建议每天固定的学习流程包含哪些环节，各花多少时间？",
+      "reference_answer": "概念学习 20 分钟（整理 5 个关键词）、源码导航 40 分钟（顺调用链读代码）、实践验证 30 分钟（运行、断点、改配置）、口述复盘 20 分钟（不看资料回答当天面试题并录音）、错题整理 10 分钟（记录说不清的概念）。",
+      "evidence_keywords": ["口述复盘", "源码导航"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "hb-03",
+      "category": "handbook",
+      "answerable": true,
+      "question": "手册明确说哪些内容不能写进简历或面试中主动宣称？",
+      "reference_answer": "除非有真实压测或监控报告，否则不要宣称生产级高并发、固定 QPS、100+ 并发用户、日均千单、零宕机和线上准确率；正确说法是项目以本地演示和自动化验证为主，已覆盖单元测试、AI Eval 和核心 E2E，但尚未进行生产级容量压测。",
+      "evidence_keywords": ["尚未进行生产级容量压测", "不要宣称"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "xd-01",
+      "category": "cross_doc",
+      "answerable": true,
+      "question": "Knowledge Chat 和 AI 智能电商平台分别证明什么能力？",
+      "reference_answer": "Knowledge Chat 证明私有知识如何进入 LLM 上下文，关键词是 RAG、Embedding、Chunk、Vector Search、Prompt、Citation；AI 电商平台证明 LLM 如何安全调用真实业务能力，关键词是 Tool、SSE、JWT、确认机制、可信数据、Eval、可观测性。",
+      "evidence_keywords": ["私有知识如何进入 LLM 上下文", "LLM 如何安全调用真实业务能力"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "xd-02",
+      "category": "cross_doc",
+      "answerable": true,
+      "question": "知识库的写入和查询为什么是两条不同的 Pipeline？",
+      "reference_answer": "写入链路处理上传、解析、切分、向量化与存储并更新文档状态；查询链路处理用户提问的 Query Embedding、Top-K 检索、阈值过滤、引用构造、Prompt 组装与 LLM 生成，两者入口、职责和数据流都不同。",
+      "evidence_keywords": ["文档写入与查询是两条不同 Pipeline", "ParserFactory 选择解析器", "min_score 过滤"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "xd-03",
+      "category": "cross_doc",
+      "answerable": true,
+      "question": "为什么把 Prompt 抽象成 Provider，而不是把 Prompt 字符串写在业务服务里？",
+      "reference_answer": "因为默认模板提供稳定回退，数据库模板支持运营配置和版本管理，ChatService 只依赖统一接口；Prompt 字符串散落在业务服务里难以回退、版本化与测试。",
+      "evidence_keywords": ["散落在业务服务里", "默认模板提供稳定回退"],
+      "gold_docs": ["ai_learning_manual.md"]
+    },
+    {
+      "id": "na-01",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "无锡市工人文化宫的健身房年卡是多少钱？",
+      "probe_terms": ["年卡"],
+      "note": "语料只说明大部分活动免费与停车收费，没有任何年卡/会员卡价格"
+    },
+    {
+      "id": "na-02",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "Kubernetes HPA 的默认缩容稳定窗口是多少秒？",
+      "probe_terms": ["缩容稳定窗口"],
+      "note": "语料完全不涉及 Kubernetes 自动扩缩容"
+    },
+    {
+      "id": "na-03",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "pgvector 的 HNSW 索引里 ef_construction 推荐设置多少？",
+      "probe_terms": ["ef_construction"],
+      "note": "手册仅提到未来可迁移 pgvector，没有任何调参细节"
+    },
+    {
+      "id": "na-04",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "公司员工的年假有几天？",
+      "probe_terms": ["年假"],
+      "note": "语料不含任何人事假期制度"
+    },
+    {
+      "id": "na-05",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "2025 年公司财报的净利润增长率是多少？",
+      "probe_terms": ["净利润增长率"],
+      "note": "语料不含任何财务数据"
+    },
+    {
+      "id": "na-06",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "LangGraph 的 StateGraph 如何配置条件边？",
+      "probe_terms": ["StateGraph"],
+      "note": "手册只讨论是否需要引入 LangGraph，不涉及 API 用法"
+    },
+    {
+      "id": "na-07",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "OAuth2 授权码模式里的 PKCE 参数应该怎么生成？",
+      "probe_terms": ["PKCE"],
+      "note": "语料只涉及自建 JWT 与内部令牌，不含 OAuth2/PKCE"
+    },
+    {
+      "id": "na-08",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "Elasticsearch 的 FST 压缩原理是什么？",
+      "probe_terms": ["FST"],
+      "note": "语料不含 Elasticsearch 内部结构内容"
+    },
+    {
+      "id": "na-09",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "怎么用 Docker Swarm 做滚动更新？",
+      "probe_terms": ["Docker Swarm"],
+      "note": "语料只提到 docker compose up --build 与 CI 流程"
+    },
+    {
+      "id": "na-10",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "无锡市工人文化宫游泳馆的开放时间是几点到几点？",
+      "probe_terms": ["游泳馆"],
+      "note": "FAQ 只提到体育中心与露天篮球场，没有游泳馆开放时间"
+    },
+    {
+      "id": "na-11",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "Kafka 生产者如何配置幂等与事务来保证 exactly-once？",
+      "probe_terms": ["Kafka", "exactly-once"],
+      "note": "语料提到幂等与事务，但都是数据库/支付语境，完全没有 Kafka 消息中间件内容"
+    },
+    {
+      "id": "na-12",
+      "category": "no_answer",
+      "answerable": false,
+      "question": "本月职工大讲堂的课程安排表在哪里看？",
+      "probe_terms": ["课程安排表"],
+      "note": "FAQ 提到职工大讲堂部分课程收费，但没有任何当期课程安排"
+    }
+  ]
+}

@@ -57,6 +57,9 @@ class RetrievalPipeline:
             threshold=getattr(settings, "CONTEXT_SCORE_THRESHOLD", 0.0),
             score_source=getattr(settings, "CONTEXT_SCORE_SOURCE", "auto"),
         )
+        # 召回分下限由配置驱动（原先硬编码 0.3，导致"决定什么进入 LLM"的阈值
+        # 无法配置、也无法按检索模式标定）
+        self._min_score = float(getattr(settings, "RETRIEVAL_MIN_SCORE", self._min_score))
 
     # ------------------------------------------------------------------
     # Public API

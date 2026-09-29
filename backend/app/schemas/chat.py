@@ -32,6 +32,11 @@ class QueryResponse(BaseModel):
     # §5.6：拒答标记与原因（无足够依据时不调用 LLM）
     abstained: bool = False
     abstention_reason: Optional[str] = None
+    # 系统故障（LLM 限流/超时等）与"拒答"是两件事：
+    # - abstained=True  → 检索没找到依据，属于正常业务结果；
+    # - error 非空      → 本次回答**失败**（answer 只是友好文案，不含内部细节），
+    #                     调用方（前端/评测）必须据此区分，不能当成模型回答去算指标。
+    error: Optional[str] = None
 
 
 class ChatRequest(BaseModel):

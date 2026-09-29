@@ -126,6 +126,12 @@ class Settings(BaseSettings):
     # vector = 仅向量检索（**Phase 2 评测的 Baseline**）
     # hybrid = 向量 + BM25 稀疏检索加权融合
     RETRIEVAL_MODE: str = "hybrid"
+    # 召回分下限：低于该分数的 chunk 不进入上下文（也不进入 Reranker）。
+    # 注意两种检索模式的分数含义不同：
+    #   vector 模式 = 余弦相似度（1 - 余弦距离）
+    #   hybrid 模式 = 两通道归一化后的加权融合分（0.5*vector + 0.5*bm25）
+    # 因此该阈值需要按模式分别标定（见 docs/RAG_EVALUATION.md）。
+    RETRIEVAL_MIN_SCORE: float = 0.3
     # 融合权重（可配置；默认等权）
     HYBRID_VECTOR_WEIGHT: float = 0.5
     HYBRID_BM25_WEIGHT: float = 0.5
@@ -194,6 +200,21 @@ class Settings(BaseSettings):
     QUERY_REWRITE_MIN_CHARS: int = 4
     # 改写结果的最大长度，超出视为非法输出并回退
     QUERY_REWRITE_MAX_CHARS: int = 200
+
+    # ---- RAG 评测（Phase 2，见 backend/evaluation/README.md）----
+    # 裁判模型单次最大 token。Agens 的 agnes-2.5-flash 属于推理型模型，
+    # 会先消耗 token 输出 reasoning_content，留太小会导致正文为空。
+    EVAL_JUDGE_MAX_TOKENS: int = 800
+    # 裁判温度（0 = 尽量确定性）
+    EVAL_JUDGE_TEMPERATURE: float = 0.0
+    # 裁判调用重试次数（429 限流 / 5xx / 超时等瞬时错误，以及空正文/非 JSON 输出）。
+    # 免费额度下实测 71 题里有 20 题因 429 丢掉判分，故必须重试；
+    # 非瞬时错误（参数/鉴权）不会重试。
+    EVAL_JUDGE_RETRY: int = 4
+    # 瞬时错误的重试基础退避秒数（指数退避：3s → 6s → 12s，上限 30s）
+    EVAL_JUDGE_RETRY_DELAY: float = 3.0
+    # 不可用输出（空正文 / 非 JSON）的重试间隔秒数（无需长退避）
+    EVAL_JUDGE_OUTPUT_RETRY_DELAY: float = 1.0
 
     # JWT 认证
     SECRET_KEY: str = "knowledge-chat-secret-key-change-in-production"

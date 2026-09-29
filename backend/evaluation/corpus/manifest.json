@@ -1,0 +1,84 @@
+{
+  "version": "1.0",
+  "description": "RAG 评测语料清单。path 相对 backend/evaluation/ 解析。",
+  "path_base": "backend/evaluation",
+  "docs": [
+    {
+      "name": "ai_learning_manual.md",
+      "path": "corpus/ai_learning_manual.md",
+      "origin": "backend/uploads/d2b7166c-4c13-4e27-ba58-74b4c8fc8851.md",
+      "origin_type": "uploaded_test_document",
+      "sha256": "19585de08dca0d42cf88b67f41d30095df64ec24f576c4c5454c61517af487a2",
+      "bytes": 51527,
+      "verify_hash": true,
+      "role": "primary",
+      "note": "《AI 应用开发项目学习手册》，含 RAG/SSE/JWT/Redis 等章节，Markdown 标题可用于 section 引用定位"
+    },
+    {
+      "name": "wuxi_culture_palace_faq.txt",
+      "path": "corpus/wuxi_culture_palace_faq.txt",
+      "origin": "backend/uploads/f2737f76-5f03-4c47-932f-f588e69b03d5.txt",
+      "origin_type": "uploaded_test_document",
+      "sha256": "fe6dc2b2d8ac72d535fc9b029dffeb3d0f98cd27fdcd92abd7fdb65de7b903c7",
+      "bytes": 5032,
+      "verify_hash": true,
+      "role": "primary",
+      "note": "事实型 FAQ（地址、电话、收费标准等数字事实），适合做精确事实评测"
+    },
+    {
+      "name": "rag_pipeline.md",
+      "path": "../../docs/rag_pipeline.md",
+      "origin": "docs/rag_pipeline.md",
+      "origin_type": "repo_document",
+      "sha256": "85d53b1a1c4d6153a7d19eb418793955f2cbe7668885d03455510e569179954c",
+      "bytes": 1337,
+      "verify_hash": false,
+      "role": "distractor",
+      "note": "仓库自有 RAG 文档，与手册主题重叠，构成强干扰项"
+    },
+    {
+      "name": "architecture.md",
+      "path": "../../docs/architecture.md",
+      "origin": "docs/architecture.md",
+      "origin_type": "repo_document",
+      "sha256": "640a0e8fef26592c8ac3689d345b0ec4e734d0dec9df2c5781634c5175b686e5",
+      "bytes": 1650,
+      "verify_hash": false,
+      "role": "distractor",
+      "note": "仓库架构说明"
+    },
+    {
+      "name": "provider_system.md",
+      "path": "../../docs/provider_system.md",
+      "origin": "docs/provider_system.md",
+      "origin_type": "repo_document",
+      "sha256": "df2b9bfd1e433f5f654c61c8cf2f3d1967b6be1554a9c109de9067d4161e8a33",
+      "bytes": 2070,
+      "verify_hash": false,
+      "role": "distractor",
+      "note": "Provider 抽象说明，与手册 §17 主题重叠"
+    },
+    {
+      "name": "KNOWLEDGE_CHAT_REALITY_AUDIT.md",
+      "path": "../../docs/KNOWLEDGE_CHAT_REALITY_AUDIT.md",
+      "origin": "docs/KNOWLEDGE_CHAT_REALITY_AUDIT.md",
+      "origin_type": "repo_document",
+      "sha256": "a5c752a175cd7ab423bd0d6a3dbd9bde6e2d948c3dfcd99b6f2efbe5f7ba7051",
+      "bytes": 56912,
+      "verify_hash": false,
+      "role": "distractor",
+      "note": "本项目现状审计报告（57KB），与原手册在 RAG 主题上高度重叠 —— 最难的一类干扰项"
+    },
+    {
+      "name": "INTERVIEW_GUIDE.md",
+      "path": "../../docs/INTERVIEW_GUIDE.md",
+      "origin": "docs/INTERVIEW_GUIDE.md",
+      "origin_type": "repo_document",
+      "sha256": "b857406ad8b6b2ac7c0feee015b0a38454a8d32bc814b8a01f15100868e71c6b",
+      "bytes": 68168,
+      "verify_hash": false,
+      "role": "distractor",
+      "note": "面试题指南（68KB），大量 RAG/架构叙述，用于压低「只靠关键词相似度」的分数"
+    }
+  ]
+}
