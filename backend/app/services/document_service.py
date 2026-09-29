@@ -202,6 +202,8 @@ class DocumentService:
 
         # 上一轮可能已写入部分向量/稀疏索引，先清理以免出现重复 chunk
         await self._purge_indexes(existing.id)
+        # 索引已变化 → 该知识库的检索缓存立即失效（避免重跑期间命中旧结果）
+        await self._invalidate_retrieval_cache(knowledge_base_id)
 
         existing.file_type = file_ext or existing.file_type
         existing.file_size = len(content)
@@ -245,6 +247,16 @@ class DocumentService:
             await get_sparse_index().delete_document(document_id)
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"清理稀疏索引失败（{document_id}）: {exc}")
+
+    @staticmethod
+    async def _invalidate_retrieval_cache(knowledge_base_id: int) -> None:
+        """让该知识库的检索缓存失效（Phase 3 §5.4）。"""
+        try:
+            from .cache.retrieval_cache import RetrievalCache
+
+            await RetrievalCache().invalidate_knowledge_base(knowledge_base_id)
+        except Exception as exc:  # noqa: BLE001 - 缓存失效失败不影响主流程
+            logger.warning(f"检索缓存失效失败（kb={knowledge_base_id}）: {exc}")
 
     def _dispatch_async(self, doc, file_path: str, knowledge_base_id: int) -> None:
         """把处理任务交给后台 Worker；提交失败则降级为请求内同步处理。"""
@@ -354,6 +366,8 @@ class DocumentService:
         if not doc:
             raise HTTPException(status_code=404, detail="文档不存在")
 
+        knowledge_base_id = doc.knowledge_base_id
+
         # Delete vector + sparse (BM25) index entries
         # （与幂等重跑共用同一清理逻辑，避免两处实现漂移）
         await self._purge_indexes(document_id)
@@ -368,6 +382,10 @@ class DocumentService:
         # Delete from database
         await db.delete(doc)
         await db.commit()
+
+        # §5.4：知识库内容变了 → 该库的检索缓存必须失效
+        if knowledge_base_id is not None:
+            await self._invalidate_retrieval_cache(knowledge_base_id)
 
         logger.info(f"Document deleted: {doc.filename} ({document_id})")
         return {"message": "文档已删除", "document_id": document_id}

@@ -210,6 +210,19 @@ class Settings(BaseSettings):
     # false 时不采集请求级指标（排障时减少噪声）。
     METRICS_ENABLED: bool = True
 
+    # ---- 检索结果缓存（Phase 3 §5.4）----
+    # True：同一知识库 + 同查询 + 同历史 + 同参数的检索结果直接复用
+    #   （文档入库完成 / 删除 / 重跑时按知识库整体失效）
+    RETRIEVAL_CACHE_ENABLED: bool = True
+    # 检索缓存 TTL（秒）；文档变化会立即失效，所以 TTL 只用来兜底陈旧数据
+    RETRIEVAL_CACHE_TTL: int = 300
+
+    # ---- 反向代理（Phase 3 §5.4 限流取真实 IP）----
+    # 信任的反向代理层数：取 X-Forwarded-For 右数第 N 个值作为客户端 IP。
+    # nginx 使用 $proxy_add_x_forwarded_for 时，客户端可伪造左侧字段，
+    # 只有最右侧（由我们信任的代理写入）才可信。
+    TRUSTED_PROXY_COUNT: int = 1
+
     # ---- Abstention / 拒答（Phase 1 §5.6）----
     # 无足够依据时拒答，而不是让 LLM 猜测
     ABSTENTION_ENABLED: bool = True

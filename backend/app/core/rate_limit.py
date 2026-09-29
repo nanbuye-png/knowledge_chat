@@ -1,82 +1,50 @@
-"""FastAPI Rate Limiting Dependency。
+"""FastAPI Rate Limiting Dependency（Phase 3 §5.4）。
 
-提供 `rate_limit(limit, window_seconds)` 依赖工厂，用于 API 端点限流。
+路由级限流依赖工厂：``dependencies=[Depends(rate_limit(...))]``。
 
-限流键维度：
-- 登录接口：使用客户端 IP
-- 聊天/上传接口：使用 user_id + endpoint（有认证时）或 IP（无认证时）
+统一到唯一实现 :func:`app.services.security.rate_limiter.check_rate_limit`
+（Redis 优先、进程内滑动窗口兜底），并修正审计 §5.4 的两个问题：
+
+1. **客户端可伪造 IP**：改为 :func:`app.core.net.client_ip`（按
+   ``TRUSTED_PROXY_COUNT`` 从 X-Forwarded-For 右往左取）。
+2. **键维度混乱**：用户维度优先取 ``request.state.user_id``（由
+   :class:`~app.middleware.rate_limit.RateLimitMiddleware` 解析 JWT 写入），
+   拿不到时退化为「token 摘要」，不再依赖 ``hash()``（Python 的字符串 hash
+   每进程随机加盐，多进程下同一个用户会落到不同键上 → 限额被放大）。
 """
+from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
+import hashlib
 
-from ..services.security.rate_limiter import rate_limiter as _limiter
+from fastapi import Request, status
+
 from ..core.config import settings
+from ..core.exceptions import AppError
+from ..core.net import client_ip
+from ..services.security.rate_limiter import check_rate_limit as _check
 
 
-async def _get_client_ip(request: Request) -> str:
-    """获取客户端真实 IP。
-    
-    优先从 X-Forwarded-For 头读取，兼容反向代理场景。
-    """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    client = request.client
-    return client.host if client else "unknown"
+def _identity(request: Request, use_user: bool) -> str:
+    """构建「用户维度」的标识（无认证时回退到 IP）。"""
+    if not use_user:
+        return f"ip:{client_ip(request)}"
+
+    user_id = getattr(request.state, "user_id", None)
+    if user_id:
+        return f"u:{user_id}"
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header:
+        # 稳定的 token 摘要（sha256 前 16 位）；不再用 hash()：进程间随机盐
+        digest = hashlib.sha256(auth_header[-64:].encode("utf-8")).hexdigest()[:16]
+        return f"t:{digest}"
+
+    return f"ip:{client_ip(request)}"
 
 
-def _make_rate_limit_key(request: Request, scope: str, use_user: bool = False) -> str:
-    """构建限流键。
-
-    Args:
-        request: FastAPI Request 对象
-        scope: 限流作用域标识（如 "login", "chat", "upload"）
-        use_user: 是否加入 user_id 维度
-
-    Returns:
-        限流键字符串
-    """
-    import asyncio
-
-    ip = ""
-    user_id = ""
-
-    # 尝试获取 IP
-    try:
-        # _get_client_ip 是 async，但在同步上下文中我们需要用另一种方式
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
-        elif request.client:
-            ip = request.client.host
-        else:
-            ip = "unknown"
-    except Exception:
-        ip = "unknown"
-
-    if use_user:
-        # 尝试从 request.state 或 scope 获取当前用户
-        try:
-            # 使用 asyncio 在当前事件循环中获取用户依赖结果
-            # 注意：这里需要从请求上下文中提取已认证的用户信息
-            from ..auth.deps import get_current_user
-            from ..storage.database import get_db
-            from sqlalchemy.ext.asyncio import AsyncSession
-
-            # 简化策略：如果有 Authorization header，使用其 hash 作为标识
-            auth_header = request.headers.get("Authorization", "")
-            if auth_header:
-                # 用 token 前缀作为临时 user 标识
-                user_id = f"u:{hash(auth_header[-20:]) % 100000}"
-            else:
-                user_id = ""
-        except Exception:
-            user_id = ""
-
-    if use_user and user_id:
-        return f"rl:{scope}:{user_id}"
-    else:
-        return f"rl:{scope}:{ip}"
+def _make_rate_limit_key(request: Request, scope: str, use_user: bool) -> str:
+    """限流键：``rl:{scope}:{identity}``。"""
+    return f"rl:{scope}:{_identity(request, use_user)}"
 
 
 def rate_limit(
@@ -84,31 +52,50 @@ def rate_limit(
     window_seconds: int | None = None,
     scope: str = "default",
     use_user: bool = True,
+    setting: str | None = None,
+    window_setting: str = "RATE_LIMIT_WINDOW",
 ):
     """限流依赖工厂函数。
 
-    用法:
+    用法::
+
         @router.post("/login", dependencies=[Depends(rate_limit(
-            limit=settings.RATE_LIMIT_LOGIN, window_seconds=60, scope="login", use_user=False
+            setting="RATE_LIMIT_LOGIN", scope="login", use_user=False,
         ))])
         async def login(...):
             ...
 
     Args:
-        limit: 窗口内最大请求数
-        window_seconds: 滑动窗口秒数
-        scope: 限流场景名
-        use_user: 是否在 key 中加入用户维度
+        limit: 窗口内最大请求数（显式值；``None`` 时读 ``setting``）。
+        window_seconds: 窗口秒数（显式值；``None`` 时读 ``window_setting``）。
+        scope: 限流场景名（键前缀的一部分）。
+        use_user: 是否使用用户维度（False = 只用 IP）。
+        setting: ``settings`` 里的限额字段名 —— **在请求时解析**，
+            因此改配置/测试打补丁都能立即生效（显式传入 ``limit`` 时忽略）。
+        window_setting: ``settings`` 里的窗口字段名。
+
+    Returns:
+        可直接作为 ``Depends(...)`` 使用的异步依赖。
     """
-    _limit = limit if limit is not None else settings.RATE_LIMIT_WINDOW
-    _window = window_seconds if window_seconds is not None else settings.RATE_LIMIT_WINDOW
 
     async def _check_rate_limit(request: Request):
+        effective_limit = limit
+        if effective_limit is None and setting:
+            effective_limit = int(getattr(settings, setting, 0))
+        if effective_limit is None:
+            effective_limit = int(getattr(settings, "RATE_LIMIT_WINDOW", 60))
+
+        effective_window = window_seconds
+        if effective_window is None:
+            effective_window = int(getattr(settings, window_setting, 60))
+
         key = _make_rate_limit_key(request, scope, use_user=use_user)
-        if not _limiter.check(key, _limit, _window):
-            raise HTTPException(
+        allowed, info = await _check(key, effective_limit, effective_window)
+        if not allowed:
+            raise AppError(
+                message="请求过于频繁，请稍后再试。",
+                code="RATE_LIMITED",
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many requests. Please try again later.",
             )
 
     return _check_rate_limit

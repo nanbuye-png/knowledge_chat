@@ -21,6 +21,8 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from loguru import logger
+
 
 @dataclass
 class _Window:
@@ -96,3 +98,71 @@ class MemoryRateLimiter(BaseRateLimiter):
 
 # 全局单例 — 整个应用生命周期内共享
 rate_limiter: MemoryRateLimiter = MemoryRateLimiter()
+
+
+# ---------------------------------------------------------------------------
+# 统一限流入口（Phase 3 §5.4：三套实现合并为一套）
+# ---------------------------------------------------------------------------
+
+
+async def check_rate_limit(
+    key: str,
+    limit: int,
+    window_seconds: int,
+) -> tuple[bool, dict]:
+    """统一的限流检查入口。
+
+    审计 §5.4 记录了三套并行实现（``core/rate_limit`` 依赖、
+    ``middleware/rate_limit`` 中间件、``services/rate_limit_service``），
+    行为互不一致。现在全部收敛到本函数：
+
+    * **多实例/多 worker 场景必须有 Redis** —— 否则每进程各算一份配额，
+      真实限额会被放大到「进程数 × limit」；
+    * Redis 不可用（或调用失败）时回退到 :class:`MemoryRateLimiter`
+      （单进程滑动窗口），保证服务不中断；
+    * 语义约定：``allowed=False`` 时调用方必须返回 429。
+
+    Args:
+        key: 限流键（如 ``rl:chat:u:1`` / ``rate:login:1.2.3.4``）。
+        limit: 窗口内允许的请求数；``<= 0`` 表示不限制。
+        window_seconds: 窗口大小（秒）。
+
+    Returns:
+        ``(allowed, info)``；``info`` 含实际生效的后端与当前计数，便于日志/调试。
+    """
+    if limit is None or limit <= 0:
+        return True, {"backend": "disabled", "limit": limit}
+
+    redis = None
+    try:
+        from ...core.redis import get_redis
+
+        redis = await get_redis()
+    except Exception as exc:  # pragma: no cover - 防御性
+        logger.debug(f"获取 Redis 客户端失败，使用进程内限流: {exc}")
+
+    if redis is not None:
+        try:
+            current = await redis.incr(key)
+            if current == 1:
+                # 首次计数才设置过期，避免每次请求都刷新窗口
+                await redis.expire(key, window_seconds)
+            ttl = await redis.ttl(key)
+            allowed = current <= limit
+            return allowed, {
+                "backend": "redis",
+                "current_count": current,
+                "limit": limit,
+                "remaining": max(0, limit - current),
+                "reset_after": ttl if isinstance(ttl, int) and ttl > 0 else None,
+            }
+        except Exception as exc:
+            logger.warning(f"Redis 限流失败，降级为进程内限流（key={key}）: {exc}")
+
+    allowed = rate_limiter.check(key, limit, window_seconds)
+    return allowed, {
+        "backend": "memory",
+        "limit": limit,
+        "remaining": None,
+        "degraded": True,
+    }

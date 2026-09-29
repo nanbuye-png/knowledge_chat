@@ -16,8 +16,9 @@ from typing import Any
 from loguru import logger
 
 from ..services.citation.builder import CitationBuilder
+from ..services.cache.retrieval_cache import RetrievalCache
 from ..services.embedding_service import embedding_service
-from ..services.metrics import track_rag_stage, track_retrieval_chunks
+from ..services.metrics import track_cache, track_rag_stage, track_retrieval_chunks
 from ..core.config import settings
 from ..storage.database import async_session
 from .knowledge.runtime_config import KnowledgeRuntimeConfigService
@@ -59,6 +60,8 @@ class RetrievalPipeline:
             threshold=getattr(settings, "CONTEXT_SCORE_THRESHOLD", 0.0),
             score_source=getattr(settings, "CONTEXT_SCORE_SOURCE", "auto"),
         )
+        # Phase 3 §5.4：检索结果缓存（Redis / Memory，由 ProviderFactory 决定）
+        self._cache = RetrievalCache()
         # 召回分下限由配置驱动（原先硬编码 0.3，导致"决定什么进入 LLM"的阈值
         # 无法配置、也无法按检索模式标定）
         self._min_score = float(getattr(settings, "RETRIEVAL_MIN_SCORE", self._min_score))
@@ -106,6 +109,24 @@ class RetrievalPipeline:
             top_k = runtime_config.retrieval_top_k
         else:
             logger.debug(f"Using caller‑supplied top_k={top_k}")
+
+        # 0a. 检索结果缓存（Phase 3 §5.4）：命中则跳过 embed + 检索 + 重排
+        history_key = RetrievalCache.build_history_key(history)
+        cache_fingerprint = RetrievalCache.build_fingerprint(top_k, min_score)
+        cached = await self._cache.get(
+            knowledge_base_id,
+            question,
+            history_key=history_key,
+            fingerprint=cache_fingerprint,
+        )
+        if cached is not None:
+            track_cache("retrieval", hit=True)
+            cached.metadata["cache_hit"] = True
+            logger.info(
+                f"检索缓存命中: kb_id={knowledge_base_id}, fingerprint={cache_fingerprint}"
+            )
+            return cached
+        track_cache("retrieval", hit=False)
 
         # 0. Query Rewrite（永不抛异常，失败即回退）
         rewrite = await self._rewriter.rewrite(question, history)
@@ -214,7 +235,7 @@ class RetrievalPipeline:
                 "section": r.get("section"),
             })
 
-        return RetrievalResult(
+        result = RetrievalResult(
             results=final_chunks,
             context="\n\n".join(context_parts),
             sources=sources,
@@ -225,6 +246,15 @@ class RetrievalPipeline:
             rewrite_status=rewrite.rewrite_status,
             has_results=True,
         )
+        # Phase 3 §5.4：写入检索缓存（只缓存"有结果"的成功路径）
+        await self._cache.set(
+            knowledge_base_id,
+            question,
+            result,
+            history_key=history_key,
+            fingerprint=cache_fingerprint,
+        )
+        return result
 
     def _empty_result(
         self,

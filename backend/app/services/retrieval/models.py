@@ -8,6 +8,7 @@ document fragments.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
@@ -69,3 +70,49 @@ class RetrievalResult:
 
     has_results: bool = False
     """Convenience flag: ``True`` when at least one relevant chunk was found."""
+
+    def to_dict(self) -> dict[str, Any]:
+        """序列化为纯数据（Phase 3 §5.4：检索结果缓存需要可 JSON 化）。
+
+        ``results`` / ``sources`` / ``metadata`` 本身就是 dict / list[dict]，
+        ``citations`` 是 :class:`Citation` 对象，这里统一转成 dict。
+        """
+        return {
+            "results": self.results,
+            "context": self.context,
+            "sources": self.sources,
+            "citations": [
+                c.to_dict() if hasattr(c, "to_dict") else c for c in self.citations
+            ],
+            "metadata": self.metadata,
+            "original_query": self.original_query,
+            "search_query": self.search_query,
+            "rewrite_status": self.rewrite_status,
+            "has_results": self.has_results,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "RetrievalResult":
+        """从 :meth:`to_dict` 的输出还原（缓存命中路径使用）。"""
+        from ..citation.models import Citation
+
+        # Citation.to_dict() 带 ``display`` 之类的派生字段，构造时只取真实字段
+        allowed = {f.name for f in dataclasses.fields(Citation)}
+        raw_citations = payload.get("citations") or []
+        citations = [
+            Citation(**{k: v for k, v in c.items() if k in allowed})
+            for c in raw_citations
+            if isinstance(c, dict)
+        ]
+
+        return cls(
+            results=list(payload.get("results") or []),
+            context=payload.get("context") or "",
+            sources=list(payload.get("sources") or []),
+            citations=citations,
+            metadata=dict(payload.get("metadata") or {}),
+            original_query=payload.get("original_query") or "",
+            search_query=payload.get("search_query") or "",
+            rewrite_status=payload.get("rewrite_status") or "",
+            has_results=bool(payload.get("has_results")),
+        )

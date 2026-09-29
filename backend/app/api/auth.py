@@ -121,8 +121,7 @@ async def register(request: RegisterRequest, db: AsyncSession = Depends(get_db))
     summary="登录",
     dependencies=[
         Depends(rate_limit(
-            limit=settings.RATE_LIMIT_LOGIN,
-            window_seconds=settings.RATE_LIMIT_WINDOW,
+            setting="RATE_LIMIT_LOGIN",
             scope="login",
             use_user=False,
         )),

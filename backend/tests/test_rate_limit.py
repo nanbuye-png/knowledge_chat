@@ -12,6 +12,27 @@ sys.path.insert(0, ".")
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def memory_only_limiter(monkeypatch):
+    """限流测试强制走进程内实现 —— 不依赖本机是否跑着 Redis。
+
+    Phase 3 §5.4 之后限流唯一实现是
+    :func:`app.services.security.rate_limiter.check_rate_limit`（Redis 优先、
+    进程内滑动窗口兜底）。测试里让 ``get_redis()`` 返回 None，即可稳定地
+    验证进程内分支；真实 Redis 分支由 ``tests/test_rate_limit_unified.py``
+    用假的 Redis 客户端单独覆盖。
+    """
+    from app.services.security import rate_limiter as rl
+
+    async def _no_redis():
+        return None
+
+    monkeypatch.setattr("app.core.redis.get_redis", _no_redis)
+    rl.rate_limiter.clear()
+    yield
+    rl.rate_limiter.clear()
+
+
 # ============================================================================
 # Test 1 — RateLimiter core logic
 # ============================================================================
@@ -180,8 +201,10 @@ class TestRateLimitDependency:
         assert callable(dep)
 
     def test_rate_limit_blocked_raises_429(self):
-        """When limit exceeded, dependency should raise 429."""
-        from app.core.rate_limit import rate_limit, _limiter
+        """When limit exceeded, dependency should raise a 429 AppError."""
+        from app.core.exceptions import AppError
+        from app.core.rate_limit import rate_limit
+        from app.services.security.rate_limiter import rate_limiter as _limiter
 
         _limiter.clear()
 
@@ -199,21 +222,21 @@ class TestRateLimitDependency:
 
         asyncio.run(_send(2))
 
-        # 3rd should raise 429
-        from fastapi import HTTPException
-
+        # 3rd should raise 429（Phase 3 §5.4：统一错误契约 {code, message}）
         async def _third():
-            with pytest.raises(HTTPException) as exc_info:
+            with pytest.raises(AppError) as exc_info:
                 await check_fn(mock_request)
             return exc_info.value
 
         exc = asyncio.run(_third())
         assert exc.status_code == 429
-        assert "Too many requests" in exc.detail
+        assert exc.code == "RATE_LIMITED"
 
     def test_different_ips_isolated(self):
         """Different IPs should have independent rate limits."""
-        from app.core.rate_limit import rate_limit, _limiter
+        from app.core.exceptions import AppError
+        from app.core.rate_limit import rate_limit
+        from app.services.security.rate_limiter import rate_limiter as _limiter
 
         _limiter.clear()
 
@@ -229,8 +252,7 @@ class TestRateLimitDependency:
             await check_fn(mock_req_a)
             await check_fn(mock_req_a)
             # User A 3rd should fail
-            from fastapi import HTTPException
-            with pytest.raises(HTTPException) as exc:
+            with pytest.raises(AppError) as exc:
                 await check_fn(mock_req_a)
             assert exc.value.status_code == 429
 
@@ -251,7 +273,17 @@ class _MockRequest:
     def __init__(self, headers=None, client_host="127.0.0.1"):
         self.headers = headers or {}
         self.client = _MockClient(host=client_host)
+        # Phase 3 §5.4：限流依赖会读 request.state.user_id（由限流中间件解析
+        # JWT 后写入），因此 mock 必须提供带属性的 state（而不是 dict）。
+        self.state = _MockState()
         self._state = {}
+
+
+class _MockState:
+    """最小 request.state 替身（只支持属性读写）。"""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 class _MockClient:

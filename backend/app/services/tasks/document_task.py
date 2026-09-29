@@ -119,7 +119,7 @@ class DocumentProcessingTask(TaskBase):
         retry_count: Optional[int] = None,
     ) -> None:
         """更新 Document 行状态（独立 session，与请求事务解耦）。"""
-        from ...models.document import Document
+        from ...models.document import Document, DocumentStatus
         from ...storage.database import async_session
 
         async with async_session() as session:
@@ -150,6 +150,15 @@ class DocumentProcessingTask(TaskBase):
         from ...services.metrics import track_document_status
 
         track_document_status(status if isinstance(status, str) else str(status))
+
+        # §5.4：文档内容变化（完成或失败都可能已写入部分向量）→ 检索缓存失效
+        if status in (DocumentStatus.COMPLETED.value, DocumentStatus.FAILED.value):
+            try:
+                from ...services.cache.retrieval_cache import RetrievalCache
+
+                await RetrievalCache().invalidate_knowledge_base(self.knowledge_base_id)
+            except Exception as exc:  # noqa: BLE001 - 缓存失效失败不能影响入库结果
+                logger.warning(f"检索缓存失效失败（kb={self.knowledge_base_id}）: {exc}")
 
 
 class DocumentEmbeddingTask(TaskBase):

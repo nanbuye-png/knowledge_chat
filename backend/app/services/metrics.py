@@ -156,6 +156,24 @@ def track_document_dedup(result: str) -> None:
     DOCUMENT_DEDUP_TOTAL.labels(result=result).inc()
 
 
+def track_cache(cache: str, hit: bool) -> None:
+    """记录一次缓存访问（Phase 3 §5.4：缓存必须能看出命中率）。
+
+    Args:
+        cache: 缓存名（如 ``retrieval``）。
+        hit: 是否命中。
+    """
+    if not _metrics_available:
+        return
+
+    counter = CACHE_HITS if hit else CACHE_MISSES
+    # 兼容历史定义：CACHE_HITS/MISSES 目前无 label；带 label 时按 cache 维度区分
+    if getattr(counter, "_labelnames", ()):
+        counter.labels(cache=cache).inc()
+    else:
+        counter.inc()
+
+
 @router.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint."""

@@ -23,8 +23,7 @@ router = APIRouter(prefix="/api/documents", tags=["文档管理"])
     summary="上传文档",
     dependencies=[
         Depends(rate_limit(
-            limit=settings.RATE_LIMIT_UPLOAD,
-            window_seconds=settings.RATE_LIMIT_WINDOW,
+            setting="RATE_LIMIT_UPLOAD",
             scope="upload",
             use_user=True,
         )),

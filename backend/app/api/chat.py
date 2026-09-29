@@ -21,7 +21,6 @@ from ..services.conversation_service import (
 from ..auth.deps import get_current_user
 from ..auth.api_key import get_api_key_user
 from ..core.rate_limit import rate_limit
-from ..core.config import settings as app_settings
 from ..storage.database import get_db, async_session
 from ..models.user import User
 from ..services.user_service import update_user_activity
@@ -40,7 +39,19 @@ async def _resolve_user(
     return user
 
 
-@router.post("/chat", response_model=ChatResponse, summary="闲聊模式")
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    summary="闲聊模式",
+    dependencies=[
+        # Phase 3 §5.4：补齐突发限额（此前 /api/chat/* 只有每日配额）
+        Depends(rate_limit(
+            setting="RATE_LIMIT_CHAT",
+            scope="chat",
+            use_user=True,
+        )),
+    ],
+)
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(_resolve_user),
@@ -87,7 +98,18 @@ async def chat(
     return ChatResponse(answer=answer)
 
 
-@router.post("/stream", summary="流式对话（SSE）")
+@router.post(
+    "/stream",
+    summary="流式对话（SSE）",
+    dependencies=[
+        # Phase 3 §5.4：审计指出"加 /stream 即绕过限流"，这里补齐
+        Depends(rate_limit(
+            setting="RATE_LIMIT_CHAT",
+            scope="chat_stream",
+            use_user=True,
+        )),
+    ],
+)
 async def stream_chat(
     request: ChatRequest,
     current_user: User = Depends(_resolve_user),

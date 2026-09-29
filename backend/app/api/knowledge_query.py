@@ -20,7 +20,6 @@ from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db, async_session
 from ..auth.deps import get_current_user
 from ..core.rate_limit import rate_limit
-from ..core.config import settings as app_settings
 from ..models.user import User
 from ..services.user_service import update_user_activity
 
@@ -51,8 +50,7 @@ async def verify_knowledge_base_access(
     summary="知识库问答",
     dependencies=[
         Depends(rate_limit(
-            limit=app_settings.RATE_LIMIT_CHAT,
-            window_seconds=app_settings.RATE_LIMIT_WINDOW,
+            setting="RATE_LIMIT_CHAT",
             scope="chat",
             use_user=True,
         )),
@@ -107,7 +105,18 @@ async def query_knowledge(
     return result
 
 
-@router.post("/query/stream", summary="流式知识库问答（SSE）")
+@router.post(
+    "/query/stream",
+    summary="流式知识库问答（SSE）",
+    dependencies=[
+        # Phase 3 §5.4：审计指出"加 /stream 即绕过限流"，这里补齐
+        Depends(rate_limit(
+            setting="RATE_LIMIT_CHAT",
+            scope="chat_stream",
+            use_user=True,
+        )),
+    ],
+)
 async def stream_query_knowledge(
     request: QueryRequest,
     current_user: User = Depends(get_current_user),
