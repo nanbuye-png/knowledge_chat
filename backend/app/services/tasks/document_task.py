@@ -39,26 +39,47 @@ class DocumentProcessingTask(TaskBase):
         self.knowledge_base_id = knowledge_base_id
 
     async def run(self) -> Dict[str, Any]:
-        """执行完整入库流程，并维护 Document 状态。"""
-        from ...models.document import DocumentStatus
-        from ..knowledge.context import KnowledgePipelineContext
-        from ..knowledge.pipeline import KnowledgePipeline
+        """执行完整入库流程，并维护 Document 状态。
 
-        await self._update_status(DocumentStatus.PROCESSING.value)
+        失败处理（Phase 3 §5.2）
+        -----------------------
+        只有当异常属于**可重试**类别（网络 / 超时 / 429 / 5xx）时才整篇重试；
+        次数与退避由 ``TASK_RETRY_*`` 配置驱动，重试次数写入
+        ``Document.retry_count``。不可重试的错误（如"文档内容为空"）立即失败，
+        不做无意义重试；最终失败仍向上抛出，由 Worker 记录任务状态。
+        """
+        from ...core.retry import retry_async, task_policy
+        from ...models.document import DocumentStatus
+
+        await self._update_status(DocumentStatus.PROCESSING.value, retry_count=0)
+
+        retries: list[int] = []
+
+        async def _on_retry(attempt: int, exc: BaseException, delay: float) -> None:
+            retries.append(attempt)
+            logger.warning(
+                f"文档处理失败，准备第 {attempt} 次重试（{self.filename}，"
+                f"{delay:.1f}s 后）: {type(exc).__name__}: {exc}"
+            )
+            await self._update_status(
+                DocumentStatus.PROCESSING.value,
+                error_message=str(exc)[:500],
+                retry_count=attempt,
+            )
 
         try:
-            pipeline = KnowledgePipeline()
-            context = KnowledgePipelineContext(
-                file_path=self.file_path,
-                document_id=self.document_id,
-                filename=self.filename,
-                knowledge_base_id=self.knowledge_base_id,
+            chunk_count = await retry_async(
+                self._process_once,
+                policy=task_policy(),
+                operation=f"document:{self.filename}",
+                on_retry=_on_retry,
             )
-            chunk_count = await pipeline.process_document(context)
         except Exception as exc:
             logger.error(f"后台文档处理失败: {self.filename} - {exc}")
             await self._update_status(
-                DocumentStatus.FAILED.value, error_message=str(exc)[:500]
+                DocumentStatus.FAILED.value,
+                error_message=str(exc)[:500],
+                retry_count=len(retries),
             )
             raise
 
@@ -66,19 +87,36 @@ class DocumentProcessingTask(TaskBase):
             DocumentStatus.COMPLETED.value,
             chunk_count=chunk_count,
             error_message="",
+            retry_count=len(retries),
         )
         return {
             "document_id": self.document_id,
             "knowledge_base_id": self.knowledge_base_id,
             "chunks_count": chunk_count,
             "status": DocumentStatus.COMPLETED.value,
+            "retry_count": len(retries),
         }
+
+    async def _process_once(self) -> int:
+        """跑一次完整入库流程（解析 → 切分 → 向量化 → 落库）。"""
+        from ..knowledge.context import KnowledgePipelineContext
+        from ..knowledge.pipeline import KnowledgePipeline
+
+        pipeline = KnowledgePipeline()
+        context = KnowledgePipelineContext(
+            file_path=self.file_path,
+            document_id=self.document_id,
+            filename=self.filename,
+            knowledge_base_id=self.knowledge_base_id,
+        )
+        return await pipeline.process_document(context)
 
     async def _update_status(
         self,
         status: str,
         chunk_count: Optional[int] = None,
         error_message: Optional[str] = None,
+        retry_count: Optional[int] = None,
     ) -> None:
         """更新 Document 行状态（独立 session，与请求事务解耦）。"""
         from ...models.document import Document
@@ -100,9 +138,14 @@ class DocumentProcessingTask(TaskBase):
                 doc.chunk_count = chunk_count
             if error_message is not None:
                 doc.error_message = error_message or None
+            if retry_count is not None:
+                doc.retry_count = retry_count
             await session.commit()
 
-        logger.info(f"文档状态更新: {self.document_id} → {status}")
+        logger.info(
+            f"文档状态更新: {self.document_id} → {status}"
+            + (f"（retry_count={retry_count}）" if retry_count else "")
+        )
 
 
 class DocumentEmbeddingTask(TaskBase):

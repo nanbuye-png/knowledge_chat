@@ -11,6 +11,8 @@ class DocumentResponse(BaseModel):
     status: str
     chunk_count: int = 0
     error_message: Optional[str] = None
+    # Phase 3 §5.2：文档级重试次数（0 表示一次成功/未重试）
+    retry_count: int = 0
     knowledge_base_id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

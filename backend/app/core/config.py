@@ -177,6 +177,27 @@ class Settings(BaseSettings):
     # False：在请求内同步处理（便于少数需要确定性结果的场景/测试）
     DOCUMENT_PROCESSING_ASYNC: bool = True
 
+    # ---- 统一重试（Phase 3 §5.2）----
+    # 总开关：false 时所有重试退化为单次调用（便于压测/排障时对比）
+    RETRY_ENABLED: bool = True
+    # 总尝试次数（含首次调用）：3 表示最多重试 2 次
+    RETRY_MAX_ATTEMPTS: int = 3
+    # 首次重试前的等待秒数（指数退避起点）
+    RETRY_BASE_DELAY: float = 1.0
+    # 单次等待上限（秒），防止退避无限增长
+    RETRY_MAX_DELAY: float = 30.0
+    # 退避倍数（2.0 → 1s, 2s, 4s, ...）
+    RETRY_BACKOFF_FACTOR: float = 2.0
+    # 抖动比例（±20%），避免多任务同时重试再次撞上限流
+    RETRY_JITTER: float = 0.2
+    # 按调用类型覆盖尝试次数（0 = 沿用 RETRY_MAX_ATTEMPTS）
+    LLM_RETRY_MAX_ATTEMPTS: int = 3
+    EMBEDDING_RETRY_MAX_ATTEMPTS: int = 3
+    # 文档级（整篇入库）重试：次数少、退避长，避免与调用级重试叠乘
+    TASK_RETRY_MAX_ATTEMPTS: int = 2
+    TASK_RETRY_BACKOFF_S: float = 5.0
+    TASK_RETRY_MAX_BACKOFF_S: float = 60.0
+
     # ---- Abstention / 拒答（Phase 1 §5.6）----
     # 无足够依据时拒答，而不是让 LLM 猜测
     ABSTENTION_ENABLED: bool = True

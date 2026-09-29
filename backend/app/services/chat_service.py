@@ -1,11 +1,12 @@
 import json
 import time
 from loguru import logger
-from typing import AsyncGenerator, AsyncIterator, Optional
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..core.retry import llm_policy, retry_async, retry_stream
 from ..prompts import get_prompt_provider
 from ..prompts.base import BasePromptProvider
 from ..prompts.resolver import resolve_prompt_provider
@@ -108,6 +109,36 @@ class ChatService:
             return await prompt_provider.get_rag_prompt(context=context, question=question)
         return prompt_provider.build_rag_prompt(context=context, question=question)
 
+    # ------------------------------------------------------------------
+    # LLM 调用（Phase 3 §5.2：统一重试）
+    # ------------------------------------------------------------------
+
+    async def _call_llm(self, messages: list[dict], **kwargs) -> str:
+        """非流式 LLM 调用，按 ``LLM_RETRY_*`` 策略重试瞬时错误。
+
+        返回 ``str``：provider 返回非字符串（异常形状）时降级为空串，
+        由上层把空回答当作失败处理，而不是把对象塞进回答。
+        """
+        response = await retry_async(
+            lambda: self._llm.chat(messages=messages, stream=False, **kwargs),
+            policy=llm_policy(),
+            operation="llm.chat",
+        )
+        return response if isinstance(response, str) else ""
+
+    async def _stream_llm(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
+        """流式 LLM 调用，只重试"首字节之前"的失败。
+
+        一旦已经向客户端吐出 token，就不再重试 —— 否则前端会把已渲染的
+        内容重复追加一遍。语义细节见 :func:`app.core.retry.retry_stream`。
+        """
+        async for token in retry_stream(
+            lambda: self._llm.chat(messages=messages, stream=True, **kwargs),
+            policy=llm_policy(),
+            operation="llm.stream",
+        ):
+            yield token
+
     async def query_knowledge(
         self,
         question: str,
@@ -163,11 +194,10 @@ class ChatService:
                     })
             messages.append({"role": "user", "content": question})
 
-            # 4. Call LLM via provider
+            # 4. Call LLM via provider（Phase 3 §5.2：瞬时错误自动重试）
             t_llm_start = time.monotonic()
-            answer = await self._llm.chat(
+            answer = await self._call_llm(
                 messages=messages,
-                stream=False,
                 temperature=0.7,
                 max_tokens=2000,
             )
@@ -207,10 +237,14 @@ class ChatService:
             )
 
         except Exception as e:
-            logger.error(f"Knowledge query failed: {e}")
+            # 失败必须与"拒答"区分开，并且**不能把内部异常原文当成回答**：
+            # 那既泄漏 provider 报文，又会让调用方（前端/评测）
+            # 把故障当成模型回答。抱歉文案只给用户看，细节进 error 与日志。
+            logger.error(f"Knowledge query failed: {type(e).__name__}: {e}")
             return QueryResponse(
-                answer=f"抱歉，查询过程中出现错误：{str(e)}",
+                answer="抱歉，服务暂时不可用，请稍后重试。",
                 has_knowledge=False,
+                error=f"{type(e).__name__}: {e}",
             )
 
     async def chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> str:
@@ -235,16 +269,16 @@ class ChatService:
             # Add current message
             messages.append({"role": "user", "content": message})
 
-            return await self._llm.chat(
+            return await self._call_llm(
                 messages=messages,
-                stream=False,
                 temperature=0.7,
                 max_tokens=2000,
             )
 
         except Exception as e:
-            logger.error(f"Chat failed: {e}")
-            return f"抱歉，对话出现错误：{str(e)}"
+            # 同上：不要把 provider 异常原文当回答返回给用户
+            logger.error(f"Chat failed: {type(e).__name__}: {e}")
+            return "抱歉，服务暂时不可用，请稍后重试。"
 
     async def stream_chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> AsyncGenerator[str, None]:
         """
@@ -266,15 +300,13 @@ class ChatService:
 
             messages.append({"role": "user", "content": message})
 
-            stream_response = await self._llm.chat(
+            # Phase 3 §5.2：流式调用只重试首字节前的失败
+            async for token in self._stream_llm(
                 messages=messages,
-                stream=True,
                 temperature=0.7,
                 max_tokens=2000,
-            )
-            if isinstance(stream_response, AsyncIterator):
-                async for token in stream_response:
-                    yield token
+            ):
+                yield token
 
         except Exception as e:
             logger.error(f"Stream chat failed: {e}")
@@ -346,17 +378,14 @@ class ChatService:
                     })
             messages.append({"role": "user", "content": question})
 
-            # 5. Stream LLM response via provider
+            # 5. Stream LLM response via provider（带重试：首字节前失败可重试）
             t_llm_start = time.monotonic()
-            stream_response = await self._llm.chat(
+            async for token in self._stream_llm(
                 messages=messages,
-                stream=True,
                 temperature=0.3,
                 max_tokens=2000,
-            )
-            if isinstance(stream_response, AsyncIterator):
-                async for token in stream_response:
-                    yield token
+            ):
+                yield token
 
             logger.info(f"[TIMING] LLM stream duration: {time.monotonic() - t_llm_start:.2f}s")
             logger.info(f"[TIMING] Total stream_query_knowledge: {time.monotonic() - t0:.2f}s")

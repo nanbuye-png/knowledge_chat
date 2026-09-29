@@ -10,6 +10,7 @@ All embedding logic has been migrated to :mod:`embedding.default_provider`.
 from loguru import logger
 
 from ..core.config import settings
+from ..core.retry import embedding_policy, retry_async
 from .embedding.factory import EmbeddingProviderFactory
 
 
@@ -56,15 +57,27 @@ class EmbeddingService:
         """Generate embeddings for a list of texts.
 
         Delegates to :meth:`EmbeddingProvider.embed_documents`.
+
+        Phase 3 §5.2：远端嵌入 Provider（openai / jina / voyage）的调用会按
+        ``EMBEDDING_*`` 重试策略重试瞬时错误；耗尽后抛
+        :class:`~app.core.retry.RetryExhausted`（保留原始异常）。
         """
-        return await self._provider.embed_documents(texts)
+        return await retry_async(
+            lambda: self._provider.embed_documents(texts),
+            policy=embedding_policy(),
+            operation="embed_texts",
+        )
 
     async def embed_query(self, text: str) -> list[float]:
         """Generate embedding for a single query text.
 
-        Delegates to :meth:`EmbeddingProvider.embed_query`.
+        Delegates to :meth:`EmbeddingProvider.embed_query`（同样带重试）。
         """
-        return await self._provider.embed_query(text)
+        return await retry_async(
+            lambda: self._provider.embed_query(text),
+            policy=embedding_policy(),
+            operation="embed_query",
+        )
 
 
 # Singleton instance — all consumers import this

@@ -176,11 +176,20 @@ class LLMQueryRewriter(QueryRewriter):
 
             self._llm = LLMProviderFactory.create(settings)
 
-        response = await self._llm.chat(
-            messages=messages,
-            stream=False,
-            temperature=0.0,
-            max_tokens=128,
+        from ...core.retry import llm_policy, retry_async
+
+        # Phase 3 §5.2：改写本身是"尽力而为"的旁路调用，但仍不该被一次
+        # 429/超时直接打掉；重试整体受外层 ``asyncio.wait_for`` 超时约束，
+        # 超预算仍会回退到原始 Query（问答链路不受影响）。
+        response = await retry_async(
+            lambda: self._llm.chat(
+                messages=messages,
+                stream=False,
+                temperature=0.0,
+                max_tokens=128,
+            ),
+            policy=llm_policy(attempts=2),
+            operation="query_rewrite",
         )
         return response if isinstance(response, str) else ""
 

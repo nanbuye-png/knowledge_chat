@@ -14,6 +14,7 @@ from loguru import logger
 from sqlalchemy import select
 
 from ...core.config import settings
+from ...core.retry import embedding_policy, retry_async
 from ...models.knowledge_base import KnowledgeBase
 from ...storage.database import async_session
 from ...storage.vector_store import vector_store
@@ -147,7 +148,13 @@ class KnowledgePipeline:
 
             # ── 6. Embed ───────────────────────────────────────────────
             logger.info(f"Generating embeddings for {len(chunks)} chunks")
-            embeddings = await embedding_provider.embed_documents(chunks)
+            # Phase 3 §5.2：向量化是典型的瞬时故障点（限流 / 连接抖动），
+            # 失败不再让整篇文档直接 FAILED，而是按策略重试后仍失败才抛出。
+            embeddings = await retry_async(
+                lambda: embedding_provider.embed_documents(chunks),
+                policy=embedding_policy(),
+                operation=f"embed_documents({context.filename})",
+            )
 
             # ── 7. Look up user_id from KB ─────────────────────────────
             async with async_session() as session:
