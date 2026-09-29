@@ -12,6 +12,10 @@ def get_system_metrics() -> dict:
 
     Returns:
         dict 包含 cpu_usage, memory_usage, disk_usage
+
+    注意：``psutil.cpu_percent(interval=1)`` 会**同步阻塞 1 秒**，在 async 处理器
+    里调用等于把整个事件循环卡住 1 秒（审计 §5.6）。这里改为非阻塞采样：
+    ``interval=None`` 返回自上次调用以来的平均使用率（首次调用返回 0.0）。
     """
     if not PSUTIL_AVAILABLE:
         return {
@@ -22,7 +26,7 @@ def get_system_metrics() -> dict:
         }
 
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
 

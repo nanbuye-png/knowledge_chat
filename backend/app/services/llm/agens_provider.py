@@ -7,7 +7,7 @@ from typing import Any, AsyncIterator, Union
 
 from openai import AsyncOpenAI
 
-from .base import LLMProvider, build_llm_http_client
+from .base import LLMProvider, LLMUsageInfo, build_llm_http_client, estimate_tokens
 
 
 class AgensProvider(LLMProvider):
@@ -104,6 +104,57 @@ class AgensProvider(LLMProvider):
         content = response.choices[0].message.content or ""
         # Agens 推理型模型（如 agnes-2.5-flash）正文前会带前导换行，去掉以免前端出现空白段落
         return content.lstrip()
+
+    async def chat_with_usage(
+        self,
+        messages: list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> tuple[Any, LLMUsageInfo]:
+        """非流式调用并透出 provider 回报的真实 usage（审计 §3.4）。
+
+        OpenAI 兼容接口在非流式响应里带 ``usage``；拿不到时回退为启发式估算，
+        并把 ``estimated=True`` 一路带到 ``llm_usages`` 记录里。
+        """
+        import time
+
+        model = kwargs.pop("model", self._model)
+        temperature = kwargs.pop("temperature", 0.7)
+        max_tokens = kwargs.pop("max_tokens", 2000)
+
+        start = time.perf_counter()
+        response = await self._async_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        latency_ms = (time.perf_counter() - start) * 1000
+        content = (response.choices[0].message.content or "").lstrip()
+
+        raw_usage = getattr(response, "usage", None)
+        if raw_usage is not None:
+            usage = LLMUsageInfo(
+                model=model,
+                prompt_tokens=int(getattr(raw_usage, "prompt_tokens", 0) or 0),
+                completion_tokens=int(getattr(raw_usage, "completion_tokens", 0) or 0),
+                latency_ms=latency_ms,
+                estimated=False,
+            )
+        else:
+            prompt_text = "\n".join(
+                m.get("content", "")
+                for m in messages
+                if isinstance(m.get("content"), str)
+            )
+            usage = LLMUsageInfo(
+                model=model,
+                prompt_tokens=estimate_tokens(prompt_text),
+                completion_tokens=estimate_tokens(content),
+                latency_ms=latency_ms,
+                estimated=True,
+            )
+        return content, usage
 
     async def _stream_response(
         self,

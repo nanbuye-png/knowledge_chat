@@ -205,6 +205,11 @@ class Settings(BaseSettings):
     TASK_RETRY_BACKOFF_S: float = 5.0
     TASK_RETRY_MAX_BACKOFF_S: float = 60.0
 
+    # ---- 可观测性（Phase 3 §5.6）----
+    # Prometheus 指标中间件开关（/metrics 路由本身始终注册）。
+    # false 时不采集请求级指标（排障时减少噪声）。
+    METRICS_ENABLED: bool = True
+
     # ---- Abstention / 拒答（Phase 1 §5.6）----
     # 无足够依据时拒答，而不是让 LLM 猜测
     ABSTENTION_ENABLED: bool = True

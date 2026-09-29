@@ -6,13 +6,21 @@ from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
+from ..core.context import get_request_id
 from ..core.retry import llm_policy, retry_async, retry_stream
 from ..prompts import get_prompt_provider
 from ..prompts.base import BasePromptProvider
 from ..prompts.resolver import resolve_prompt_provider
 from ..schemas.chat import QueryResponse, SourceReference
 from .citation.validator import validate_citations
+from .llm.base import LLMUsageInfo, call_with_usage, estimate_tokens
+from .metrics import (
+    track_abstention,
+    track_llm_call,
+    track_rag_stage,
+)
 from .retrieval.abstention import AbstentionDecision, create_abstention_decider
+from .usage_service import usage_service
 
 from .llm.factory import LLMProviderFactory
 from .retrieval_pipeline import RetrievalPipeline
@@ -119,12 +127,77 @@ class ChatService:
         返回 ``str``：provider 返回非字符串（异常形状）时降级为空串，
         由上层把空回答当作失败处理，而不是把对象塞进回答。
         """
-        response = await retry_async(
-            lambda: self._llm.chat(messages=messages, stream=False, **kwargs),
+        text, _ = await self._call_llm_with_usage(messages, **kwargs)
+        return text
+
+    async def _call_llm_with_usage(
+        self, messages: list[dict], **kwargs
+    ) -> tuple[str, LLMUsageInfo]:
+        """非流式 LLM 调用，同时拿到 provider 透出的 usage（审计 §3.4）。"""
+        start = time.perf_counter()
+        response, usage = await retry_async(
+            lambda: call_with_usage(self._llm, messages, **kwargs),
             policy=llm_policy(),
             operation="llm.chat",
         )
-        return response if isinstance(response, str) else ""
+        if not usage.latency_ms:
+            usage.latency_ms = (time.perf_counter() - start) * 1000
+        return (response if isinstance(response, str) else ""), usage
+
+    async def _record_usage(
+        self,
+        usage: LLMUsageInfo,
+        *,
+        session: Optional[AsyncSession] = None,
+        user_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+    ) -> None:
+        """上报 LLM 指标，并在拿到会话/用户时落库到 ``llm_usages``。
+
+        审计 §3.4：``usage_service.record`` 在生产代码里**零调用点**，
+        导致 llm_usages 永远为空、前端 Token/成本页面恒为 0。这里接上写入端；
+        计费/统计失败绝不影响问答（只 warning）。
+        """
+        model = usage.model or settings.LLM_MODEL
+        track_llm_call(
+            model=model,
+            prompt_tokens=usage.prompt_tokens,
+            completion_tokens=usage.completion_tokens,
+            latency=usage.latency_ms / 1000.0,
+        )
+
+        if session is None or user_id is None:
+            return
+
+        try:
+            await usage_service.record(
+                session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                provider=settings.LLM_PROVIDER,
+                model=model,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+                total_tokens=usage.total_tokens,
+                latency_ms=round(usage.latency_ms, 2),
+            )
+        except Exception as exc:  # noqa: BLE001 - 统计不能影响主链路
+            logger.warning(f"记录 LLM 用量失败: {type(exc).__name__}: {exc}")
+
+    @staticmethod
+    def _estimate_stream_usage(prompt_text: str, answer_text: str, latency_ms: float) -> LLMUsageInfo:
+        """流式调用没有可用 usage → 用启发式估算并明确标记 ``estimated``。
+
+        审计 §3.4 指出 usage 端到端缺失；流式是主链路（前端打字机效果），
+        若完全不计，Token 统计仍然等于没有。
+        """
+        return LLMUsageInfo(
+            model=settings.LLM_MODEL,
+            prompt_tokens=estimate_tokens(prompt_text),
+            completion_tokens=estimate_tokens(answer_text),
+            latency_ms=latency_ms,
+            estimated=True,
+        )
 
     async def _stream_llm(self, messages: list[dict], **kwargs) -> AsyncGenerator[str, None]:
         """流式 LLM 调用，只重试"首字节之前"的失败。
@@ -145,6 +218,9 @@ class ChatService:
         knowledge_base_id: int,
         history: list[dict] = None,
         session: Optional[AsyncSession] = None,
+        *,
+        user_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
     ) -> QueryResponse:
         """
         Query knowledge base with RAG and multi-turn context.
@@ -153,15 +229,21 @@ class ChatService:
         2. Build messages with conversation history
         3. Call LLM with context + history
         4. Return answer with sources
+
+        Args:
+            user_id / conversation_id: 提供时把本次调用的 token 用量写入
+                ``llm_usages``（审计 §3.4：写入端此前完全缺失）。
         """
         t0 = time.monotonic()
         try:
-            # 1. Retrieve relevant documents
+            # 1. Retrieve relevant documents（§5.6：检索总耗时单列，便于与子阶段对齐）
+            t_retrieval = time.monotonic()
             retrieval_result = await self._retrieval.retrieve(
                 question=question,
                 knowledge_base_id=knowledge_base_id,
                 history=history,
             )
+            track_rag_stage("retrieval_total", time.monotonic() - t_retrieval)
 
             # §5.6：无足够依据 → 拒答（不调用 LLM，避免无依据生成）
             # 无上下文（no_context）也走这里，文案由 ABSTENTION_MESSAGE 配置
@@ -171,6 +253,7 @@ class ChatService:
                     f"知识库问答拒答: reason={abstention.reason}, "
                     f"details={abstention.details}"
                 )
+                track_abstention(abstention.reason)
                 return QueryResponse(
                     answer=abstention.message,
                     has_knowledge=False,
@@ -196,13 +279,28 @@ class ChatService:
 
             # 4. Call LLM via provider（Phase 3 §5.2：瞬时错误自动重试）
             t_llm_start = time.monotonic()
-            answer = await self._call_llm(
+            answer, usage = await self._call_llm_with_usage(
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2000,
             )
-            logger.info(f"[TIMING] LLM call: {time.monotonic() - t_llm_start:.2f}s")
-            logger.info(f"[TIMING] Total query_knowledge: {time.monotonic() - t0:.2f}s")
+            llm_seconds = time.monotonic() - t_llm_start
+            track_rag_stage("llm", llm_seconds)
+            await self._record_usage(
+                usage,
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
+            logger.info(
+                f"[TIMING] LLM call: {llm_seconds:.2f}s "
+                f"(prompt_tokens={usage.prompt_tokens}, "
+                f"completion_tokens={usage.completion_tokens}, estimated={usage.estimated})"
+            )
+            logger.info(
+                f"[TIMING] Total query_knowledge: {time.monotonic() - t0:.2f}s "
+                f"request_id={get_request_id()}"
+            )
 
             # Convert sources to SourceReference for API response
             sources = [
@@ -247,7 +345,15 @@ class ChatService:
                 error=f"{type(e).__name__}: {e}",
             )
 
-    async def chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> str:
+    async def chat(
+        self,
+        message: str,
+        history: list[dict] = None,
+        session: Optional[AsyncSession] = None,
+        *,
+        user_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+    ) -> str:
         """
         General chat mode.
         Delegates to the LLM provider with conversation history.
@@ -269,22 +375,64 @@ class ChatService:
             # Add current message
             messages.append({"role": "user", "content": message})
 
-            return await self._call_llm(
+            answer, usage = await self._call_llm_with_usage(
                 messages=messages,
                 temperature=0.7,
                 max_tokens=2000,
             )
+            await self._record_usage(
+                usage,
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
+            return answer
 
         except Exception as e:
             # 同上：不要把 provider 异常原文当回答返回给用户
             logger.error(f"Chat failed: {type(e).__name__}: {e}")
             return "抱歉，服务暂时不可用，请稍后重试。"
 
-    async def stream_chat(self, message: str, history: list[dict] = None, session: Optional[AsyncSession] = None) -> AsyncGenerator[str, None]:
+    async def _finish_stream_usage(
+        self,
+        prompt_text: str,
+        answer_text: str,
+        started_at: float,
+        *,
+        session: Optional[AsyncSession],
+        user_id: Optional[int],
+        conversation_id: Optional[int],
+    ) -> None:
+        """流式收尾：估算 usage 并记录（失败/取消都不影响已发出的响应）。"""
+        try:
+            usage = self._estimate_stream_usage(
+                prompt_text, answer_text, (time.monotonic() - started_at) * 1000
+            )
+            await self._record_usage(
+                usage,
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - 统计失败不影响回答
+            logger.debug(f"流式用量记录跳过: {exc}")
+
+    async def stream_chat(
+        self,
+        message: str,
+        history: list[dict] = None,
+        session: Optional[AsyncSession] = None,
+        *,
+        user_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+    ) -> AsyncGenerator[str, None]:
         """
         Stream chat response using SSE.
         Used for typewriter effect in frontend.
         """
+        started_at = time.monotonic()
+        prompt_text = ""
+        answer_parts: list[str] = []
         try:
             prompt_provider = await self.get_prompt_provider(session)
             system_prompt = await self._get_system_prompt(prompt_provider)
@@ -299,6 +447,9 @@ class ChatService:
                     })
 
             messages.append({"role": "user", "content": message})
+            prompt_text = "\n".join(
+                m.get("content", "") for m in messages if isinstance(m.get("content"), str)
+            )
 
             # Phase 3 §5.2：流式调用只重试首字节前的失败
             async for token in self._stream_llm(
@@ -306,23 +457,51 @@ class ChatService:
                 temperature=0.7,
                 max_tokens=2000,
             ):
+                answer_parts.append(token)
                 yield token
 
         except Exception as e:
             logger.error(f"Stream chat failed: {e}")
             yield f"抱歉，对话出现错误：{str(e)}"
+        finally:
+            await self._finish_stream_usage(
+                prompt_text,
+                "".join(answer_parts),
+                started_at,
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
 
-    async def stream_query_knowledge(self, question: str, knowledge_base_id: int, history: list[dict] = None, session: Optional[AsyncSession] = None) -> AsyncGenerator[str, None]:
+    async def stream_query_knowledge(
+        self,
+        question: str,
+        knowledge_base_id: int,
+        history: list[dict] = None,
+        session: Optional[AsyncSession] = None,
+        *,
+        user_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+    ) -> AsyncGenerator[str, None]:
         """
         Stream knowledge base query response using SSE.
         First sends sources as JSON, then streams the answer.
         Uses conversation history for multi-turn context.
         """
         t0 = time.monotonic()
+        started_at = time.monotonic()
+        prompt_text = ""
+        answer_parts: list[str] = []
         try:
-            logger.info(f"RAG query started: question='{question[:50]}...', kb_id={knowledge_base_id}, history_len={len(history) if history else 0}")
+            logger.info(
+                f"RAG query started: question='{question[:50]}...', "
+                f"kb_id={knowledge_base_id}, "
+                f"history_len={len(history) if history else 0}, "
+                f"request_id={get_request_id()}"
+            )
 
             # 1. Retrieve relevant documents
+            t_retrieval = time.monotonic()
             try:
                 retrieval_result = await self._retrieval.retrieve(
                     question=question,
@@ -333,6 +512,7 @@ class ChatService:
                 logger.exception(f"Retrieval failed for query '{question[:50]}...': {e}")
                 yield json.dumps({"type": "error", "message": "抱歉，检索文档时出现错误，请稍后重试。"}, ensure_ascii=False)
                 return
+            track_rag_stage("retrieval_total", time.monotonic() - t_retrieval)
 
             # §5.6：无足够依据 → 拒答（不调用 LLM）
             # 复用 no_result 控制帧以保持前端契约兼容，额外字段携带拒答信号与 Debug 信息
@@ -342,6 +522,7 @@ class ChatService:
                     f"知识库问答拒答: reason={abstention.reason}, "
                     f"details={abstention.details}"
                 )
+                track_abstention(abstention.reason)
                 yield json.dumps(
                     {
                         "type": "no_result",
@@ -377,6 +558,9 @@ class ChatService:
                         "content": h.get("content", ""),
                     })
             messages.append({"role": "user", "content": question})
+            prompt_text = "\n".join(
+                m.get("content", "") for m in messages if isinstance(m.get("content"), str)
+            )
 
             # 5. Stream LLM response via provider（带重试：首字节前失败可重试）
             t_llm_start = time.monotonic()
@@ -385,10 +569,19 @@ class ChatService:
                 temperature=0.3,
                 max_tokens=2000,
             ):
+                answer_parts.append(token)
                 yield token
 
-            logger.info(f"[TIMING] LLM stream duration: {time.monotonic() - t_llm_start:.2f}s")
-            logger.info(f"[TIMING] Total stream_query_knowledge: {time.monotonic() - t0:.2f}s")
+            llm_seconds = time.monotonic() - t_llm_start
+            track_rag_stage("llm", llm_seconds)
+            logger.info(
+                f"[TIMING] LLM stream duration: {llm_seconds:.2f}s "
+                f"(chars={len(''.join(answer_parts))})"
+            )
+            logger.info(
+                f"[TIMING] Total stream_query_knowledge: {time.monotonic() - t0:.2f}s "
+                f"request_id={get_request_id()}"
+            )
 
         except Exception as e:
             logger.exception(f"Stream knowledge query failed for kb_id={knowledge_base_id}, question='{question[:50]}...'")
@@ -397,6 +590,15 @@ class ChatService:
             except Exception:
                 # If even the error yield fails, generator will simply end
                 pass
+        finally:
+            await self._finish_stream_usage(
+                prompt_text,
+                "".join(answer_parts),
+                started_at,
+                session=session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
 
 
 # Singleton instance — prompt_provider obtained via factory; LLM provider is internal

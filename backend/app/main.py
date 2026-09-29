@@ -31,9 +31,28 @@ from .api.admin.audit_logs import router as admin_audit_logs_router
 from .api.admin.sessions import router as admin_sessions_router
 from .api.admin.organizations import router as admin_organizations_router
 from .api.api_keys import router as api_keys_router
+from .services.metrics import router as metrics_router
 from .storage.database import init_db, close_db
 from .storage.vector_store import vector_store
 from .services.embedding_service import embedding_service
+
+
+def _mask_dsn(url: str) -> str:
+    """脱敏数据库连接串（审计 §5.5：启动日志曾把 PostgreSQL 密码打出来）。"""
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(url)
+        if parts.password:
+            netloc = f"{parts.username}:***@{parts.hostname}"
+            if parts.port:
+                netloc += f":{parts.port}"
+            return urlunsplit((parts.scheme, netloc, parts.path, parts.query, ""))
+    except Exception:  # pragma: no cover - 脱敏失败时退化为"不打印"
+        return "<unparsable-dsn>"
+    return url
 
 
 @asynccontextmanager
@@ -100,7 +119,7 @@ async def lifespan(app: FastAPI):
     for issue in settings.check_llm_config():
         logger.warning(f"⚠️  LLM 配置检查: {issue}")
     
-    logger.info(f"🗄️  数据库: {settings.DATABASE_URL}")
+    logger.info(f"🗄️  数据库: {_mask_dsn(settings.DATABASE_URL)}")
     logger.info(f"📦 向量存储: {settings.VECTOR_STORE_TYPE}")
     logger.info(f"🔤 嵌入模型: {settings.EMBEDDING_MODEL}")
     logger.info("=" * 60)
@@ -141,6 +160,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 from .middleware.rate_limit import RateLimitMiddleware
 app.add_middleware(RateLimitMiddleware)
 
+# 请求级指标 + request_id 中间件（Phase 3 §5.6）
+from .middleware.metrics import MetricsMiddleware
+app.add_middleware(MetricsMiddleware)
+
 
 # 全局异常处理器
 app.add_exception_handler(AppError, app_error_handler)
@@ -148,19 +171,29 @@ app.add_exception_handler(HTTPException, http_exception_handler)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """全局异常处理器：处理未捕获的错误。"""
-    logger.error(f"Unhandled error: {exc} on {request.url}")
+    """全局异常处理器：处理未捕获的错误。
+
+    审计 §5.5：这里此前用 ``logger.error(f"...{exc}")``，**不打堆栈**，
+    线上 500 因此无法定位。改为 ``logger.exception``（带 traceback），
+    并在响应里带上 request_id，便于前端报障时对齐日志。
+    """
+    from .core.context import get_request_id
+
+    request_id = getattr(request.state, "request_id", None) or get_request_id()
+    logger.exception(f"Unhandled error on {request.url} (request_id={request_id})")
     return JSONResponse(
         status_code=500,
         content={
             "code": "INTERNAL_ERROR",
             "message": "服务器内部错误",
+            "request_id": request_id,
         },
     )
 
 
 # 注册路由
 app.include_router(health_router)
+app.include_router(metrics_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
 app.include_router(auth_router)

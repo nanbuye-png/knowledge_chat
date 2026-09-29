@@ -10,12 +10,14 @@ into this pipeline without affecting ChatService.
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from loguru import logger
 
 from ..services.citation.builder import CitationBuilder
 from ..services.embedding_service import embedding_service
+from ..services.metrics import track_rag_stage, track_retrieval_chunks
 from ..core.config import settings
 from ..storage.database import async_session
 from .knowledge.runtime_config import KnowledgeRuntimeConfigService
@@ -114,11 +116,15 @@ class RetrievalPipeline:
             f"original='{question[:40]}', search='{search_query[:40]}'"
             + (f", error={rewrite.error}" if rewrite.error else "")
         )
+        # §5.6：Query Rewrite 是 RAG 链路的第一个可变阶段，单独计时
+        track_rag_stage("rewrite", rewrite.latency_ms / 1000.0)
 
         base_metadata = {"rewrite": rewrite.to_dict()}
 
         # 1. Embed（检索用查询；Embedding 失败会显式抛出，不产生随机向量）
+        t_embed = time.monotonic()
         query_embedding = await embedding_service.embed_query(search_query)
+        track_rag_stage("embed", time.monotonic() - t_embed)
         if not query_embedding:
             logger.warning("Query embedding 为空，检索中止")
             return self._empty_result(question, search_query, rewrite, base_metadata)
@@ -129,6 +135,7 @@ class RetrievalPipeline:
         if self._reranker.enabled:
             candidates_k = max(top_k, getattr(settings, "RERANKER_CANDIDATES", 20))
 
+        t_retrieve = time.monotonic()
         raw_results = await self._retriever.retrieve(
             embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
@@ -139,6 +146,12 @@ class RetrievalPipeline:
             f"Retriever search: kb_id={knowledge_base_id}, candidates_k={candidates_k}, "
             f"results={len(raw_results)}"
         )
+        base_metadata["retrieval_latency_ms"] = round(
+            (time.monotonic() - t_retrieve) * 1000, 1
+        )
+        # §5.6：召回规模进指标 —— 只监控总耗时无法判断"是不是检索变慢了"
+        track_retrieval_chunks("candidates", len(raw_results))
+        track_rag_stage("retrieve", time.monotonic() - t_retrieve)
 
         if not raw_results:
             return self._empty_result(question, search_query, rewrite, base_metadata)
@@ -151,20 +164,26 @@ class RetrievalPipeline:
             return self._empty_result(question, search_query, rewrite, base_metadata)
 
         # 4. Rerank（Precision；超时/异常自动回退召回顺序，永不抛异常）
+        t_rerank = time.monotonic()
         rerank_outcome = await self._reranker.rerank(
             search_query, relevant, top_k=top_k
         )
+        track_rag_stage("rerank", time.monotonic() - t_rerank)
         final_chunks = rerank_outcome.results or relevant[:top_k]
 
         base_metadata["rerank"] = rerank_outcome.to_dict()
         base_metadata["retrieval_candidates"] = len(raw_results)
         base_metadata["after_threshold"] = len(relevant)
+        track_retrieval_chunks("after_threshold", len(relevant))
 
         # 5. Context Filtering（§5.4）：低于阈值的 chunk 不进入 LLM，并记录明细
+        t_filter = time.monotonic()
         filter_outcome = self._context_filter.apply(final_chunks)
+        track_rag_stage("context_filter", time.monotonic() - t_filter)
         final_chunks = filter_outcome.chunks
         base_metadata["context_filter"] = filter_outcome.to_dict()
         base_metadata["final_context"] = len(final_chunks)
+        track_retrieval_chunks("final_context", len(final_chunks))
 
         if not final_chunks:
             logger.info(

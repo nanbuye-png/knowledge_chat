@@ -146,6 +146,10 @@ class DocumentProcessingTask(TaskBase):
             f"文档状态更新: {self.document_id} → {status}"
             + (f"（retry_count={retry_count}）" if retry_count else "")
         )
+        # §5.6：状态流转进指标 —— "有多少文档卡在 pending/failed" 必须可被查询
+        from ...services.metrics import track_document_status
+
+        track_document_status(status if isinstance(status, str) else str(status))
 
 
 class DocumentEmbeddingTask(TaskBase):

@@ -66,7 +66,13 @@ async def chat(
             return ChatResponse(answer="抱歉，消息保存失败，请稍后重试。")
 
     try:
-        answer = await chat_service.chat(request.message, request.history)
+        answer = await chat_service.chat(
+            request.message,
+            request.history,
+            session=db,
+            user_id=current_user.id,
+            conversation_id=request.conversation_id,
+        )
     except Exception as e:
         logger.error(f"Chat failed: {e}")
         raise HTTPException(status_code=500, detail=f"对话失败: {str(e)}")
@@ -118,7 +124,13 @@ async def stream_chat(
                     return
 
             try:
-                async for token in chat_service.stream_chat(request.message, request.history):
+                async for token in chat_service.stream_chat(
+                    request.message,
+                    request.history,
+                    session=db,
+                    user_id=current_user.id,
+                    conversation_id=request.conversation_id,
+                ):
                     full_answer += token
                     yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
             except Exception:

@@ -15,6 +15,7 @@ from ..models.document import Document, DocumentStatus
 from ..models.knowledge_base import KnowledgeBase
 from ..schemas.document import DocumentResponse, DocumentListResponse
 from ..storage.vector_store import vector_store
+from .metrics import track_document_dedup
 
 from .knowledge.context import KnowledgePipelineContext  # noqa: F401 - 对外可见（兼容既有引用）
 from .knowledge.pipeline import KnowledgePipeline
@@ -139,6 +140,7 @@ class DocumentService:
             )
 
         await db.refresh(doc)
+        track_document_dedup("created")
 
         # Dispatch processing (P0-4)
         await self._dispatch_or_process(doc, file_path, knowledge_base_id, db)
@@ -182,6 +184,7 @@ class DocumentService:
                 f"幂等命中：{existing.filename}（document_id={existing.id}, "
                 f"status={existing.status}）内容与本次上传相同，跳过重复处理"
             )
+            track_document_dedup("skipped")
             return UploadResult(
                 document=existing, skipped=True, duplicated_of=existing.id
             )
@@ -190,6 +193,7 @@ class DocumentService:
         # 文件路径由文档 id 推导（uploads/{id}{ext}），因此把新内容写到既有记录的
         # 路径上，保持「记录 id ↔ 文件路径」一致。
         logger.info(f"幂等命中失败记录，复用并重跑: {existing.filename}（{existing.id}）")
+        track_document_dedup("reused_failed")
         existing_path = os.path.join(
             settings.UPLOAD_DIR, f"{existing.id}{file_ext or existing.file_type}"
         )

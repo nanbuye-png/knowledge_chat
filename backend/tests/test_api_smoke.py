@@ -27,12 +27,18 @@ class TestPublicEndpoints:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "healthy"
+        # Phase 3 §5.6：健康检查改为真实探测 —— 测试环境没有初始化向量库/嵌入模型，
+        # 因此必须体现为 degraded，而不再是硬编码的 healthy（审计 §5.6 反例）。
+        assert body["status"] in {"healthy", "degraded"}, body["checks"]
+        assert set(body["checks"]) >= {"database", "vector_store", "embedding", "redis", "llm"}
         assert isinstance(body["embedding_model"], bool), (
             "embedding_model 必须是布尔值（历史缺陷：恒为 False）"
         )
         assert isinstance(body["llm_configured"], bool)
-        print(f"[PASS] GET /api/health → embedding_model={body['embedding_model']}")
+        print(
+            f"[PASS] GET /api/health → status={body['status']}, "
+            f"embedding_model={body['embedding_model']}"
+        )
 
     def test_unknown_route_is_404(self, client):
         resp = client.get("/api/definitely-not-a-route")

@@ -59,7 +59,16 @@ def _run_stream(request, *, stream_fn=None, create_user_error=None, verify_error
     saved = {"user": [], "assistant": []}
     db = MagicMock()
 
-    async def default_stream(message, history=None):
+    async def default_stream(
+        message,
+        history=None,
+        session=None,
+        *,
+        user_id=None,
+        conversation_id=None,
+    ):
+        # Phase 3 §5.6：ChatService.stream_chat 新增 session/user_id/conversation_id
+        # 形参（用于 token 用量落库），替身必须接受这些关键字参数。
         yield "你好"
         yield "，世界"
 

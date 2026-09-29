@@ -203,6 +203,30 @@ def _settings() -> Any:
     return settings
 
 
+def _track_retry(operation: str) -> None:
+    """上报一次重试（Phase 3 §5.6）。
+
+    指标依赖是可选的：这里做防御性导入，未安装 prometheus_client 时静默跳过，
+    绝不因为监控问题打断重试链路。
+    """
+    try:
+        from ..services.metrics import track_retry
+
+        track_retry(operation)
+    except Exception:  # pragma: no cover - 指标不影响主链路
+        pass
+
+
+def _track_retry_exhausted(operation: str) -> None:
+    """上报一次「重试耗尽」（真正需要告警的信号）。"""
+    try:
+        from ..services.metrics import track_retry_exhausted
+
+        track_retry_exhausted(operation)
+    except Exception:  # pragma: no cover
+        pass
+
+
 def _policy(**overrides: Any) -> RetryPolicy:
     """从 settings 构造策略，``overrides`` 优先（仅覆盖非 None 值）。"""
     s = _settings()
@@ -326,6 +350,7 @@ async def retry_async(
                 f"[retry] {label} 第 {attempt}/{attempts} 次失败"
                 f"（{type(exc).__name__}: {exc}），{delay:.2f}s 后重试"
             )
+            _track_retry(label)
             if on_retry is not None:
                 maybe_awaitable = on_retry(attempt, exc, delay)
                 if inspect.isawaitable(maybe_awaitable):
@@ -333,6 +358,7 @@ async def retry_async(
             await sleep_fn(delay)
 
     assert last_exc is not None  # 循环内必然赋值（attempts >= 2）
+    _track_retry_exhausted(label)
     raise RetryExhausted(attempts=attempts, last_error=last_exc, operation=label)
 
 
@@ -385,6 +411,7 @@ async def retry_stream(
                         f"[retry] {label} 流式调用已达重试上限（{total} 次），"
                         f"最后错误: {type(exc).__name__}: {exc}"
                     )
+                    _track_retry_exhausted(label)
                 raise
 
             delay = backoff_delay(attempt, policy)
@@ -392,6 +419,7 @@ async def retry_stream(
                 f"[retry] {label} 流式调用第 {attempt}/{total} 次失败"
                 f"（{type(exc).__name__}: {exc}），{delay:.2f}s 后重试"
             )
+            _track_retry(label)
             await sleep_fn(delay)
 
 def backoff_delay(attempt: int, policy: RetryPolicy) -> float:

@@ -86,7 +86,14 @@ async def query_knowledge(
         await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
 
     try:
-        result = await chat_service.query_knowledge(request.question, request.knowledge_base_id, request.history, session=db)
+        result = await chat_service.query_knowledge(
+            request.question,
+            request.knowledge_base_id,
+            request.history,
+            session=db,
+            user_id=current_user.id,
+            conversation_id=request.conversation_id,
+        )
     except Exception as e:
         logger.error(f"Query failed: {e}")
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
@@ -137,7 +144,12 @@ async def stream_query_knowledge(
 
             try:
                 async for data in chat_service.stream_query_knowledge(
-                    request.question, request.knowledge_base_id, request.history, session=db
+                    request.question,
+                    request.knowledge_base_id,
+                    request.history,
+                    session=db,
+                    user_id=current_user.id,
+                    conversation_id=request.conversation_id,
                 ):
                     is_control = False
                     try:

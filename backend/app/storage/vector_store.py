@@ -94,9 +94,8 @@ class VectorStore:
                     {k: v for k, v in metadata.items() if v is not None}
                 )
 
-            # ------------------------------------------------
-            # 写入前：确认 Python metadata 中包含 knowledge_base_id
-            logger.info(f"[WRITE CHECK] About to write {len(chunks)} chunks. First metadata (Python): {metadatas[0] if metadatas else 'EMPTY'}")
+            # 写入前只记录规模（不打印 metadata 内容：含其他用户文档片段，审计 §5.5）
+            logger.debug(f"Writing {len(chunks)} chunks to vector store")
 
             self.collection.add(
                 ids=ids,
@@ -105,17 +104,16 @@ class VectorStore:
                 documents=chunks,
             )
 
-            # ------------------------------------------------
-            # 写入后：用 collection.get() 回读，确认 Chroma 真正存储的 metadata
+            # 写入后回读数量做一致性校验（只比数量，不回读/打印内容）
             verify_ids = ids[:min(3, len(ids))]  # sample first 3
             verify_result = self.collection.get(ids=verify_ids, include=["metadatas"])
-            if verify_result and verify_result.get("metadatas"):
-                logger.info(f"[CHROMA VERIFY] collection.get() metadatas: {verify_result['metadatas']}")
-            else:
-                logger.warning(f"[CHROMA VERIFY] collection.get() returned NO metadatas for ids={verify_ids}")
+            if not (verify_result and verify_result.get("metadatas")):
+                logger.warning(
+                    f"[CHROMA VERIFY] 回读失败: ids={verify_ids}"
+                )
 
             logger.info(f"Added {len(chunks)} chunks for document: {filename} (kb={knowledge_base_id}, user={user_id})")
-            logger.info(f"Vector DB count after add: {self.collection.count()}")
+            logger.debug(f"Vector DB count after add: {self.collection.count()}")
         except Exception as e:
             logger.error(f"Failed to add chunks to vector store: {e}")
             raise
@@ -138,11 +136,6 @@ class VectorStore:
                 where_filter = {"knowledge_base_id": {"$eq": knowledge_base_id}}
 
             logger.info(f"Vector search: kb_id={knowledge_base_id}, where_filter={where_filter}, total_count={self.collection.count()}")
-
-            # Diagnostic: peek at stored metadata to verify knowledge_base_id is present
-            sample = self.collection.peek(limit=3)
-            if sample and sample.get("metadatas"):
-                logger.info(f"Vector DB sample metadata (first 3): {sample['metadatas']}")
 
             results = self.collection.query(
                 query_embeddings=[query_embedding],

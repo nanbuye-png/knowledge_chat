@@ -1,6 +1,17 @@
 import sys
 from loguru import logger
+
 from .config import settings
+from .context import request_id_ctx
+
+
+def _inject_request_id(record) -> None:
+    """给每条日志注入当前请求的 request_id（Phase 3 §5.6）。
+
+    有了它，一次请求内的所有日志（包括 await 出去的 service 调用）都能用
+    ``rid=xxx`` 串起来；后台线程/启动阶段没有请求上下文，显示 ``-``。
+    """
+    record["extra"].setdefault("request_id", request_id_ctx.get())
 
 
 def _console_sink():
@@ -26,8 +37,13 @@ def _console_sink():
 
 
 def setup_logging():
-    """配置应用的结构化日志。"""
+    """配置应用的结构化日志。
+
+    每条日志都带 ``rid=<request_id>``：同一次请求的多条日志（跨 service /
+    后台任务）由此可以串成一条链路（Phase 3 §5.6）。
+    """
     logger.remove()
+    logger.configure(patcher=_inject_request_id)
 
     # 控制台处理器
     logger.add(
@@ -35,6 +51,7 @@ def setup_logging():
         format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
                "<level>{level: <8}</level> | "
                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+               "rid={extra[request_id]} | "
                "<level>{message}</level>",
         level=settings.LOG_LEVEL,
         colorize=True,
@@ -43,7 +60,8 @@ def setup_logging():
     # 带轮转的文件处理器
     logger.add(
         "logs/app_{time:YYYY-MM-DD}.log",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | "
+               "rid={extra[request_id]} | {message}",
         level="DEBUG",
         rotation="1 day",
         retention="30 days",
