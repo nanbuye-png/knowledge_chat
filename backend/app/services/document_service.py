@@ -1,8 +1,13 @@
+import hashlib
 import os
 import uuid
+from dataclasses import dataclass
+from typing import Optional
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from fastapi import UploadFile, HTTPException
 
 from ..core.config import settings
@@ -13,6 +18,23 @@ from ..storage.vector_store import vector_store
 
 from .knowledge.context import KnowledgePipelineContext  # noqa: F401 - 对外可见（兼容既有引用）
 from .knowledge.pipeline import KnowledgePipeline
+
+
+@dataclass
+class UploadResult:
+    """上传结果（Phase 3 §5.3 幂等）。
+
+    Attributes:
+        document: 命中或新建的文档记录。
+        skipped: ``True`` 表示同一知识库内已有相同内容 —— 本次**没有**新建记录、
+            也没有派发新的处理任务。
+        duplicated_of: 复用既有记录时指向该文档 ID（等于 ``document.id``）；
+            ``skipped=False`` 但带值表示"复用了 FAILED 记录并重跑"。
+    """
+
+    document: Document
+    skipped: bool = False
+    duplicated_of: Optional[str] = None
 
 
 class DocumentService:
@@ -26,14 +48,20 @@ class DocumentService:
     def __init__(self):
         self._pipeline = KnowledgePipeline()
 
-    async def upload_document(self, file: UploadFile, db: AsyncSession, user_id: int, knowledge_base_id: int) -> Document:
-        """Upload and process a document.
+    async def upload_document(
+        self, file: UploadFile, db: AsyncSession, user_id: int, knowledge_base_id: int
+    ) -> UploadResult:
+        """Upload and process a document（Phase 3 §5.3：内容级幂等）。
 
         Args:
             file: The uploaded file.
             db: Database session.
             user_id: The current user's ID.
             knowledge_base_id: The target knowledge base ID (must belong to the user).
+
+        Returns:
+            :class:`UploadResult`；``skipped=True`` 表示同一知识库内已有相同内容，
+            本次未新建记录、未派发任务。
         """
         # Validate file
         await self._validate_file(file)
@@ -49,17 +77,28 @@ class DocumentService:
         if kb is None:
             raise HTTPException(status_code=403, detail="无权访问该知识库")
 
-        # Save file
         file_ext = os.path.splitext(file.filename)[1].lower()
-        file_id = str(uuid.uuid4())
-        safe_filename = f"{file_id}{file_ext}"
-        file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
-
         content = await file.read()
+        file_size = len(content)
+        file_hash = (
+            self._compute_file_hash(content)
+            if getattr(settings, "DOCUMENT_DEDUP_ENABLED", True)
+            else None
+        )
+
+        # 幂等检查（在写盘之前）：同知识库 + 同内容 → 复用既有记录
+        if file_hash:
+            existing = await self._find_by_hash(db, knowledge_base_id, file_hash)
+            if existing is not None:
+                return await self._handle_existing(
+                    existing, content, file_ext, knowledge_base_id, db
+                )
+
+        # Save file
+        file_id = str(uuid.uuid4())
+        file_path = os.path.join(settings.UPLOAD_DIR, f"{file_id}{file_ext}")
         with open(file_path, "wb") as f:
             f.write(content)
-
-        file_size = len(content)
 
         # Create document record（PENDING：等待后台 Worker 处理）
         doc = Document(
@@ -69,18 +108,139 @@ class DocumentService:
             file_type=file_ext,
             status=DocumentStatus.PENDING.value,
             knowledge_base_id=knowledge_base_id,
+            file_hash=file_hash,
         )
         db.add(doc)
-        await db.commit()
+        try:
+            await db.commit()
+        except IntegrityError:
+            # 并发上传同一内容的竞态：由 uq_documents_kb_file_hash 兜底，
+            # 应用层「先查后写」无法覆盖这个窗口。
+            await db.rollback()
+            self._remove_file(file_path)
+            existing = (
+                await self._find_by_hash(db, knowledge_base_id, file_hash)
+                if file_hash
+                else None
+            )
+            if existing is None:
+                logger.error(
+                    f"上传冲突但查不到既有记录: kb={knowledge_base_id}, hash={file_hash}"
+                )
+                raise HTTPException(
+                    status_code=409, detail="文档正在被并发上传，请稍后重试"
+                )
+            logger.warning(
+                f"并发上传同一内容，命中唯一约束，返回既有记录: "
+                f"{existing.filename}（{existing.id}）"
+            )
+            return UploadResult(
+                document=existing, skipped=True, duplicated_of=existing.id
+            )
+
         await db.refresh(doc)
 
         # Dispatch processing (P0-4)
+        await self._dispatch_or_process(doc, file_path, knowledge_base_id, db)
+        return UploadResult(document=doc)
+
+    # ------------------------------------------------------------------
+    # 幂等辅助（Phase 3 §5.3）
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_file_hash(content: bytes) -> str:
+        """内容指纹：SHA-256（64 位十六进制）。"""
+        return hashlib.sha256(content).hexdigest()
+
+    @staticmethod
+    async def _find_by_hash(
+        db: AsyncSession, knowledge_base_id: int, file_hash: str
+    ) -> Optional[Document]:
+        """按「知识库 + 内容指纹」查找既有记录（唯一约束保证最多一条）。"""
+        result = await db.execute(
+            select(Document)
+            .where(
+                Document.knowledge_base_id == knowledge_base_id,
+                Document.file_hash == file_hash,
+            )
+            .order_by(Document.created_at.desc())
+        )
+        return result.scalars().first()
+
+    async def _handle_existing(
+        self,
+        existing: Document,
+        content: bytes,
+        file_ext: str,
+        knowledge_base_id: int,
+        db: AsyncSession,
+    ) -> UploadResult:
+        """命中相同内容：非 FAILED 直接跳过；FAILED 则复用记录重跑。"""
+        if existing.status != DocumentStatus.FAILED.value:
+            logger.info(
+                f"幂等命中：{existing.filename}（document_id={existing.id}, "
+                f"status={existing.status}）内容与本次上传相同，跳过重复处理"
+            )
+            return UploadResult(
+                document=existing, skipped=True, duplicated_of=existing.id
+            )
+
+        # 之前失败的文档：复用同一条记录重跑，而不是留下两条永远 FAILED 的记录。
+        # 文件路径由文档 id 推导（uploads/{id}{ext}），因此把新内容写到既有记录的
+        # 路径上，保持「记录 id ↔ 文件路径」一致。
+        logger.info(f"幂等命中失败记录，复用并重跑: {existing.filename}（{existing.id}）")
+        existing_path = os.path.join(
+            settings.UPLOAD_DIR, f"{existing.id}{file_ext or existing.file_type}"
+        )
+        with open(existing_path, "wb") as f:
+            f.write(content)
+
+        # 上一轮可能已写入部分向量/稀疏索引，先清理以免出现重复 chunk
+        await self._purge_indexes(existing.id)
+
+        existing.file_type = file_ext or existing.file_type
+        existing.file_size = len(content)
+        existing.status = DocumentStatus.PENDING.value
+        existing.chunk_count = 0
+        existing.retry_count = 0
+        existing.error_message = None
+        await db.commit()
+        await db.refresh(existing)
+
+        await self._dispatch_or_process(existing, existing_path, knowledge_base_id, db)
+        return UploadResult(document=existing, duplicated_of=existing.id)
+
+    async def _dispatch_or_process(
+        self, doc: Document, file_path: str, knowledge_base_id: int, db: AsyncSession
+    ) -> None:
+        """按配置决定异步派发（后台 Worker）还是请求内同步处理。"""
         if getattr(settings, "DOCUMENT_PROCESSING_ASYNC", True):
             self._dispatch_async(doc, file_path, knowledge_base_id)
         else:
             await self._process_inline(doc, file_path, knowledge_base_id, db)
 
-        return doc
+    @staticmethod
+    def _remove_file(path: str) -> None:
+        """删除落盘的临时文件（失败只记录，不影响上传结果）。"""
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except OSError as exc:  # pragma: no cover - 防御性
+            logger.warning(f"清理临时文件失败（{path}）: {exc}")
+
+    async def _purge_indexes(self, document_id: str) -> None:
+        """删除该文档的向量/稀疏索引（重复处理前调用，避免重复 chunk）。"""
+        try:
+            await vector_store.delete_document(document_id)
+        except Exception as exc:  # noqa: BLE001 - 清理失败不应中断主流程
+            logger.warning(f"清理向量索引失败（{document_id}）: {exc}")
+        try:
+            from .retrieval.sparse_index import get_sparse_index
+
+            await get_sparse_index().delete_document(document_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"清理稀疏索引失败（{document_id}）: {exc}")
 
     def _dispatch_async(self, doc, file_path: str, knowledge_base_id: int) -> None:
         """把处理任务交给后台 Worker；提交失败则降级为请求内同步处理。"""
@@ -190,19 +350,9 @@ class DocumentService:
         if not doc:
             raise HTTPException(status_code=404, detail="文档不存在")
 
-        # Delete from vector store
-        try:
-            await vector_store.delete_document(document_id)
-        except Exception as e:
-            logger.warning(f"Vector store deletion warning: {e}")
-
-        # Delete from sparse (BM25) index
-        try:
-            from .retrieval.sparse_index import get_sparse_index
-
-            await get_sparse_index().delete_document(document_id)
-        except Exception as e:
-            logger.warning(f"Sparse index deletion warning: {e}")
+        # Delete vector + sparse (BM25) index entries
+        # （与幂等重跑共用同一清理逻辑，避免两处实现漂移）
+        await self._purge_indexes(document_id)
 
         # Delete uploaded file
         for ext in settings.ALLOWED_EXTENSIONS:

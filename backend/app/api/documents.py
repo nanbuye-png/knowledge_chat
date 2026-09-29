@@ -49,21 +49,33 @@ async def upload_document(
         )
 
     try:
-        doc = await document_service.upload_document(file, db, user_id=current_user.id, knowledge_base_id=knowledge_base_id)
+        result = await document_service.upload_document(file, db, user_id=current_user.id, knowledge_base_id=knowledge_base_id)
+        doc = result.document
         await create_audit_log(
             db=db, operator_id=current_user.id, action="DOCUMENT_UPLOAD",
             target_type="document", target_id=doc.id,
-            detail={"filename": doc.filename, "kb_id": knowledge_base_id}, status="SUCCESS",
+            detail={
+                "filename": doc.filename,
+                "kb_id": knowledge_base_id,
+                # Phase 3 §5.3：幂等命中必须留痕（审计里能看出"上传被跳过"）
+                "skipped": result.skipped,
+                "duplicated_of": result.duplicated_of,
+            },
+            status="SKIPPED" if result.skipped else "SUCCESS",
         )
+        if result.skipped:
+            message = "该知识库中已存在内容相同的文档，已跳过重复处理"
+        elif getattr(settings, "DOCUMENT_PROCESSING_ASYNC", True):
+            message = "文档上传成功，正在后台处理中"
+        else:
+            message = "文档上传成功，正在处理中"
         return UploadResponse(
-            message=(
-                "文档上传成功，正在后台处理中"
-                if getattr(settings, "DOCUMENT_PROCESSING_ASYNC", True)
-                else "文档上传成功，正在处理中"
-            ),
+            message=message,
             document_id=doc.id,
             filename=doc.filename,
             status=doc.status,
+            skipped=result.skipped,
+            duplicated_of=result.duplicated_of,
         )
     except HTTPException:
         raise

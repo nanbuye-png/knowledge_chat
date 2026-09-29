@@ -177,6 +177,13 @@ class Settings(BaseSettings):
     # False：在请求内同步处理（便于少数需要确定性结果的场景/测试）
     DOCUMENT_PROCESSING_ASYNC: bool = True
 
+    # ---- 上传幂等（Phase 3 §5.3）----
+    # True：同一知识库内上传内容完全相同的文件时跳过重复处理
+    #   （命中已完成/处理中的记录 → 直接返回既有记录；命中 FAILED 记录 →
+    #   复用该记录重跑，而不是留下两条永远失败的记录）
+    # False：关闭去重，每次上传都新建记录（排障/压测时用）
+    DOCUMENT_DEDUP_ENABLED: bool = True
+
     # ---- 统一重试（Phase 3 §5.2）----
     # 总开关：false 时所有重试退化为单次调用（便于压测/排障时对比）
     RETRY_ENABLED: bool = True

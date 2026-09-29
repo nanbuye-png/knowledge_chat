@@ -31,6 +31,10 @@ class UploadResponse(BaseModel):
     document_id: str
     filename: str
     status: str = "processing"
+    # Phase 3 §5.3 幂等：True 表示该知识库内已存在相同内容，本次未新建记录、
+    # 也未派发新的处理任务；duplicated_of 指向被复用的文档 ID。
+    skipped: bool = False
+    duplicated_of: Optional[str] = None
 
 
 class DeleteResponse(BaseModel):

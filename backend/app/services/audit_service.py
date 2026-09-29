@@ -67,7 +67,7 @@ async def create_audit_log(
         detail: 附加详情字典，存储为 JSON 字符串
         ip_address: 操作者 IP
         user_agent: 客户端 User-Agent
-        status: 操作结果（SUCCESS / FAILURE）
+        status: 操作结果（SUCCESS / FAILURE / SKIPPED）
 
     Returns:
         创建的 AuditLog 对象

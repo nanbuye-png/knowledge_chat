@@ -256,6 +256,21 @@ class _FakeUpload:
         self._pos = pos
 
 
+async def _upload(db, filename: str = "a.txt", **kwargs):
+    """调用上传接口并返回 Document。
+
+    Phase 3 §5.3 之后 ``upload_document`` 返回 :class:`UploadResult`
+    （同时携带 ``skipped``/``duplicated_of``），这里只取文档记录，
+    让既有状态机断言保持简洁。
+    """
+    from app.services.document_service import DocumentService
+
+    result = await DocumentService().upload_document(
+        _FakeUpload(filename), db, **kwargs
+    )
+    return result.document
+
+
 def _prepare_kb(temp_db, user_id: int = 1, kb_id: int = 1):
     async def scenario():
         from app.models.knowledge_base import KnowledgeBase
@@ -318,9 +333,7 @@ class TestUploadPath:
 
         async def scenario():
             async with temp_db.session() as db:
-                return await DocumentService().upload_document(
-                    _FakeUpload("a.txt"), db, user_id=1, knowledge_base_id=1
-                )
+                return await _upload(db, user_id=1, knowledge_base_id=1)
 
         doc = asyncio.run(scenario())
         assert doc.status == "pending", "上传应立刻返回 pending 状态"
@@ -348,9 +361,7 @@ class TestUploadPath:
 
         async def scenario():
             async with temp_db.session() as db:
-                return await DocumentService().upload_document(
-                    _FakeUpload("a.txt"), db, user_id=1, knowledge_base_id=1
-                )
+                return await _upload(db, user_id=1, knowledge_base_id=1)
 
         doc = asyncio.run(scenario())
         assert doc.status == "completed"
@@ -376,9 +387,7 @@ class TestUploadPath:
 
         async def scenario():
             async with temp_db.session() as db:
-                return await DocumentService().upload_document(
-                    _FakeUpload("a.txt"), db, user_id=1, knowledge_base_id=1
-                )
+                return await _upload(db, user_id=1, knowledge_base_id=1)
 
         doc = asyncio.run(scenario())
         assert doc.status == "failed"
