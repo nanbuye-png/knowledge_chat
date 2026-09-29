@@ -39,13 +39,13 @@ export default function DocumentPage() {
 
   // Poll processing documents
   useEffect(() => {
-    const processingDocs = documents.filter(d => d.status === 'processing')
+    const processingDocs = documents.filter(d => d.status === 'pending' || d.status === 'processing')
     if (processingDocs.length === 0) return
     const interval = setInterval(async () => {
       for (const doc of processingDocs) {
         try {
           const updated = await documentsApi.getDocumentStatus(doc.id)
-          if (updated.status !== 'processing') {
+          if (updated.status !== 'pending' && updated.status !== 'processing') {
             updateDocumentStatus(doc.id, updated.status, updated.chunk_count)
           }
         } catch {}
@@ -68,19 +68,33 @@ export default function DocumentPage() {
         return
       }
       const result = await documentsApi.uploadDocument(file, currentKnowledgeBase.id)
-      setUploadProgress({ filename: file.name, progress: 100, status: 'processing' })
+      // §5.3 幂等命中：该知识库已有内容完全相同的文档 —— 后端**没有**新建记录、
+      // 也没有派发处理任务。因此不能伪造一条 processing 记录去轮询（会一直转圈），
+      // 直接把结果提示给用户，并刷新列表以显示既有记录。
+      if (result.skipped) {
+        setUploadProgress({
+          filename: result.filename, progress: 100, status: 'completed',
+          skipped: true, message: result.message,
+        })
+        fetchDocuments(currentKnowledgeBase.id)
+        setTimeout(() => setUploadProgress(null), 3000)
+        return
+      }
+      setUploadProgress({
+        filename: result.filename, progress: 100, status: 'processing', message: result.message,
+      })
       addDocument({
         id: result.document_id, filename: result.filename,
         file_size: file.size, file_type: `.${ext}`,
-        status: 'processing', chunk_count: 0, created_at: new Date().toISOString(),
+        status: 'pending', chunk_count: 0, created_at: new Date().toISOString(),
       })
       const pollInterval = setInterval(async () => {
         try {
           const updated = await documentsApi.getDocumentStatus(result.document_id)
-          if (updated.status !== 'processing') {
+          if (updated.status !== 'pending' && updated.status !== 'processing') {
             updateDocumentStatus(result.document_id, updated.status, updated.chunk_count)
             setUploadProgress({
-              filename: file.name, progress: 100,
+              filename: result.filename, progress: 100,
               status: updated.status === 'completed' ? 'completed' : 'failed',
               error: updated.error_message || undefined,
             })
@@ -93,7 +107,7 @@ export default function DocumentPage() {
       setUploadProgress({ filename: file.name, progress: 100, status: 'failed', error: error.message || '上传失败' })
       setTimeout(() => setUploadProgress(null), 3000)
     }
-  }, [addDocument, updateDocumentStatus, currentKnowledgeBase])
+  }, [addDocument, updateDocumentStatus, currentKnowledgeBase, fetchDocuments])
 
   const handleDelete = useCallback(async (id: string) => {
     try { await documentsApi.deleteDocument(id); removeDocument(id) }

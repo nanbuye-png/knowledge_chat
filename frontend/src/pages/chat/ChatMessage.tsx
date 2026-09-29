@@ -9,6 +9,17 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { Message } from '../../types'
 import CitationCard from './CitationCard'
 
+/**
+ * 拒答原因码 → 面向用户的说明（后端 AbstentionReason，§5.6）。
+ * 拒答是正常业务结果：检索没找到依据，因此不调用 LLM 猜答案。
+ */
+const ABSTENTION_REASON_LABELS: Record<string, string> = {
+  no_context: '未检索到相关内容',
+  insufficient_context: '有效上下文不足',
+  low_retrieval_score: '召回相似度低于阈值',
+  low_rerank_score: '重排得分低于阈值',
+}
+
 interface Props {
   message: Message
   isStreaming?: boolean
@@ -172,12 +183,14 @@ export default function ChatMessage({ message, isStreaming, onRetry }: Props) {
           </div>
         )}
 
-        {/* No knowledge indicator */}
-        {!isUser && message.hasKnowledge === false && !isStreaming && (
+        {/* No knowledge / abstention indicator（§5.6：拒答与"没找到"要能区分） */}
+        {!isUser && !isStreaming && (message.abstained || message.hasKnowledge === false) && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
             className="mt-2 flex items-center gap-1 text-xs text-amber-500">
             <AlertCircle className="w-3 h-3" />
-            未在知识库中找到相关信息
+            {message.abstained
+              ? `未找到足够依据，已拒答${ABSTENTION_REASON_LABELS[message.abstentionReason ?? ''] ? `（${ABSTENTION_REASON_LABELS[message.abstentionReason ?? '']}）` : ''}`
+              : '未在知识库中找到相关信息'}
           </motion.div>
         )}
       </div>

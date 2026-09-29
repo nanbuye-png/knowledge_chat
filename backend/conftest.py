@@ -91,9 +91,25 @@ def client(temp_db):
     The lifespan is intentionally **not** executed: it would initialise the
     developer database, the vector store and load the embedding model.
     Route wiring and dependency resolution are still fully exercised.
+
+    Why every route module's ``get_db`` is overridden
+    -------------------------------------------------
+    Some test modules call ``importlib.reload(app.storage.database)``
+    (``test_db_migration`` / ``test_connection_pool``) to rebuild the engine.
+    After a reload, ``app.storage.database.get_db`` is a **new function
+    object**, while the API modules still hold the old one captured at import
+    time —— overriding only the freshly imported object silently has no
+    effect and the requests hit the real developer database
+    (observed: ``backend/knowledge.db`` gained test users/documents).
+    So we override the function object that each route module actually
+    references, plus the current one for good measure.
     """
+    import importlib
+    import pkgutil
+
     from fastapi.testclient import TestClient
 
+    import app.api as api_pkg
     from app.main import app
     from app.storage.database import get_db
 
@@ -101,9 +117,22 @@ def client(temp_db):
         async with temp_db.session() as session:
             yield session
 
-    app.dependency_overrides[get_db] = _override_get_db
+    db_dependencies = {get_db}
+    for module_info in pkgutil.iter_modules(api_pkg.__path__):
+        try:
+            module = importlib.import_module(f"app.api.{module_info.name}")
+        except Exception:  # noqa: BLE001 - 某个子模块导入失败不应影响其余覆盖
+            continue
+        dependency = getattr(module, "get_db", None)
+        if dependency is not None:
+            db_dependencies.add(dependency)
+
+    for dependency in db_dependencies:
+        app.dependency_overrides[dependency] = _override_get_db
+
     test_client = TestClient(app)
     try:
         yield test_client
     finally:
-        app.dependency_overrides.pop(get_db, None)
+        for dependency in db_dependencies:
+            app.dependency_overrides.pop(dependency, None)

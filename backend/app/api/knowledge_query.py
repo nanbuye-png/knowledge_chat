@@ -160,14 +160,18 @@ async def stream_query_knowledge(
                     user_id=current_user.id,
                     conversation_id=request.conversation_id,
                 ):
-                    is_control = False
+                    frame_type = None
                     try:
                         parsed = json.loads(data.strip())
                         if isinstance(parsed, dict) and "type" in parsed:
-                            is_control = True
+                            frame_type = parsed.get("type")
+                            if frame_type == "no_result":
+                                # §5.6：拒答也是一次"回答"。若只把它当控制帧丢掉，
+                                # 历史会话里就只剩用户提问、看不到系统答了什么。
+                                full_answer = parsed.get("message") or ""
                     except (json.JSONDecodeError, TypeError):
                         pass
-                    if not is_control:
+                    if frame_type is None:
                         full_answer += data
                     yield f"data: {json.dumps({'token': data}, ensure_ascii=False)}\n\n"
             except Exception:

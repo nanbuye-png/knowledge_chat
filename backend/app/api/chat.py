@@ -119,8 +119,24 @@ async def stream_chat(
     提供 conversation_id 时，会把用户消息与模型回答持久化到该会话。
     流式响应期间自行管理数据库会话（与 RAG 流式接口一致），
     避免请求级 session 的生命周期跨越整个流式输出。
+
+    帧契约（Phase 3 §5.4，与 /api/knowledge/query/stream 对齐）：
+    ``data: {"token": "<纯文本增量>"}`` 为正文；控制帧是把一段 JSON
+    再序列化进 ``token``（前端先取 token 再 JSON.parse），形如
+    ``{"type": "error", "message": "..."}``；结束帧为 ``data: [DONE]``。
+    错误一律走控制帧 —— 否则前端会把"无权访问该会话"当成模型回答渲染。
     """
     logger.info(f"Stream chat: {request.message[:100]}...")
+
+    def _error_frame(message: str) -> str:
+        return (
+            "data: "
+            + json.dumps(
+                {"token": json.dumps({"type": "error", "message": message}, ensure_ascii=False)},
+                ensure_ascii=False,
+            )
+            + "\n\n"
+        )
 
     async def generate():
         async with async_session() as db:
@@ -136,12 +152,12 @@ async def stream_chat(
                     await auto_update_conversation_title(db, request.conversation_id, request.message)
                     user_msg_saved = True
                 except ValueError:
-                    yield f"data: {json.dumps({'token': '无权访问该会话'}, ensure_ascii=False)}\n\n"
+                    yield _error_frame("无权访问该会话")
                     yield "data: [DONE]\n\n"
                     return
                 except Exception:
                     logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
-                    yield f"data: {json.dumps({'token': '抱歉，消息保存失败，请稍后重试。'}, ensure_ascii=False)}\n\n"
+                    yield _error_frame("抱歉，消息保存失败，请稍后重试。")
                     yield "data: [DONE]\n\n"
                     return
 
@@ -157,7 +173,8 @@ async def stream_chat(
                     yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
             except Exception:
                 logger.exception("Stream chat generator failed")
-                yield f"data: {json.dumps({'token': '抱歉，对话过程中出现内部错误，请稍后重试。'}, ensure_ascii=False)}\n\n"
+                yield _error_frame("抱歉，对话过程中出现内部错误，请稍后重试。")
+                yield "data: [DONE]\n\n"
                 return
 
             # 2. 保存模型回答（与 RAG 一致：仅在真正拿到内容时保存）

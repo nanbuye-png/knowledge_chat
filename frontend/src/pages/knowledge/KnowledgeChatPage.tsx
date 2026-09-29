@@ -7,7 +7,7 @@ import { useAuthStore } from '../../store/auth'
 import * as knowledgeApi from '../../api/knowledge'
 import * as conversationsApi from '../../api/conversations'
 import * as kbApi from '../../api/knowledgeBases'
-import type { Message, SourceReference, Conversation } from '../../types'
+import type { Citation, Message, SourceReference, Conversation } from '../../types'
 import type { KnowledgeBase } from '../../api/knowledgeBases'
 import ChatMessage from '../chat/ChatMessage'
 import InputBox from '../chat/InputBox'
@@ -67,47 +67,94 @@ export default function KnowledgeChatPage() {
     setStreaming(true)
     setSources([])
 
+    /**
+     * 更新最后一条 assistant 消息（拒答/引用只有流结束时才知道）。
+     * 直接改 store 里的对象会让 React 认为引用未变，故用不可变更新。
+     */
+    const patchLastMessage = (patch: Partial<Message>) => {
+      const state = useKnowledgeChatStore.getState()
+      const msgs = [...state.messages]
+      const lastMsg = msgs[msgs.length - 1]
+      if (lastMsg && lastMsg.role === 'assistant') {
+        msgs[msgs.length - 1] = { ...lastMsg, ...patch }
+        useKnowledgeChatStore.setState({ messages: msgs })
+      }
+    }
+
     try {
+      // 懒创建会话（Phase 3 §5.4）：没有 conversation_id 时后端不会持久化消息，
+      // 多轮上下文与"历史会话"都会静默丢失。与聊天页一致：首次发送时才建会话。
+      let conversationId = currentConversationId ?? undefined
+      if (conversationId == null) {
+        try {
+          const conv = await conversationsApi.createConversation(knowledgeBaseId)
+          conversationId = conv.id
+          setCurrentConversationId(conv.id)
+        } catch {
+          // 建会话失败不应阻断问答，退化为不落库的单轮问答
+          conversationId = undefined
+        }
+      }
+
       let sources: SourceReference[] = []
+      let citations: Citation[] = []
       let fullContent = ''
 
       knowledgeApi.createStreamKnowledgeQuery(
         content,
         knowledgeBaseId,
-        (srcs) => {
-          sources = srcs
-          setSources(srcs)
+        {
+          onSources: (srcs) => {
+            sources = srcs
+            setSources(srcs)
+          },
+          onCitations: (cites) => {
+            citations = cites
+          },
+          onToken: (token) => {
+            fullContent += token
+            updateLastMessage(fullContent)
+          },
+          // §5.6 拒答：检索无足够依据（未调用 LLM）—— 不是错误，需如实展示
+          // 拒答文案并标记 abstained/reason，供 UI 与后续统计区分。
+          onAbstention: (info) => {
+            patchLastMessage({
+              content: info.message,
+              hasKnowledge: false,
+              abstained: true,
+              abstentionReason: info.reason ?? null,
+            })
+            setStreaming(false)
+            // 服务端已把拒答文案落库，刷新列表让新会话（含自动标题）立即可见
+            conversationsApi.listConversations(knowledgeBaseId)
+              .then(data => setConversationList(data))
+              .catch(() => {})
+          },
+          onDone: () => {
+            patchLastMessage({
+              sources,
+              citations,
+              hasKnowledge: sources.length > 0,
+            })
+            setStreaming(false)
+            conversationsApi.listConversations(knowledgeBaseId)
+              .then(data => setConversationList(data))
+              .catch(() => {})
+          },
+          onError: (error) => {
+            patchLastMessage({ content: `抱歉，查询出错：${error}`, error })
+            setStreaming(false)
+          },
         },
-        (token) => {
-          fullContent += token
-          updateLastMessage(fullContent)
-        },
-        () => {
-          // Attach sources to the last message
-          const state = useKnowledgeChatStore.getState()
-          const msgs = [...state.messages]
-          const lastMsg = msgs[msgs.length - 1]
-          if (lastMsg) {
-            lastMsg.sources = sources
-            lastMsg.hasKnowledge = sources.length > 0
-            useKnowledgeChatStore.setState({ messages: msgs })
-          }
-          setStreaming(false)
-          conversationsApi.listConversations(knowledgeBaseId)
-            .then(data => setConversationList(data))
-            .catch(() => {})
-        },
-        (error) => {
-          updateLastMessage(`抱歉，查询出错：${error}`)
-          setStreaming(false)
-        },
-        currentConversationId ?? undefined,
+        conversationId,
       )
     } catch (error: any) {
       updateLastMessage(`抱歉，处理请求时出错：${error.message || '未知错误'}`)
       setStreaming(false)
     }
-  }, [isStreaming, knowledgeBaseId, addMessage, updateLastMessage, setStreaming, currentConversationId, setSources])
+  }, [isStreaming, knowledgeBaseId, addMessage, updateLastMessage, setStreaming, currentConversationId,
+      setSources, setCurrentConversationId, setConversationList])
+
 
   const handleNewChat = useCallback(async () => {
     if (!knowledgeBaseId) return

@@ -4,6 +4,7 @@
  * 基于后端 /api/chat 端点。
  */
 import apiClient from './client'
+import { parseControlFrame, readResponseError, readSse } from './sse'
 
 export async function chatMessage(
   message: string,
@@ -18,18 +19,37 @@ export async function chatMessage(
   return response.data.answer
 }
 
-// SSE streaming for general chat
+/** 流式回调（控制帧按类型分发）。 */
+export interface ChatStreamHandlers {
+  /** 正文增量 */
+  onToken?: (token: string) => void
+  /** 流正常结束 */
+  onDone?: () => void
+  /** 本次回答失败（error 控制帧 / HTTP 错误） */
+  onError?: (error: string) => void
+}
+
+/**
+ * 流式通用对话（SSE）。
+ *
+ * 帧契约与 RAG 流式一致（见 ``api/sse.ts``）：正文为
+ * ``data: {"token": "..."}``，错误走 ``{"type":"error"}`` 控制帧 ——
+ * 否则前端会把"无权访问该会话"当成模型回答直接渲染给用户。
+ *
+ * :param conversationId: 传入时后端持久化用户消息与回答（前端应在
+ *     首次发送前先创建会话，见 ChatPage 的懒创建）。
+ */
 export function createStreamChat(
   message: string,
   history: { role: string; content: string }[],
-  onToken: (token: string) => void,
-  onDone: () => void,
-  onError: (error: string) => void,
+  handlers: ChatStreamHandlers,
   conversationId: number | null = null
 ): AbortController {
   const controller = new AbortController()
-
   const token = localStorage.getItem('token')
+  // 错误控制帧已给出终态，不再补发 onDone（避免"失败 + 正常结束"双回调）。
+  let settled = false
+
   fetch('/api/chat/stream', {
     method: 'POST',
     headers: {
@@ -41,57 +61,35 @@ export function createStreamChat(
   })
     .then(async (response) => {
       if (!response.ok) {
-        let errorMsg = '网络请求失败'
+        handlers.onError?.(await readResponseError(response))
+        return
+      }
+
+      await readSse(response, (payload) => {
+        let parsed: { token?: unknown }
         try {
-          const errData = await response.json()
-          errorMsg = errData.detail || errData.error?.message || `请求失败 (HTTP ${response.status})`
+          parsed = JSON.parse(payload)
         } catch {
-          errorMsg = `请求失败 (HTTP ${response.status})`
+          return // 非法 JSON 帧：跳过
         }
-        onError(errorMsg)
-        return
-      }
+        if (typeof parsed.token !== 'string') return
 
-      const reader = response.body?.getReader()
-      if (!reader) {
-        onError('无法读取响应流')
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') {
-              onDone()
-              return
-            }
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.token) {
-                onToken(parsed.token)
-              }
-            } catch {
-              // Skip invalid JSON
-            }
-          }
+        const frame = parseControlFrame(parsed.token)
+        if (!frame) {
+          handlers.onToken?.(parsed.token)
+          return
         }
-      }
-      onDone()
+        if (frame.type === 'error') {
+          settled = true
+          handlers.onError?.(frame.message ?? '对话失败，请稍后重试')
+          return 'stop'
+        }
+      })
+      if (!settled) handlers.onDone?.()
     })
     .catch((err) => {
       if (err.name !== 'AbortError') {
-        onError(err.message || '流式请求失败')
+        handlers.onError?.(err.message || '流式请求失败')
       }
     })
 

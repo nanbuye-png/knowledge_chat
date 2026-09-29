@@ -78,18 +78,20 @@ export default function ChatPage() {
       chatApi.createStreamChat(
         content,
         history,
-        (token) => {
-          fullContent += token
-          updateLastMessage(fullContent)
-        },
-        () => {
-          setStreaming(false)
-          // 服务端已按首条消息自动生成标题，刷新列表即可看到
-          fetchConversations()
-        },
-        (error) => {
-          updateLastMessage(`抱歉，对话出错：${error}`)
-          setStreaming(false)
+        {
+          onToken: (token) => {
+            fullContent += token
+            updateLastMessage(fullContent)
+          },
+          onDone: () => {
+            setStreaming(false)
+            // 服务端已按首条消息自动生成标题，刷新列表即可看到
+            fetchConversations()
+          },
+          onError: (error) => {
+            updateLastMessage(`抱歉，对话出错：${error}`)
+            setStreaming(false)
+          },
         },
         conversationId
       )

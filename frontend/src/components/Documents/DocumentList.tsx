@@ -38,20 +38,39 @@ export default function DocumentList({ documents, loading, uploadProgress, onDel
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="mx-3 mt-2 p-3 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800"
+            className={`mx-3 mt-2 p-3 rounded-xl border ${
+              uploadProgress.skipped
+                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800'
+                : 'bg-primary-50 dark:bg-primary-900/20 border-primary-100 dark:border-primary-800'
+            }`}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-primary-700 dark:text-primary-300 truncate max-w-[150px]">
+              <span className={`text-xs font-medium truncate max-w-[150px] ${
+                uploadProgress.skipped
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-primary-700 dark:text-primary-300'
+              }`}>
                 {uploadProgress.filename}
               </span>
-              <span className="text-xs text-primary-500">
-                {uploadProgress.status === 'uploading' ? '上传中...' :
+              <span className={`text-xs ${uploadProgress.skipped ? 'text-amber-600 dark:text-amber-400' : 'text-primary-500'}`}>
+                {/* §5.3 幂等：后端未新建记录也未派发任务，明确告诉用户"没有被重复处理" */}
+                {uploadProgress.skipped ? '已跳过（内容重复）' :
+                 uploadProgress.status === 'uploading' ? '上传中...' :
                  uploadProgress.status === 'processing' ? '处理中...' : ''}
               </span>
             </div>
-            <div className="w-full h-1.5 bg-primary-200 dark:bg-primary-800 rounded-full overflow-hidden">
+            {uploadProgress.skipped && uploadProgress.message && (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mb-2">{uploadProgress.message}</p>
+            )}
+            <div className={`w-full h-1.5 rounded-full overflow-hidden ${
+              uploadProgress.skipped ? 'bg-amber-200 dark:bg-amber-800' : 'bg-primary-200 dark:bg-primary-800'
+            }`}>
               <motion.div
-                className="h-full bg-gradient-to-r from-primary-500 to-primary-600 rounded-full"
+                className={`h-full rounded-full ${
+                  uploadProgress.skipped
+                    ? 'bg-amber-400 dark:bg-amber-500'
+                    : 'bg-gradient-to-r from-primary-500 to-primary-600'
+                }`}
                 initial={{ width: '0%' }}
                 animate={{
                   width: uploadProgress.status === 'completed' ? '100%' :

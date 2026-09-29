@@ -40,6 +40,8 @@ function getFileIcon(type: string) {
 function getStatusIcon(status: string) {
   switch (status) {
     case 'completed': return <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+    // 后端上传后先落 PENDING（等待后台 Worker 认领），再 PROCESSING
+    case 'pending': return <Clock className="w-3.5 h-3.5 text-slate-400" />
     case 'processing': return <Clock className="w-3.5 h-3.5 text-amber-500" />
     case 'failed': return <AlertCircle className="w-3.5 h-3.5 text-red-500" />
     default: return null
@@ -49,6 +51,7 @@ function getStatusIcon(status: string) {
 function getStatusText(status: string) {
   switch (status) {
     case 'completed': return '已完成'
+    case 'pending': return '排队中'
     case 'processing': return '处理中'
     case 'failed': return '失败'
     default: return status
@@ -100,6 +103,8 @@ export default function DocumentItem({ document, onDelete }: DocumentItemProps) 
         {document.status === 'failed' && document.error_message && (
           <p className="text-xs text-red-400 mt-0.5 truncate" title={document.error_message}>
             {document.error_message}
+            {/* §5.2：文档级重试次数（>0 说明经过重试仍失败，便于区分"偶发抖动"与"稳定失败"） */}
+            {document.retry_count ? ` · 已重试 ${document.retry_count} 次` : ''}
           </p>
         )}
       </div>
