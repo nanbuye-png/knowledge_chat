@@ -44,6 +44,45 @@ async def verify_knowledge_base_access(
     return kb
 
 
+async def verify_conversation_knowledge_base(
+    db: AsyncSession,
+    conversation_id: int,
+    knowledge_base_id: int,
+    current_user: User,
+):
+    """知识库问答的前置校验：知识库归属 + 会话归属 + 两者一致性。
+
+    审计 §6.2（IDOR）：此前只在 ``conversation_id is None`` 时才调用
+    :func:`verify_knowledge_base_access`，于是「自己的会话 + 他人的
+    ``knowledge_base_id``」可以越过归属校验直接检索别人的知识库。
+
+    现在两条路径统一走这里：
+
+    1. 知识库必须属于当前用户（否则 403）；
+    2. 会话必须属于当前用户（否则 403）；
+    3. 会话若已绑定知识库，必须与请求的知识库一致（否则 403）——
+       这是纵深防御：避免「A 库的会话」被用来读写「B 库」的上下文。
+    """
+    await verify_knowledge_base_access(db, knowledge_base_id, current_user)
+
+    try:
+        conversation = await _verify_conversation_ownership(
+            db, conversation_id, current_user.id
+        )
+    except ValueError:
+        raise HTTPException(status_code=403, detail="无权访问该会话")
+
+    bound_kb_id = conversation.knowledge_base_id
+    if bound_kb_id is not None and bound_kb_id != knowledge_base_id:
+        logger.warning(
+            f"Knowledge base mismatch: conversation_id={conversation_id} "
+            f"bound to kb={bound_kb_id} but request asked for kb={knowledge_base_id}"
+        )
+        raise HTTPException(status_code=403, detail="会话与知识库不匹配")
+
+    return conversation
+
+
 @router.post(
     "/query",
     response_model=QueryResponse,
@@ -65,10 +104,19 @@ async def query_knowledge(
     await update_user_activity(db, current_user.id)
     logger.info(f"Knowledge query: {request.question[:100]}...")
 
-    # Save user message if conversation_id is provided
+    # 审计 §6.2（IDOR）：知识库归属校验必须**无条件**执行。此前只在
+    # conversation_id 为空时校验，于是「自己的会话 + 他人的 knowledge_base_id」
+    # 可以绕过校验检索别人的知识库。
+    if request.conversation_id is not None:
+        await verify_conversation_knowledge_base(
+            db, request.conversation_id, request.knowledge_base_id, current_user
+        )
+    else:
+        await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
+
+    # 校验通过后才写入用户消息（403 时不留任何副作用）
     if request.conversation_id is not None:
         try:
-            await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
             await create_user_message(db, request.conversation_id, request.question)
             await auto_update_conversation_title(db, request.conversation_id, request.question)
         except ValueError:
@@ -79,9 +127,6 @@ async def query_knowledge(
                 answer="抱歉，消息保存失败，请稍后重试。",
                 has_knowledge=False,
             )
-
-    if request.conversation_id is None:
-        await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
 
     try:
         result = await chat_service.query_knowledge(
@@ -130,25 +175,32 @@ async def stream_query_knowledge(
             user_msg_saved = False
             await update_user_activity(db, current_user.id)
 
+            # 审计 §6.2（IDOR）：流式路径同样无条件校验知识库归属
+            # （此前只在 conversation_id 为空时校验）。
             if request.conversation_id is not None:
                 try:
-                    await _verify_conversation_ownership(db, request.conversation_id, current_user.id)
-                    await create_user_message(db, request.conversation_id, request.question)
-                    await auto_update_conversation_title(db, request.conversation_id, request.question)
-                    user_msg_saved = True
-                except ValueError:
-                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该会话'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                    await verify_conversation_knowledge_base(
+                        db, request.conversation_id, request.knowledge_base_id, current_user
+                    )
+                except HTTPException as exc:
+                    detail = exc.detail if isinstance(exc.detail, str) else "无权访问该会话"
+                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': detail}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
-                except Exception:
-                    logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
-                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '消息保存失败，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
-                    return
-
-            if request.conversation_id is None:
+            else:
                 try:
                     await verify_knowledge_base_access(db, request.knowledge_base_id, current_user)
                 except HTTPException:
                     yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '无权访问该知识库'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
+                    return
+
+            if request.conversation_id is not None:
+                try:
+                    await create_user_message(db, request.conversation_id, request.question)
+                    await auto_update_conversation_title(db, request.conversation_id, request.question)
+                    user_msg_saved = True
+                except Exception:
+                    logger.exception(f"Failed to save user message for conversation_id={request.conversation_id}")
+                    yield f"data: {json.dumps({'token': json.dumps({'type': 'error', 'message': '消息保存失败，请稍后重试。'}, ensure_ascii=False)}, ensure_ascii=False)}\n\n"
                     return
 
             try:

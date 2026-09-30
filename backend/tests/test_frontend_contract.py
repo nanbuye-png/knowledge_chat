@@ -254,7 +254,10 @@ def _run_knowledge_route(
     monkeypatch.setattr(kq, "async_session", lambda: _FakeSessionContext(AsyncMock()))
     monkeypatch.setattr(kq, "update_user_activity", AsyncMock())
     monkeypatch.setattr(kq, "verify_knowledge_base_access", AsyncMock())
-    monkeypatch.setattr(kq, "_verify_conversation_ownership", AsyncMock())
+    # 会话绑定的知识库与请求一致（审计 §6.2 新增的一致性校验，请求 kb=1）
+    ownership = AsyncMock()
+    ownership.return_value.knowledge_base_id = 1
+    monkeypatch.setattr(kq, "_verify_conversation_ownership", ownership)
     monkeypatch.setattr(kq, "auto_update_conversation_title", AsyncMock())
 
     saved: dict = {"user": [], "assistant": []}
