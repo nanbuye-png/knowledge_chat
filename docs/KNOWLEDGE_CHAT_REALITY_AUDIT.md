@@ -6,6 +6,10 @@
 > **审计范围**：`backend/app/**`（146 个 Python 文件）、`frontend/src/**`（125 个 TS/TSX）、`backend/tests/**`、
 > `alembic/**`、`docs/**`、`docker*`、`nginx/**`、`k8s/**`、`helm/**`、`monitoring/**`、`.github/workflows/**`
 > **审计基线 commit**：`a689bf2`（branch `main`，工作区干净）
+>
+> **整改进度（2026-09-30 更新）**：本报告是审计当日的**快照**，正文不做追溯修改（保留实测证据）。
+> 其中 P0/P1 项已在 Phase 1–3 修复并逐条提交，**逐项对应 commit 见文末 §14 整改进度表**。
+> 判断"现在能不能用"请先看该表，不要按已修复的旧结论做决策。
 
 ---
 
@@ -1036,3 +1040,35 @@ Phase 1 建议顺序（与计划 §20 一致，每步独立 commit + 独立测�
   - Unit Test（正常 / 空输入 / 依赖失败 fallback）
   - 与 P0-2 / P0-5 相关的可复现性保障
 ```
+
+---
+
+## 14. 整改进度（2026-09-30）
+
+本节记录 §1–§12 各项结论的**当前**状态与对应 commit。审计正文保持为审计当日的快照
+（不做追溯修改，避免掩盖当时的实测证据）；判断"现在能不能用"请以本表为准。
+
+| 审计条目 | 问题 | 状态 | commit |
+|---|---|---|---|
+| §6.2 | 知识库越权读（IDOR）：仅"无会话"分支校验归属 | ✅ 已修复（两条分支统一校验知识库 / 会话 / 一致性） | `4ac39e8` |
+| §6.1 | 占位 `SECRET_KEY` 可上线、`/docs` 生产暴露 | ✅ 已修复（fail-fast + 按环境关闭文档） | `3bb33f4` |
+| §6.3 | RBAC 联表导致管理后台全量 500 | ✅ 已修复（联表 + 遗留角色映射 + ROOT 收敛） | `dd815fa` |
+| §6.1 / §5.3 | token 不校验用户状态、API Key 通道不可用、naive/aware UTC | ✅ 已修复 | `d8ca420` |
+| §3.5 / §5.5 | 500 拼接 `str(e)` 泄漏内部信息、错误契约不统一 | ✅ 已修复（固定文案 + `code` + `request_id`，异常只进日志） | `0aa43bb` |
+| §5.3 | `api_keys` 迁移为空桩（表根本不存在） | ✅ 已修复（迁移建表 + 不再手工维护模型 import） | `4c24dc5` |
+| §4 | Agent / Workflow / Tools 后端缺失、前端假数据冒充功能 | 🟡 部分修复：工具层真实落地（`kb_search` / `calculator` + `/api/tools`）；Agent / Workflow 明确标注 Planned | `474ebfa` |
+| §7.1 / §7.2 | 缺 `.dockerignore` / 健康检查 / 前端 SPA rewrite | ✅ 已修复 | `80f36ba` |
+| §7.3 / §7.5 | K8s 缺 PVC、多副本与 SQLite/向量库冲突；Nginx `X-Forwarded-For` 与上传体积 | ✅ 已修复 | `df585ba` |
+| §7.4 / §5.6 | Helm 空壳（0 资源）、Grafana 面板缺失 | 🟡 仅文档标注 Planned（产物仍未落地） | `65920af` |
+| §8.5 | 评测产物归档口径（smoke 产物混入） | ✅ 已修复 | `ccb1c86` |
+| §3.2 等前端契约 | 前端未适配 Phase 3 后端契约 | ✅ 已修复 | `760d383` |
+
+测试基线：审计当日 **235 passed** → 现在 **629 passed / 0 failed**；`backend/conftest.py`
+提供真实 SQLite（schema 由模型元数据创建），`tests/test_sprint31_ai_enhancement.py`
+中与生产无关的玩具类已删除（改为断言"未实现"这一事实）。
+
+说明：本表只覆盖本轮整改板（Phase 1–3 收尾）的 commit。审计中其余**工程类**条目已由
+Phase 1–3 的功能提交覆盖，例如统一重试 `16d9169`、上传幂等 `5f58d65`、Redis protocol `f67474b`、
+异步入库 `9b95218`、指标与埋点 `4572adf`；请以代码与 §1 状态总览为准，不要按审计当日的旧结论判断。
+仍未落地的**产物**：§7.4 Helm 资源模板、§5.6 Grafana 面板（两者已在 README 标注 Planned）。
+

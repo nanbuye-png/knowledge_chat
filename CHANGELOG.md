@@ -1,5 +1,34 @@
 # 更新日志
 
+## v1.0.1 (2026-09-30) — Reality Audit 整改（Phase 1–3）
+
+基于 `docs/KNOWLEDGE_CHAT_REALITY_AUDIT.md`（审计基线 `a689bf2`）的实际修复，每个条目对应一个独立 commit。
+后端测试基线：**235 passed → 629 passed**（`cd backend && python -m pytest -q`）。
+
+### 安全 / 鉴权（P0）
+- **知识库越权读修复** — 此前只在「无会话」分支校验知识库归属，导致「自己的会话 + 他人的 `knowledge_base_id`」可越权检索；现在两条分支统一校验知识库归属 + 会话归属 + 二者一致性（`4ac39e8`）
+- **占位 SECRET_KEY 拒绝启动** — 生产环境使用默认占位密钥直接 fail-fast；`/docs`、`/redoc`、`/openapi.json` 按环境关闭（`3bb33f4`）
+- **RBAC 全量 500 修复** — 权限联表 SQL 修复 + 遗留角色映射 + ROOT 授权收敛（`dd815fa`）
+- **认证通道修复** — 拒绝已禁用/已删除用户的 token，修复 API Key 认证通道，统一 naive/aware UTC 处理（`d8ca420`）
+
+### 契约与前端一致性
+- **错误契约统一** — `/api/*` 的 500 不再拼接 `str(e)`（SQL/DSN/堆栈会顺响应泄漏），改为固定文案 + `code=INTERNAL_ERROR` + `request_id`，原始异常仅进日志（`0aa43bb`）
+- **前端契约适配** — 按 Phase 3 后端契约调整前端解析（`760d383`）
+- **工具层落地（最小真实路径）** — 新增 `kb_search`（复用生产检索链路 + 归属校验）与 `calculator`（AST 白名单，不使用 eval）两个真实工具，端点 `GET /api/tools`、`POST /api/tools/run`、`POST /api/tools/{tool_name}[/invoke]`，含超时 / 最大调用次数 / 失败处理；删除前端占位假数据，Agent / Workflow 页面统一标注 Planned（`474ebfa`）
+
+### 工程 / 数据
+- **`api_keys` 表缺失修复** — 迁移文件此前是空桩（`upgrade()/downgrade()` 均为 `pass`），现由迁移建表；不再手工维护模型 import 列表（`4c24dc5`）
+- **评测产物归档口径** — 只归档正式评测报告，忽略 smoke 产物（`ccb1c86`）
+
+### 部署 / 文档
+- **镜像与 Compose** — 补 `.dockerignore`、健康检查、前端镜像 SPA rewrite（`80f36ba`）
+- **Nginx / K8s** — 上传体积与 `X-Forwarded-For` 加固、补 `pvc.yaml`、后端固定单副本（`df585ba`）
+- **文档口径修正** — Helm Chart 与 Grafana 栈明确标注 Planned（`65920af`）；README 的「Agents / Workflows / Tools」措辞修正为「工具层已实现 + Agent/Workflow Planned」
+
+### 测试
+- 新增 `tests/test_tools.py`（工具端点 / 注册表 / 前端 Planned 文本契约）、`tests/test_error_contract.py`（500 不泄漏 + 统一契约）等；按审计 §4 删除 `test_sprint31` 内与生产无关的玩具
+  `Tool` / `Workflow` / `Agent` 类，改为断言「未实现」这一事实
+
 ## v1.0.1 (2026-09-22)
 
 ### LLM 模型升级：agnes-2.5-flash

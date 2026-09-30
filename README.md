@@ -120,12 +120,12 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 knowledge_chat/
 ├── backend/
 │   ├── app/
-│   │   ├── api/           # API 路由 (admin/auth/chat/knowledge/...)
+│   │   ├── api/           # API 路由 (admin/auth/chat/knowledge/tools/...)
 │   │   ├── auth/          # JWT 认证
 │   │   ├── core/          # 配置、日志、异常、权限
 │   │   ├── models/        # SQLAlchemy 数据模型
 │   │   ├── schemas/       # Pydantic 请求/响应
-│   │   ├── services/      # 业务逻辑 (llm/knowledge/retrieval/usage/tasks/...)
+│   │   ├── services/      # 业务逻辑 (llm/knowledge/retrieval/tools/usage/tasks/...)
 │   │   └── storage/       # 数据库 & 向量存储
 │   ├── scripts/           # 工具脚本 (create_root.py 等)
 │   └── tests/             # 测试
