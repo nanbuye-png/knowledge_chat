@@ -16,17 +16,20 @@ if str(_backend_root) not in sys.path:
 from app.core.config import settings  # noqa: E402
 
 # ---- Import all models so Alembic can detect them ----
+# 审计 §6.1-5：这里原来是**手写清单**，新增模型（api_keys）忘了加进来，
+# autogenerate 于是产出空迁移（只有 ``pass``）却被 stamp 成 head —— 结果
+# 「迁移都跑过了，表还是没有」，直到调用 /api/api-keys 才炸。
+# 现在与 tests/conftest.py 一样遍历 app/models/*.py 自动导入，新增模型
+# 不需要再改这个文件（tests/test_api_keys_migration.py 会守住这条）。
+import importlib  # noqa: E402
+import pkgutil  # noqa: E402
+
+import app.models as _models_pkg  # noqa: E402
 from app.models.document import Base  # noqa: E402
-from app.models.user import User  # noqa: E402, F401
-from app.models.knowledge_base import KnowledgeBase  # noqa: E402, F401
-from app.models.document import Document  # noqa: E402, F401
-from app.models.conversation import Conversation  # noqa: E402, F401
-from app.models.message import Message  # noqa: E402, F401
-from app.models.llm_model import LLMModel  # noqa: E402, F401
-from app.models.prompt_template import PromptTemplate  # noqa: E402, F401
-from app.models.prompt_template_version import PromptTemplateVersion  # noqa: E402, F401
-from app.models.llm_usage import LLMUsage  # noqa: E402, F401
-from app.models.knowledge_config import KnowledgeConfig  # noqa: E402, F401
+
+for _module_info in pkgutil.iter_modules(_models_pkg.__path__):
+    if _module_info.name != "__init__":
+        importlib.import_module(f"app.models.{_module_info.name}")
 
 # ---- Alembic Config object ----
 config = context.config
