@@ -57,7 +57,7 @@ class TestDockerCompose:
         print(f"[PASS] Dockerfiles exist: backend, frontend")
 
     def test_nginx_config(self):
-        """nginx.conf 存在且配置正确"""
+        """nginx.conf 存在且配置正确（审计 §7.5 的五条修正）"""
         path = os.path.join(_backend_dir, "..", "nginx", "nginx.conf")
         assert os.path.exists(path)
         with open(path, encoding="utf-8") as f:
@@ -65,7 +65,32 @@ class TestDockerCompose:
         assert "gzip on" in content
         assert "/api/" in content
         assert "proxy_pass" in content
-        print(f"[PASS] nginx.conf: gzip, proxy, api routes configured")
+        # §7.5-1：body 上限必须与应用侧 MAX_FILE_SIZE=50MB 一致（此前 413）
+        assert "client_max_body_size 50m;" in content
+        # §7.5-3：只写真实对端，不保留客户端伪造的 X-Forwarded-For
+        assert "X-Forwarded-For $remote_addr;" in content
+        assert "$proxy_add_x_forwarded_for" not in content
+        # §7.5-4：/health 必须真正转发到后端
+        assert "proxy_pass http://backend/api/health;" in content
+        assert 'return 200 "OK"' not in content
+        # §7.5-5：/ws/ 没有对应的后端路由，是死配置
+        assert "location /ws/" not in content
+        # §7.5-2：Connection 必须按 Upgrade 头动态取值（无条件 upgrade 破坏 keepalive）
+        assert "Connection $connection_upgrade;" in content
+        print("[PASS] nginx.conf: 50m / XFF 加固 / health 真转发 / 无死配置")
+
+    def test_nginx_ssl_config_matches(self):
+        """HTTPS 模板必须与主配置保持同一套修正（否则上生产就回退到旧问题）。"""
+        path = os.path.join(_backend_dir, "..", "nginx", "nginx.ssl.conf")
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        assert "client_max_body_size 50m;" in content
+        assert "X-Forwarded-For $remote_addr;" in content
+        assert "$proxy_add_x_forwarded_for" not in content
+        assert "proxy_pass http://backend/api/health;" in content
+        assert 'return 200 "OK"' not in content
+        assert "location /ws/" not in content
+        print("[PASS] nginx.ssl.conf: 与 nginx.conf 同一套修正")
 
     def test_dockerignore_excludes_secrets_and_build_artifacts(self):
         """审计 §7.1-1（P0）：没有 .dockerignore 时 backend/.env 会被打进镜像。
@@ -237,10 +262,36 @@ class TestKubernetes:
 
         deploy = next(d for d in docs if d["kind"] == "Deployment")
         spec = deploy["spec"]
-        assert spec["replicas"] == 2
+        # 审计 §7.3-2：本地 ChromaDB 是"每 Pod 一份" → 后端必须单副本，
+        # 且用 Recreate 避免 RWO 卷的滚动更新死锁。
+        assert spec["replicas"] == 1, "本地向量库下后端只能单副本（审计 §7.3-2）"
+        assert spec["strategy"]["type"] == "Recreate", "RWO 卷不能用 RollingUpdate"
         assert "livenessProbe" in spec["template"]["spec"]["containers"][0]
         assert "readinessProbe" in spec["template"]["spec"]["containers"][0]
-        print(f"[PASS] K8s backend: 2 replicas, health probes")
+        print(f"[PASS] K8s backend: 单副本 + Recreate + health probes")
+
+    def test_pvc_definitions_exist(self):
+        """审计 §7.3-1：Deployment 引用的 PVC 必须真的定义，否则 Pod 永远 Pending。"""
+        backend_path = os.path.join(_backend_dir, "..", "k8s", "backend-deployment.yaml")
+        with open(backend_path, encoding="utf-8") as f:
+            backend_docs = list(yaml.safe_load_all(f))
+        deploy = next(d for d in backend_docs if d["kind"] == "Deployment")
+        claims = {
+            v["persistentVolumeClaim"]["claimName"]
+            for v in deploy["spec"]["template"]["spec"]["volumes"]
+            if "persistentVolumeClaim" in v
+        }
+
+        pvc_path = os.path.join(_backend_dir, "..", "k8s", "pvc.yaml")
+        assert os.path.exists(pvc_path), "必须有 k8s/pvc.yaml（审计 §7.3-1）"
+        with open(pvc_path, encoding="utf-8") as f:
+            pvc_docs = [d for d in yaml.safe_load_all(f) if d]
+        assert all(d["kind"] == "PersistentVolumeClaim" for d in pvc_docs)
+
+        defined = {d["metadata"]["name"] for d in pvc_docs}
+        missing = claims - defined
+        assert not missing, f"Deployment 引用了未定义的 PVC：{missing}"
+        print(f"[PASS] K8s PVC: {sorted(defined)} 已定义且被 Deployment 引用")
 
     def test_configmap(self):
         """ConfigMap 配置"""
@@ -309,20 +360,35 @@ class TestHPA:
     """Step 8: HPA Auto Scaling"""
 
     def test_hpa_config(self):
-        """HPA 配置"""
+        """HPA 配置：本地向量库下必须"锁死在单副本"（审计 §7.3-2）。"""
         path = os.path.join(_backend_dir, "..", "k8s", "hpa.yaml")
         assert os.path.exists(path)
 
         with open(path, encoding="utf-8") as f:
             hpa = yaml.safe_load(f)
-        assert hpa["spec"]["minReplicas"] == 2
-        assert hpa["spec"]["maxReplicas"] == 10
+        # 曾经是 2-10：与本地 ChromaDB（每 Pod 一份数据）直接冲突 ——
+        # 扩容会让向量检索结果分叉。现在上下限都是 1，等向量库外置再放开。
+        assert hpa["spec"]["minReplicas"] == 1
+        assert hpa["spec"]["maxReplicas"] == 1, "向量库外置前不得扩容（审计 §7.3-2）"
 
         metrics = hpa["spec"]["metrics"]
         metric_names = [m["resource"]["name"] for m in metrics]
         assert "cpu" in metric_names
         assert "memory" in metric_names
-        print(f"[PASS] HPA: 2-10 replicas, CPU 70%, Memory 80%")
+        print("[PASS] HPA: 1-1（本地向量库约束，CPU/Memory 指标保留）")
+
+    def test_ingress_body_size_matches_app_limit(self):
+        """审计 §7.3-4：入口 body 上限必须与应用侧 50MB 一致，否则大文件 413。"""
+        path = os.path.join(_backend_dir, "..", "k8s", "frontend-deployment.yaml")
+        with open(path, encoding="utf-8") as f:
+            docs = [d for d in yaml.safe_load_all(f) if d]
+        ingress = next((d for d in docs if d.get("kind") == "Ingress"), None)
+        assert ingress is not None, "Ingress 必须存在（此前测试用了 if 判断，删掉也能过）"
+
+        annotations = ingress["metadata"]["annotations"]
+        assert annotations.get("nginx.ingress.kubernetes.io/proxy-body-size") == "50m"
+        assert "tls" in ingress["spec"]
+        print("[PASS] Ingress: proxy-body-size=50m + TLS")
 
 
 class TestSecurity:

@@ -5,7 +5,15 @@ metadata:
   labels:
     app: knowledge-backend
 spec:
-  replicas: 2
+  # 审计 §7.3-2（架构矛盾）：本项目的向量库是**本地 ChromaDB PersistentClient**，
+  # 数据落在每个 Pod 自己的 /app/chroma_db 里。扩到 2 个副本不是"更稳"，而是
+  # 让两个 Pod 各持一份互相看不见的向量数据 → 检索结果随机分叉（写入也只落在
+  # 其中一份上）。因此在向量库外置（独立服务/共享存储）之前，后端**只能单副本**。
+  replicas: 1
+  # RWO 卷 + 单副本时，RollingUpdate 会出现"新 Pod 等旧 Pod 释放卷"的死锁，
+  # 用 Recreate 明确"先停后起"（有短暂不可用，换取不会卡死）。
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: knowledge-backend
@@ -16,7 +24,9 @@ spec:
     spec:
       containers:
       - name: backend
-        image: ghcr.io/nanbuye-png/knowledge_chat/backend:latest
+        # 审计 §7.3-5：标签必须与 compose（1.0.1）/VERSION 一致；发布时建议
+        # 改为按 digest 固定（image@sha256:...），避免 latest 漂移。
+        image: ghcr.io/nanbuye-png/knowledge_chat/backend:1.0.1
         ports:
         - containerPort: 8000
         envFrom:

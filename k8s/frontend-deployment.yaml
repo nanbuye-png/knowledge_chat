@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: ghcr.io/nanbuye-png/knowledge_chat/frontend:latest
+        # 与 compose / VERSION 对齐（审计 §7.3-5：此前 k8s 用 latest、compose 用 1.0.1）
+        image: ghcr.io/nanbuye-png/knowledge_chat/frontend:1.0.1
         ports:
         - containerPort: 80
         resources:
@@ -47,6 +48,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # 审计 §7.3-4：ingress-nginx 默认 body 上限 1m，与会话上传的 50MB 不一致
+    # → 大文件在入口就被 413。必须与 nginx/nginx.conf 的 client_max_body_size 对齐。
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 spec:
   ingressClassName: nginx
   rules:

@@ -320,8 +320,9 @@ docker push ghcr.io/nanbuye-png/knowledge_chat/frontend:1.0.1
 
 ```bash
 # 方式一：原生 k8s 清单
-kubectl apply -f k8s/secret.yaml      # 先修改为真实密钥
+kubectl apply -f k8s/secret.yaml      # 先修改为真实密钥（SECRET_KEY 必填）
 kubectl apply -f k8s/configmap.yaml   # 修改 CORS_ORIGINS 等
+kubectl apply -f k8s/pvc.yaml         # 上传文件 + 向量库持久卷（Deployment 依赖它）
 kubectl apply -f k8s/backend-deployment.yaml
 kubectl apply -f k8s/frontend-deployment.yaml
 kubectl apply -f k8s/hpa.yaml
@@ -334,8 +335,17 @@ helm install knowledge-chat ./helm/knowledge-chat \
   --set ingress.host=your-domain.com
 ```
 
+> ⚠️ **后端在 Kubernetes 里是"单副本"设计**：向量库是本地 ChromaDB，数据落在
+> Pod 自己的 `/app/chroma_db` 里。扩到多副本不会更稳，而是让每个 Pod 各持一份
+> 互相看不见的向量数据，检索结果随机分叉。因此
+> `k8s/backend-deployment.yaml` 固定 `replicas: 1` + `strategy: Recreate`
+> （RWO 卷不适合滚动更新），`k8s/hpa.yaml` 的上下限也都是 1。
+> 需要横向扩容时，先把向量库外置（独立 Chroma 服务 / pgvector 等）。
+
 > 注：k8s/Helm 部署依赖 PostgreSQL 与 Redis 实例（可通过外部服务或云厂商托管），
 > 部署前请根据 `k8s/configmap.yaml` 与 `helm/knowledge-chat/values.yaml` 调整连接地址。
+> 上传体积上限在入口处由 `nginx.ingress.kubernetes.io/proxy-body-size: 50m`
+> 控制，与后端 `MAX_FILE_SIZE` 保持一致。
 
 ---
 

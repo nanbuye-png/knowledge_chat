@@ -7,8 +7,14 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: knowledge-backend
-  minReplicas: 2
-  maxReplicas: 10
+  # 审计 §7.3-2：后端是**本地 ChromaDB**（每 Pod 一份数据），HPA 扩容等于把
+  # 向量数据切成互不可见的多份 —— 因此上下限都钉在 1。保留这个对象是为了
+  # 显式声明"曾计划扩容"，而不是现在就扩。
+  # 要做真高可用，先完成向量库外置（独立 Chroma 服务 / pgvector 等），再把
+  # maxReplicas 提到 2 以上，并同步改后端 Deployment 的 replicas 与
+  # strategy（Recreate → RollingUpdate）。
+  minReplicas: 1
+  maxReplicas: 1
   metrics:
   - type: Resource
     resource:

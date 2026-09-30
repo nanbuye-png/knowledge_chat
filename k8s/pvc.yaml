@@ -1,0 +1,35 @@
+# 持久卷声明（审计 §7.3-1：后端 Deployment 引用了 knowledge-uploads /
+# knowledge-chroma，但仓库里**没有 PVC 定义** → Pod 永远 Pending，属于
+# "清单看起来齐全、却部署不起来"的典型）。
+#
+# 两个卷承载的东西都不能丢：
+#   * knowledge-uploads —— 用户上传的文档原件；
+#   * knowledge-chroma  —— 本地 ChromaDB 数据（丢了要整库重建索引，且要重跑嵌入）。
+#
+# storageClassName 留空即使用集群默认 StorageClass；如集群没有默认值，
+# 请显式填写（例如 standard / gp2 / local-path）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: knowledge-uploads
+  labels:
+    app: knowledge-backend
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: knowledge-chroma
+  labels:
+    app: knowledge-backend
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
