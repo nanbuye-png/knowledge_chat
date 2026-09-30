@@ -61,10 +61,15 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 - Agents / Workflows / Tools：AI Agent 平台框架
 
 ### 📊 可观测性中心 (v1.0.1 新增)
-- Monitoring Dashboard：系统 + AI 健康度监控
+- Monitoring Dashboard：系统 + AI 健康度监控（管理后台"监控"页）
 - AI Metrics：AI 调用指标与模型排行
 - Token Analytics：Token 消耗趋势分析
 - Error Tracking：错误追踪
+- 指标端点：后端 `/metrics`（Prometheus 文本格式），可直接被外部抓取
+
+> 这一节指的是**应用内**的监控面板（已实现）。**外部** Prometheus + Grafana 整套
+> 栈目前只提供了抓取配置模板（`monitoring/prometheus/prometheus.yml`），
+> Grafana 面板与 Compose/Helm 服务属于 Planned，尚未开箱可用。
 
 ---
 
@@ -94,13 +99,15 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 | 图标 | lucide-react |
 
 ### 部署
-| 组件 | 技术 |
-|------|------|
-| 容器化 | Docker + Docker Compose |
-| 编排 | Helm / Kubernetes (k8s) |
-| 反向代理 | Nginx (HTTP/HTTPS) |
-| 可观测性 | Prometheus + Grafana (monitoring/) |
-| CI/CD | GitHub Actions |
+| 组件 | 技术 | 状态 |
+|------|------|------|
+| 容器化 | Docker + Docker Compose | ✅ dev / prod 均可直接使用 |
+| 编排 | Kubernetes（`k8s/` 原生清单） | ✅ 含 PVC / Ingress / 单副本约束 |
+| 编排 | Helm Chart（`helm/knowledge-chat/`） | ⚠️ **Planned**：当前只有 `values.yaml` 骨架，`templates/` 仅 `_helpers.tpl`，`helm install` 创建 0 个资源 |
+| 反向代理 | Nginx (HTTP/HTTPS) | ✅ 含 50MB 上传上限、X-Forwarded-For 加固 |
+| 可观测性 | 应用内监控面板 + `/metrics` | ✅ 面板与指标端点已实现 |
+| 可观测性 | Prometheus 抓取 / Grafana 面板 | ⚠️ **部分**：`monitoring/prometheus/prometheus.yml` 已提供，Grafana 面板与 Compose 服务尚未落地 |
+| CI/CD | GitHub Actions | ✅ |
 
 ---
 
@@ -132,9 +139,9 @@ knowledge_chat/
 ├── Dockerfile.backend     # 后端镜像
 ├── Dockerfile.frontend    # 前端镜像
 ├── nginx/                 # Nginx 反向代理配置 (HTTP / HTTPS)
-├── helm/knowledge-chat/   # Helm Chart
-├── k8s/                   # Kubernetes 部署清单
-├── monitoring/            # Prometheus + Grafana 监控配置
+├── helm/knowledge-chat/   # Helm Chart（Planned：目前仅 values 骨架，无资源模板）
+├── k8s/                   # Kubernetes 部署清单（含 pvc.yaml）
+├── monitoring/            # Prometheus 抓取配置（Grafana 面板待补）
 ├── CHANGELOG.md           # 更新日志
 └── VERSION                # 版本号
 ```
@@ -316,10 +323,10 @@ docker push ghcr.io/nanbuye-png/knowledge_chat/frontend:1.0.1
 
 ### 四、Kubernetes / Helm 部署
 
-项目提供了 Kubernetes 清单（`k8s/`）与 Helm Chart（`helm/knowledge-chat/`）：
+项目提供了 Kubernetes 清单（`k8s/`）；Helm Chart（`helm/knowledge-chat/`）目前是 **Planned 状态**（只有 values 骨架，没有资源模板，`helm install` 不会创建任何资源），请优先使用原生清单：
 
 ```bash
-# 方式一：原生 k8s 清单
+# 方式一：原生 k8s 清单（推荐）
 kubectl apply -f k8s/secret.yaml      # 先修改为真实密钥（SECRET_KEY 必填）
 kubectl apply -f k8s/configmap.yaml   # 修改 CORS_ORIGINS 等
 kubectl apply -f k8s/pvc.yaml         # 上传文件 + 向量库持久卷（Deployment 依赖它）
@@ -327,12 +334,12 @@ kubectl apply -f k8s/backend-deployment.yaml
 kubectl apply -f k8s/frontend-deployment.yaml
 kubectl apply -f k8s/hpa.yaml
 
-# 方式二：Helm
-helm install knowledge-chat ./helm/knowledge-chat \
-  --set secrets.postgresPassword=xxx \
-  --set secrets.agensApiKey=xxx \
-  --set secrets.secretKey=xxx \
-  --set ingress.host=your-domain.com
+# 方式二：Helm —— 尚未实现，命令仅作规划参考
+# helm install knowledge-chat ./helm/knowledge-chat \
+#   --set secrets.postgresPassword=xxx \
+#   --set secrets.agensApiKey=xxx \
+#   --set secrets.secretKey=xxx \
+#   --set ingress.host=your-domain.com
 ```
 
 > ⚠️ **后端在 Kubernetes 里是"单副本"设计**：向量库是本地 ChromaDB，数据落在
