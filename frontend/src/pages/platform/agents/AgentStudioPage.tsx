@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Bot, Plus, Edit3, Trash2, Play, CheckCircle, XCircle, Search, BookOpen, FileText } from 'lucide-react'
 import LoadingState from '../../../components/common/LoadingState'
 import EmptyState from '../../../components/common/EmptyState'
+import PlannedNotice from '../../../components/common/PlannedNotice'
 import { listModels, type LLMModel } from '../../../api/models'
 import { listPrompts, type PromptTemplate } from '../../../api/prompts'
 import { listKnowledgeBases, type KnowledgeBase } from '../../../api/knowledgeBases'
@@ -130,6 +131,13 @@ export default function AgentStudioPage() {
 
       {/* Right: Detail */}
       <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
+        <div className="p-6 pb-0">
+          <PlannedNotice
+            feature="AI Agent 编排"
+            reason="后端不存在 /api/agents：本页的 listAgents / createAgent / executeAgent 请求都会 404（列表失败已被 catch 成空数组）。页面保留仅作 UI 预览，功能不可用。"
+            available="工具层已可用：GET /api/tools（清单）、POST /api/tools/{tool_name}/invoke（调用）。"
+          />
+        </div>
         {showEditor ? (
           <div className="p-6 max-w-2xl">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">{editId ? 'Edit Agent' : 'New Agent'}</h2>

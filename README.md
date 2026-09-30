@@ -58,7 +58,10 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 - Provider Management：多 Provider 状态查看
 - Prompt Templates：提示词模板 CRUD 与版本管理
 - AI Configuration：运行时配置概览
-- Agents / Workflows / Tools：AI Agent 平台框架
+- Tool Calling：工具层 `kb_search`（知识库检索）+ `calculator`（数学表达式，AST 白名单）
+- Agents / Workflows：Agent 平台框架 —— ⚠️ **Planned**（后端无对应模型/路由/服务；
+  前端 `AgentManagementPage` / `AgentStudioPage` / `WorkflowManagementPage` /
+  `WorkflowStudioPage` 已统一标注 Planned，不再用假数据渲染）
 
 ### 📊 可观测性中心 (v1.0.1 新增)
 - Monitoring Dashboard：系统 + AI 健康度监控（管理后台"监控"页）

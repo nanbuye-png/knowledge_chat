@@ -24,6 +24,7 @@ from .api.llm_model import router as llm_model_router
 from .api.prompt_template import router as prompt_template_router
 from .api.prompt_version import router as prompt_version_router
 from .api.knowledge_config import router as knowledge_config_router
+from .api.tools import router as tools_router
 from .api.usage import router as usage_router
 from .api.admin.users import router as admin_users_router
 from .api.admin.dashboard import router as admin_dashboard_router
@@ -230,6 +231,7 @@ app.include_router(llm_model_router)
 app.include_router(prompt_template_router)
 app.include_router(prompt_version_router)
 app.include_router(knowledge_config_router)
+app.include_router(tools_router)
 app.include_router(usage_router)
 app.include_router(admin_users_router)
 app.include_router(admin_dashboard_router)

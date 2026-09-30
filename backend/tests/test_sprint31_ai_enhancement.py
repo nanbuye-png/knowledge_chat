@@ -6,10 +6,15 @@ Sprint 31 AI Enhancement 综合测试 (Step 1-8)
 2. Hybrid Search (BM25 + Vector)
 3. Reranker Framework
 4. Advanced Document Parser
-5. Workflow Engine
-6. Agent Architecture
-7. Tool Calling
+5. Workflow Engine —— **未实现**（本文件只断言"不存在"，见审计 §4）
+6. Agent Architecture —— **未实现**（同上）
+7. Tool Calling —— 打**生产**工具层（app.services.tools），不再是测试内的玩具类
 8. AI Integration Pipeline
+
+审计 §4 的整改要求（"删除或重写 test_sprint31 中与生产无关的玩具用例"）在本文件
+的 Step 5/6/7 落地：Step 5/6 的玩具 Workflow / Agent 类已删除，改为断言后端**确实
+没有**这两套 API；Step 7 改为驱动真实注册表。工具层的端到端 HTTP 覆盖见
+``tests/test_tools.py``。
 """
 import asyncio
 import os
@@ -223,41 +228,28 @@ class TestDocumentParser:
 # ============================================================
 
 class TestWorkflow:
-    """Workflow 引擎测试"""
+    """Workflow 引擎 —— **后端未实现**（审计 §4）。
 
-    def test_workflow_execution(self):
-        """工作流执行"""
-        async def run():
-            class Node:
-                def __init__(self, name: str, fn):
-                    self.name = name
-                    self.fn = fn
+    原先这里自定义了一个玩具 ``Workflow`` 类并断言它自己跑通，容易被误读成
+    "Workflow 已实现"。现在断言的是**未实现这一事实**：真实可用的编排能力只有
+    工具执行器（``app.services.tools.ToolRegistry.run_plan``）。
+    """
 
-            class Workflow:
-                def __init__(self):
-                    self.nodes = []
+    def test_workflow_api_is_not_implemented(self):
+        """``/api/workflows`` 不应存在 —— 与 README / 前端 Planned 标注保持一致。"""
+        import importlib.util
 
-                def add_node(self, node: Node):
-                    self.nodes.append(node)
+        from app.main import app
 
-                async def execute(self, context: dict) -> dict:
-                    for node in self.nodes:
-                        result = await node.fn(context)
-                        context.update(result)
-                    return context
+        paths = app.openapi()["paths"]
+        assert not [p for p in paths if p.startswith("/api/workflows")], (
+            "若已实现 /api/workflows，需要同步 README 与 "
+            "WorkflowManagementPage/WorkflowStudioPage 的 Planned 标注"
+        )
+        assert importlib.util.find_spec("app.api.workflows") is None
+        print("[PASS] /api/workflows 未实现（README / 前端已标注 Planned）")
 
-            workflow = Workflow()
-            async def retrieve(ctx): return {"docs": ["doc1", "doc2"]}
-            async def generate(ctx): return {"answer": f"Based on {len(ctx['docs'])} docs"}
 
-            workflow.add_node(Node("retrieve", retrieve))
-            workflow.add_node(Node("generate", generate))
-
-            result = await workflow.execute({"query": "test"})
-            assert result["docs"] == ["doc1", "doc2"]
-            assert "Based on 2 docs" in result["answer"]
-            print(f"[PASS] Workflow execution: {result}")
-        asyncio.run(run())
 
 
 # ============================================================
@@ -265,41 +257,36 @@ class TestWorkflow:
 # ============================================================
 
 class TestAgent:
-    """Agent 架构测试"""
+    """Agent 架构 —— **后端未实现**（审计 §4）。
 
-    def test_agent_loop(self):
-        """Agent 循环: Think -> Act -> Observe -> Answer"""
-        async def run():
-            class Agent:
-                def __init__(self):
-                    self.memory = []
+    原先这里自定义了一个玩具 ``Agent``（think/act/observe/answer）并断言它自己
+    跑通；README 与前端页面因此被误认为"Agent 平台已完成"。现在改为断言边界：
+    ``/api/agents`` 不存在，真实存在的是工具层 ``/api/tools``。
+    """
 
-                async def think(self, query: str) -> str:
-                    return f"Need to answer: {query}"
+    def test_agent_api_is_not_implemented(self):
+        import importlib.util
 
-                async def act(self, thought: str) -> str:
-                    return f"Searching for information..."
+        from app.main import app
 
-                async def observe(self, result: str) -> str:
-                    return f"Found relevant data"
+        paths = app.openapi()["paths"]
+        assert not [p for p in paths if p.startswith("/api/agents")], (
+            "若已实现 /api/agents，需要同步 README 与 "
+            "AgentManagementPage/AgentStudioPage 的 Planned 标注"
+        )
+        assert importlib.util.find_spec("app.api.agents") is None
+        print("[PASS] /api/agents 未实现（README / 前端已标注 Planned）")
 
-                async def answer(self, info: str) -> str:
-                    return f"Final answer based on analysis"
+    def test_tool_layer_is_the_real_replacement(self):
+        """Agent 未实现时，真实可用的替代能力是工具层（审计 §4 的最小真实路径）。"""
+        from app.main import app
 
-                async def run(self, query: str) -> str:
-                    thought = await self.think(query)
-                    action_result = await self.act(thought)
-                    observation = await self.observe(action_result)
-                    self.memory.append({"query": query, "thought": thought, "observation": observation})
-                    return await self.answer(observation)
+        paths = app.openapi()["paths"]
+        assert "/api/tools" in paths
+        assert "/api/tools/{tool_name}/invoke" in paths
+        print("[PASS] 真实可用的是 /api/tools（kb_search + calculator）")
 
-            agent = Agent()
-            result = await agent.run("What is AI?")
-            assert "Final answer" in result
-            assert len(agent.memory) == 1
-            assert agent.memory[0]["query"] == "What is AI?"
-            print(f"[PASS] Agent loop: {result}")
-        asyncio.run(run())
+
 
 
 # ============================================================
@@ -307,61 +294,53 @@ class TestAgent:
 # ============================================================
 
 class TestToolCalling:
-    """Tool Calling 测试"""
+    """Tool Calling —— 打**生产**注册表（审计 §4）。
 
-    def test_tool_registry(self):
-        """Tool 注册和执行"""
-        from typing import Dict, Any
+    审计原文：本类原先在测试文件内部自定义 ``Tool`` / ``ToolRegistry`` 玩具类，
+    ``test_tool_validation`` 只断言本地 dict，"测试绿"与生产代码毫无关系。现在
+    改为驱动 ``app.services.tools``（真实工具、真实校验、真实执行）；HTTP 端到端
+    覆盖见 ``tests/test_tools.py``。
+    """
 
-        class Tool:
-            def __init__(self, name: str, description: str, fn):
-                self.name = name
-                self.description = description
-                self.fn = fn
+    def test_tool_registry_exposes_real_tools(self):
+        """生产注册表里必须是真实工具，且自带可机读的参数 Schema。"""
+        from app.services.tools import tool_registry
 
-        class ToolRegistry:
-            def __init__(self):
-                self._tools: Dict[str, Tool] = {}
+        assert tool_registry.names() == ["calculator", "kb_search"]
+        assert tool_registry.get("calculator").required_parameters() == ["expression"]
 
-            def register(self, tool: Tool):
-                self._tools[tool.name] = tool
+        kb_schema = tool_registry.get("kb_search").json_schema()
+        assert kb_schema["type"] == "object"
+        assert sorted(kb_schema["required"]) == ["knowledge_base_id", "query"]
+        assert kb_schema["properties"]["top_k"]["default"] == 5
+        print(f"[PASS] 生产 ToolRegistry 暴露 {tool_registry.names()}")
 
-            async def execute(self, name: str, **kwargs) -> Any:
-                tool = self._tools.get(name)
-                if not tool:
-                    raise ValueError(f"Tool not found: {name}")
-                return await tool.fn(**kwargs)
+    def test_tool_validation_uses_production_implementation(self):
+        """参数校验走生产实现：缺必填被拒，合法参数补齐默认值。"""
+        import pytest
 
-        async def run():
-            registry = ToolRegistry()
+        from app.services.tools import ToolInvalidArguments, tool_registry
 
-            async def search_tool(query: str):
-                return {"results": [f"Result for {query}"]}
+        tool = tool_registry.get("kb_search")
+        with pytest.raises(ToolInvalidArguments):
+            tool.validate_arguments({"query": "门诊时间"})  # 缺 knowledge_base_id
 
-            registry.register(Tool("search", "Search the knowledge base", search_tool))
-            result = await registry.execute("search", query="AI")
-            assert "Result for AI" in str(result)
-            print(f"[PASS] Tool registry: {result}")
-        asyncio.run(run())
+        cleaned = tool.validate_arguments({"query": "门诊时间", "knowledge_base_id": 1})
+        assert cleaned == {"query": "门诊时间", "knowledge_base_id": 1, "top_k": 5}
+        print("[PASS] Tool 参数校验与默认值来自生产实现")
 
-    def test_tool_validation(self):
-        """Tool 参数验证"""
-        registry = {}
+    def test_tool_executes_through_registry(self):
+        """真实执行一次 calculator（不是本地 mock 的返回值）。"""
+        from app.services.tools import tool_registry
 
-        def register(name: str, schema: dict):
-            registry[name] = schema
+        result = asyncio.run(
+            tool_registry.invoke("calculator", {"expression": "6 * 7"})
+        )
+        assert result.tool == "calculator"
+        assert result.output["result"] == 42
+        assert result.elapsed_ms >= 0
+        print(f"[PASS] 生产工具执行: 6 * 7 = {result.output['result']}")
 
-        register("calculate", {
-            "name": "calculate",
-            "description": "Execute Python math",
-            "parameters": {
-                "expression": {"type": "string", "description": "Math expression"}
-            }
-        })
-
-        assert "calculate" in registry
-        assert "expression" in registry["calculate"]["parameters"]
-        print(f"[PASS] Tool schema validation: {list(registry.keys())}")
 
 
 # ============================================================

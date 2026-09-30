@@ -274,6 +274,20 @@ class Settings(BaseSettings):
     # 改写结果的最大长度，超出视为非法输出并回退
     QUERY_REWRITE_MAX_CHARS: int = 200
 
+    # ---- 工具调用（审计 §4：Agent / Workflow / Tools 的最小真实路径）----
+    # 只做「工具」这一层：可被选择的工具（自带参数 Schema）+ 可执行的调用端点。
+    # Agent loop / Workflow 编排仍未实现（前端与 README 统一标注 Planned）。
+    # 单次工具执行的超时（秒）；超时按 504 返回，绝不无限挂起
+    TOOL_TIMEOUT_SECONDS: float = 15.0
+    # 一次请求内最多执行的工具调用次数（POST /api/tools/run 的硬上限）
+    TOOL_MAX_CALLS_PER_REQUEST: int = 5
+    # kb_search 返回片段数上限（防止把整库内容塞进一次响应）
+    TOOL_KB_SEARCH_MAX_TOP_K: int = 20
+    # kb_search 每个片段的正文截断长度（字符）
+    TOOL_KB_SEARCH_SNIPPET_CHARS: int = 500
+    # calculator 表达式长度上限（字符）
+    TOOL_CALCULATOR_MAX_CHARS: int = 200
+
     # ---- RAG 评测（Phase 2，见 backend/evaluation/README.md）----
     # 裁判模型单次最大 token。Agens 的 agnes-2.5-flash 属于推理型模型，
     # 会先消耗 token 输出 reasoning_content，留太小会导致正文为空。

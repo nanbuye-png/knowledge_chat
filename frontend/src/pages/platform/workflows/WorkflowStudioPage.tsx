@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Workflow, GitBranch, Plus, Edit3, Trash2, Play, CheckCircle, XCircle, Settings, MessageSquare, Cpu, Search, Bot, Puzzle, ChevronRight } from 'lucide-react'
 import LoadingState from '../../../components/common/LoadingState'
 import EmptyState from '../../../components/common/EmptyState'
+import PlannedNotice from '../../../components/common/PlannedNotice'
 import {
   listWorkflows, createWorkflow, updateWorkflow, deleteWorkflow, executeWorkflow,
   type Workflow as WFType, type WorkflowCreate, type WorkflowNode
@@ -165,6 +166,13 @@ export default function WorkflowStudioPage() {
 
       {/* Right: Detail */}
       <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
+        <div className="p-6 pb-0">
+          <PlannedNotice
+            feature="Workflow 编排"
+            reason="后端不存在 /api/workflows：本页的 listWorkflows / createWorkflow / executeWorkflow 请求都会 404（列表失败已被 catch 成空数组）。页面保留仅作 UI 预览，功能不可用。"
+            available="工具层已可用：GET /api/tools（清单）、POST /api/tools/{tool_name}/invoke（调用）。"
+          />
+        </div>
         {showEditor ? (
           <div className="p-6 max-w-3xl">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">{editId ? 'Edit Workflow' : 'New Workflow'}</h2>
