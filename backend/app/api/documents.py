@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from ..storage.database import get_db
+from ..core.exceptions import internal_error
 from ..schemas.document import (
     DocumentResponse, DocumentListResponse,
     UploadResponse, DeleteResponse,
@@ -78,9 +79,8 @@ async def upload_document(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+    except Exception:
+        raise internal_error("上传文档失败")
 
 
 @router.get("", response_model=DocumentListResponse, summary="获取文档列表")
@@ -93,9 +93,8 @@ async def list_documents(
     try:
         result = await document_service.get_documents(db, knowledge_base_id=knowledge_base_id, user_id=current_user.id)
         return result
-    except Exception as e:
-        logger.error(f"List documents failed: {e}")
-        raise HTTPException(status_code=500, detail="获取文档列表失败")
+    except Exception:
+        raise internal_error("获取文档列表失败")
 
 
 @router.delete("/{document_id}", response_model=DeleteResponse, summary="删除文档")
@@ -115,9 +114,8 @@ async def delete_document(
         return result
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Delete document failed: {e}")
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+    except Exception:
+        raise internal_error("删除文档失败")
 
 
 @router.get("/{document_id}/status", response_model=DocumentResponse, summary="获取文档状态")
@@ -131,6 +129,5 @@ async def get_document_status(
         return await document_service.get_document_status(document_id, db, user_id=current_user.id)
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Get document status failed: {e}")
-        raise HTTPException(status_code=500, detail="获取文档状态失败")
+    except Exception:
+        raise internal_error("获取文档状态失败")

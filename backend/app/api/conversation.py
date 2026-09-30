@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.exceptions import internal_error
 from ..schemas.chat import (
     CreateConversationRequest, CreateConversationResponse,
     ConversationListItem, MessageResponse,
@@ -37,9 +38,8 @@ async def create_conversation_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Create conversation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"创建会话失败: {str(e)}")
+    except Exception:
+        raise internal_error("创建会话失败")
 
 
 @router.get("", response_model=list[ConversationListItem], summary="获取会话列表")
@@ -63,9 +63,8 @@ async def list_conversations(
         ]
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"List conversations failed: {e}")
-        raise HTTPException(status_code=500, detail=f"获取会话列表失败: {str(e)}")
+    except Exception:
+        raise internal_error("获取会话列表失败")
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageResponse], summary="获取会话消息")
@@ -91,9 +90,8 @@ async def get_conversation_messages(
         ]
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Get conversation messages failed: {e}")
-        raise HTTPException(status_code=500, detail=f"获取会话消息失败: {str(e)}")
+    except Exception:
+        raise internal_error("获取会话消息失败")
 
 
 @router.delete("/{conversation_id}", response_model=DeleteResponse, summary="删除会话")
@@ -112,9 +110,8 @@ async def delete_conversation_endpoint(
         raise HTTPException(status_code=403, detail=str(e))
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Delete conversation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"删除会话失败: {str(e)}")
+    except Exception:
+        raise internal_error("删除会话失败")
 
 
 @router.patch("/{conversation_id}", response_model=ConversationListItem, summary="重命名会话")
@@ -136,6 +133,5 @@ async def rename_conversation_endpoint(
         )
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
-    except Exception as e:
-        logger.error(f"Rename conversation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"重命名会话失败: {str(e)}")
+    except Exception:
+        raise internal_error("重命名会话失败")

@@ -19,6 +19,7 @@ from ..services.conversation_service import auto_update_conversation_title, _ver
 from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db, async_session
 from ..auth.deps import get_current_user
+from ..core.exceptions import internal_error
 from ..core.rate_limit import rate_limit
 from ..models.user import User
 from ..services.user_service import update_user_activity
@@ -137,9 +138,9 @@ async def query_knowledge(
             user_id=current_user.id,
             conversation_id=request.conversation_id,
         )
-    except Exception as e:
-        logger.error(f"Query failed: {e}")
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+    except Exception:
+        # 审计 §5.5：不把 str(e) 拼进响应，原始异常进日志（含堆栈）
+        raise internal_error("知识库查询失败（检索/LLM 链路）")
 
     if request.conversation_id is not None:
         try:

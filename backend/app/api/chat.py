@@ -20,6 +20,7 @@ from ..services.conversation_service import (
 )
 from ..auth.deps import get_optional_user
 from ..auth.api_key import get_api_key_user
+from ..core.exceptions import internal_error
 from ..core.rate_limit import rate_limit
 from ..storage.database import get_db, async_session
 from ..models.user import User
@@ -90,9 +91,9 @@ async def chat(
             user_id=current_user.id,
             conversation_id=request.conversation_id,
         )
-    except Exception as e:
-        logger.error(f"Chat failed: {e}")
-        raise HTTPException(status_code=500, detail=f"对话失败: {str(e)}")
+    except Exception:
+        # 审计 §5.5：不把 str(e) 拼进响应，原始异常进日志（含堆栈）
+        raise internal_error("chat 调用失败（LLM/检索链路）")
 
     # 2. 保存模型回答
     if request.conversation_id is not None:
