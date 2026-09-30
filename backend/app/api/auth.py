@@ -19,6 +19,7 @@ from ..services.session_service import create_session
 from ..core.config import settings
 from ..core.password_policy import validate_password_strength
 from ..core.rate_limit import rate_limit
+from ..core.timeutil import as_naive_utc, utcnow
 from ..services.audit_service import create_audit_log, _extract_client_info
 from ..services.auth.token_service import revoke_token
 from ..auth.deps import oauth2_scheme
@@ -133,7 +134,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate and return JWT access token."""
-    now = datetime.now(timezone.utc)
+    now = utcnow()  # 审计 §6.1-4：统一 naive UTC（落库与比较同源）
     ip, ua = None, None
     if req is not None:
         ip, ua = _extract_client_info(req)
@@ -155,9 +156,11 @@ async def login(
             detail="账户已被禁用，请联系管理员",
         )
 
-    # --- 3. 检查账户是否被锁定 ---
-    if user.locked_until is not None and user.locked_until > now:
-        remaining_minutes = int((user.locked_until - now).total_seconds() // 60) + 1
+    # --- 3. 检查账户是否被锁定（审计 §6.1-4：必须两侧都是 naive UTC，
+    #         否则读回 naive、比较 aware → TypeError → 登录 500） ---
+    locked_until = as_naive_utc(user.locked_until)
+    if locked_until is not None and locked_until > now:
+        remaining_minutes = int((locked_until - now).total_seconds() // 60) + 1
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"账户已被暂时锁定，请 {remaining_minutes} 分钟后再试",
@@ -216,7 +219,7 @@ async def login(
     await update_user_activity(db, user.id)
 
     # 创建 Session 记录
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
+    expires_at = utcnow() + timedelta(hours=settings.ACCESS_TOKEN_EXPIRE_HOURS)
     await create_session(
         db=db,
         user_id=user.id,

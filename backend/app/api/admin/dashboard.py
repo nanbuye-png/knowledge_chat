@@ -102,7 +102,11 @@ async def get_dashboard(
 
     # 4. 在线用户统计（最近 5 分钟有活动）
     from datetime import timedelta
-    five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+    from ...core.timeutil import utcnow
+
+    # 审计 §6.1-4：过滤器两侧都必须是 naive UTC（列类型是 TIMESTAMP WITHOUT TIME ZONE）
+    five_minutes_ago = utcnow() - timedelta(minutes=5)
     online_result = await db.execute(
         select(func.count(User.id)).where(
             User.deleted_at.is_(None),

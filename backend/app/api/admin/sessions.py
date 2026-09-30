@@ -1,7 +1,5 @@
 import datetime
 
-from datetime import timezone
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -9,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 from ...core.permissions import require_root, require_permission
+from ...core.timeutil import as_naive_utc, utcnow
 from ...models.user import User
 from ...models.user_session import UserSession
 from ...services.audit_service import create_audit_log
@@ -60,7 +59,7 @@ async def list_all_sessions(
             last_used_at=s.last_used_at.isoformat() if s.last_used_at else None,
             expires_at=s.expires_at.isoformat() if s.expires_at else None,
             revoked_at=s.revoked_at.isoformat() if s.revoked_at else None,
-            is_active=s.revoked_at is None and s.expires_at > datetime.now(timezone.utc),
+            is_active=s.revoked_at is None and as_naive_utc(s.expires_at) > utcnow(),
         )
         for s in sessions
     ]

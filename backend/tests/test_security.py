@@ -29,6 +29,7 @@ def _make_user(**overrides):
     user.password_hash = "hashed_xxx"
     user.role = "user"
     user.is_active = True
+    user.deleted_at = None  # get_current_user 会检查软删除（审计 §6.1-2）
     user.failed_login_count = overrides.get("failed_login_count", 0)
     user.locked_until = overrides.get("locked_until", None)
     user.last_login_at = overrides.get("last_login_at", None)
@@ -197,7 +198,10 @@ class TestLoginProtection:
 
         assert user.failed_login_count == 5
         assert user.locked_until is not None
-        delta = user.locked_until - datetime.now(timezone.utc)
+        # 审计 §6.1-4：locked_until 与 now 都统一成 naive UTC 再比较
+        from app.core.timeutil import as_naive_utc, utcnow
+
+        delta = as_naive_utc(user.locked_until) - utcnow()
         assert timedelta(minutes=14) < delta < timedelta(minutes=16)
 
     # --- Scenario 4: Locked account rejects correct password ---

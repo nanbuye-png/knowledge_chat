@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.timeutil import utcnow
 from ..models.user import User
 
 
@@ -41,6 +42,8 @@ async def update_user_activity(db: AsyncSession, user_id: int) -> None:
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is not None:
-        user.last_activity_at = datetime.now(timezone.utc)
+        # 审计 §6.1-4：统一写 naive UTC（否则 SQLite 静默丢 tzinfo、
+        # PostgreSQL 按会话时区转换，两边读回来的东西还不一样）
+        user.last_activity_at = utcnow()
         db.add(user)
         await db.commit()

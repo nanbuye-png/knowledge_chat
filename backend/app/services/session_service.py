@@ -1,8 +1,10 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.timeutil import as_naive_utc, utcnow
 from ..models.user_session import UserSession
 
 
@@ -19,13 +21,17 @@ async def create_session(
     ip_address: str | None = None,
     expires_at: datetime | None = None,
 ) -> UserSession:
-    """创建用户 Session 记录。"""
+    """创建用户 Session 记录。
+
+    ``expires_at`` 统一归一到 naive UTC（审计 §6.1-4）：调用方传 aware 会把
+    "库内 naive、比较 aware" 的老问题重新引回来。
+    """
     session = UserSession(
         user_id=user_id,
         token_hash=_hash_token(token),
         device_info=device_info,
         ip_address=ip_address,
-        expires_at=expires_at,
+        expires_at=as_naive_utc(expires_at),
     )
     db.add(session)
     await db.commit()
@@ -40,7 +46,7 @@ async def revoke_session(db: AsyncSession, session_id: int) -> None:
     )
     session = result.scalar_one_or_none()
     if session is not None and session.revoked_at is None:
-        session.revoked_at = datetime.now(timezone.utc)
+        session.revoked_at = utcnow()
         await db.commit()
 
 

@@ -1,7 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
+
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import DeclarativeBase
 
+from ..core.timeutil import as_naive_utc, utcnow
 from .document import Base
 
 
@@ -15,8 +17,10 @@ class UserSession(Base):
     token_hash = Column(String(128), nullable=False, index=True, comment="JWT token 的 SHA256 hash")
     device_info = Column(String(255), nullable=True, comment="设备信息")
     ip_address = Column(String(50), nullable=True, comment="登录IP")
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), comment="创建时间")
-    last_used_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), comment="最后使用时间")
+    # 审计 §6.1-4：默认值也写 naive UTC（否则 SQLite 静默丢 tzinfo、
+    # PostgreSQL 按会话时区转换），用 timeutil.utcnow 统一口径。
+    created_at = Column(DateTime, nullable=False, default=utcnow, comment="创建时间")
+    last_used_at = Column(DateTime, nullable=False, default=utcnow, comment="最后使用时间")
     expires_at = Column(DateTime, nullable=False, comment="过期时间")
     revoked_at = Column(DateTime, nullable=True, index=True, comment="注销时间，NULL 表示未注销")
 
@@ -35,5 +39,6 @@ class UserSession(Base):
             "last_used_at": self.last_used_at.isoformat() if self.last_used_at else None,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
-            "is_active": self.revoked_at is None and self.expires_at > datetime.now(timezone.utc),
+            # 审计 §6.1-4：库内 expires_at 是 naive，必须归一后再与 naive now 比
+            "is_active": self.revoked_at is None and as_naive_utc(self.expires_at) > utcnow(),
         }

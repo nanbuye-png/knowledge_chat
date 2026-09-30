@@ -8,6 +8,7 @@ from loguru import logger
 
 from ...core.permissions import require_root, require_permission, require_admin_or_root
 from ...core.roles import UserRole
+from ...core.timeutil import as_naive_utc, utcnow
 from ...models.user import User
 from ...schemas.admin_user import AdminUserResponse
 from ...services.audit_service import create_audit_log
@@ -198,7 +199,7 @@ async def list_online_users(
     
     在线判断：最近 5 分钟内有活动记录。
     """
-    now = datetime.now(timezone.utc)
+    now = utcnow()  # 审计 §6.1-4：与库内 last_activity_at（naive）同源
     threshold = 5 * 60  # 5 分钟（秒）
 
     base_filter = active_user_filter()
@@ -213,7 +214,7 @@ async def list_online_users(
     for u in users:
         online = False
         if u.last_activity_at is not None:
-            delta = (now - u.last_activity_at).total_seconds()
+            delta = (now - as_naive_utc(u.last_activity_at)).total_seconds()
             online = delta <= threshold
 
         items.append(UserOnlineItem(
@@ -435,7 +436,7 @@ async def delete_user(
     _check_system_account_protection(target_user, "删除")
 
     # 软删除：设置 deleted_at 时间戳
-    target_user.deleted_at = datetime.now(timezone.utc)
+    target_user.deleted_at = utcnow()
     await db.commit()
     await db.refresh(target_user)
 

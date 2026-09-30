@@ -4,10 +4,11 @@
 密钥仅在创建时返回一次，数据库仅存储 SHA256 hash。
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Index
 
+from ..core.timeutil import utcnow
 from .document import Base
 
 
@@ -47,7 +48,7 @@ class ApiKey(Base):
     created_at = Column(
         DateTime,
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=utcnow,  # 审计 §6.1-4：naive UTC，与列类型一致
         comment="创建时间",
     )
 

@@ -129,7 +129,7 @@ class TestClientIpResolution:
 
 class TestStreamEndpointsAreLimited:
     def _override_user(self, monkeypatch):
-        from app.auth.deps import get_current_user
+        from app.auth.deps import get_current_user, get_optional_user
         from app.main import app
 
         class _User:
@@ -137,7 +137,11 @@ class TestStreamEndpointsAreLimited:
             username = "limited"
             role = "USER"
 
+        # 依赖"接线"两类端点都要覆盖，否则测试会因为 401 而不是 429 失败：
+        # * /api/knowledge/query/stream → get_current_user（JWT 必填）
+        # * /api/chat/*               → get_optional_user（JWT 可选 + API Key，审计 §6.1-3）
         monkeypatch.setitem(app.dependency_overrides, get_current_user, lambda: _User())
+        monkeypatch.setitem(app.dependency_overrides, get_optional_user, lambda: _User())
 
     @staticmethod
     def _force_memory_limiter(monkeypatch):

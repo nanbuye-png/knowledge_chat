@@ -12,6 +12,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.timeutil import as_naive_utc, utcnow
 from ..models.api_key import ApiKey
 from ..models.user import User
 
@@ -100,16 +101,22 @@ async def verify_api_key(db: AsyncSession, raw_key: str) -> User | None:
     if not api_key.is_active:
         return None
 
-    # 检查是否过期
-    if api_key.expires_at is not None and api_key.expires_at < datetime.now(timezone.utc):
+    # 检查是否过期（审计 §6.1-4：库内 naive、比较用 naive utcnow）
+    if api_key.expires_at is not None and as_naive_utc(api_key.expires_at) < utcnow():
         return None
 
     # 更新最后使用时间
-    api_key.last_used_at = datetime.now(timezone.utc)
+    api_key.last_used_at = utcnow()
     await db.commit()
 
-    # 返回用户
-    user_result = await db.execute(select(User).where(User.id == api_key.user_id))
+    # 返回用户（禁用/软删除用户的 Key 立即失效，审计 §6.1-2 的同一原则）
+    user_result = await db.execute(
+        select(User).where(
+            User.id == api_key.user_id,
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
+    )
     user = user_result.scalar_one_or_none()
     return user
 

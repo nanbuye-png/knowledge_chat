@@ -27,6 +27,7 @@ def _make_user(**overrides):
     user.password_hash = "hashed"
     user.role = "user"
     user.is_active = True
+    user.deleted_at = None  # get_current_user 会检查软删除（审计 §6.1-2）
     user.failed_login_count = 0
     user.locked_until = None
     user.last_login_at = None

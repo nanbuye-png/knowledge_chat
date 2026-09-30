@@ -18,7 +18,7 @@ from ..services.conversation_service import (
     auto_update_conversation_title,
     _verify_conversation_ownership,
 )
-from ..auth.deps import get_current_user
+from ..auth.deps import get_optional_user
 from ..auth.api_key import get_api_key_user
 from ..core.rate_limit import rate_limit
 from ..storage.database import get_db, async_session
@@ -29,10 +29,16 @@ router = APIRouter(prefix="/api/chat", tags=["问答系统"])
 
 
 async def _resolve_user(
-    current_user: User | None = Depends(get_current_user),
+    current_user: User | None = Depends(get_optional_user),
     api_key_user: User | None = Depends(get_api_key_user),
 ) -> User:
-    """支持 JWT 和 API Key 两种认证方式。"""
+    """支持 JWT 和 API Key 两种认证方式。
+
+    审计 §6.1-3：原来这里用的是 ``get_current_user``（无 token 直接 401），
+    于是**带 X-API-Key 的请求永远到不了 api_key_user 分支** —— API Key 通道
+    形同虚设。改用 ``get_optional_user``（无 token 返回 None）后两种认证才真正
+    并列：谁有效用谁，都无效才 401。
+    """
     user = current_user or api_key_user
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
