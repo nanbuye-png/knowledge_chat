@@ -15,6 +15,7 @@
 - **错误契约统一** — `/api/*` 的 500 不再拼接 `str(e)`（SQL/DSN/堆栈会顺响应泄漏），改为固定文案 + `code=INTERNAL_ERROR` + `request_id`，原始异常仅进日志（`0aa43bb`）
 - **前端契约适配** — 按 Phase 3 后端契约调整前端解析（`760d383`）
 - **工具层落地（最小真实路径）** — 新增 `kb_search`（复用生产检索链路 + 归属校验）与 `calculator`（AST 白名单，不使用 eval）两个真实工具，端点 `GET /api/tools`、`POST /api/tools/run`、`POST /api/tools/{tool_name}[/invoke]`，含超时 / 最大调用次数 / 失败处理；删除前端占位假数据，Agent / Workflow 页面统一标注 Planned（`474ebfa`）
+- **前端空壳页面与死代码清理** — 删除会真实调用（且失败被 `catch` 吞掉）的 `AgentStudioPage` / `WorkflowStudioPage` 两个空壳编排器、`api/agents.ts` / `api/workflows.ts` 两个假客户端与无人引用的 `store/agent.ts` / `store/workflow.ts`；`/platform/agents`、`/platform/workflows` 保留为 redirect 到带 Planned 标注的 `/ai/agents`、`/ai/workflows`，侧边栏去掉重复入口（`fcacc25`）
 
 ### 工程 / 数据
 - **`api_keys` 表缺失修复** — 迁移文件此前是空桩（`upgrade()/downgrade()` 均为 `pass`），现由迁移建表；不再手工维护模型 import 列表（`4c24dc5`）
@@ -26,7 +27,7 @@
 - **文档口径修正** — Helm Chart 与 Grafana 栈明确标注 Planned（`65920af`）；README 的「Agents / Workflows / Tools」措辞修正为「工具层已实现 + Agent/Workflow Planned」
 
 ### 测试
-- 新增 `tests/test_tools.py`（工具端点 / 注册表 / 前端 Planned 文本契约）、`tests/test_error_contract.py`（500 不泄漏 + 统一契约）等；按审计 §4 删除 `test_sprint31` 内与生产无关的玩具
+- 新增 `tests/test_tools.py`（工具端点 / 注册表 / 前端 Planned 文本契约）、`tests/test_error_contract.py`（500 不泄漏 + 统一契约）等；前端契约新增「空壳页面与假 API 客户端必须不存在、旧 URL 必须 redirect」断言（`fcacc25`）；按审计 §4 删除 `test_sprint31` 内与生产无关的玩具
   `Tool` / `Workflow` / `Agent` 类，改为断言「未实现」这一事实
 
 ## v1.0.1 (2026-09-22)

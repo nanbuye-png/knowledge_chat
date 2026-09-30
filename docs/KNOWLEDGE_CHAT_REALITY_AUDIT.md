@@ -1057,13 +1057,14 @@ Phase 1 建议顺序（与计划 §20 一致，每步独立 commit + 独立测�
 | §3.5 / §5.5 | 500 拼接 `str(e)` 泄漏内部信息、错误契约不统一 | ✅ 已修复（固定文案 + `code` + `request_id`，异常只进日志） | `0aa43bb` |
 | §5.3 | `api_keys` 迁移为空桩（表根本不存在） | ✅ 已修复（迁移建表 + 不再手工维护模型 import） | `4c24dc5` |
 | §4 | Agent / Workflow / Tools 后端缺失、前端假数据冒充功能 | 🟡 部分修复：工具层真实落地（`kb_search` / `calculator` + `/api/tools`）；Agent / Workflow 明确标注 Planned | `474ebfa` |
+| §12 P3 / §4（前端侧） | `AgentStudioPage` / `WorkflowStudioPage` 会真实请求不存在的 `/agents`、`/workflows`，失败被 `catch` 吞成空数组（页面看似可用、实际永远为空） | ✅ 已清理：空壳编排器 + 假客户端 + 死 store 整体删除，旧 URL 改为 redirect，测试钉住"禁止复活" | `fcacc25` |
 | §7.1 / §7.2 | 缺 `.dockerignore` / 健康检查 / 前端 SPA rewrite | ✅ 已修复 | `80f36ba` |
 | §7.3 / §7.5 | K8s 缺 PVC、多副本与 SQLite/向量库冲突；Nginx `X-Forwarded-For` 与上传体积 | ✅ 已修复 | `df585ba` |
 | §7.4 / §5.6 | Helm 空壳（0 资源）、Grafana 面板缺失 | 🟡 仅文档标注 Planned（产物仍未落地） | `65920af` |
 | §8.5 | 评测产物归档口径（smoke 产物混入） | ✅ 已修复 | `ccb1c86` |
 | §3.2 等前端契约 | 前端未适配 Phase 3 后端契约 | ✅ 已修复 | `760d383` |
 
-测试基线：审计当日 **235 passed** → 现在 **629 passed / 0 failed**；`backend/conftest.py`
+测试基线：审计当日 **235 passed** → 现在 **630 passed / 0 failed**；`backend/conftest.py`
 提供真实 SQLite（schema 由模型元数据创建），`tests/test_sprint31_ai_enhancement.py`
 中与生产无关的玩具类已删除（改为断言"未实现"这一事实）。
 
@@ -1071,4 +1072,6 @@ Phase 1 建议顺序（与计划 §20 一致，每步独立 commit + 独立测�
 Phase 1–3 的功能提交覆盖，例如统一重试 `16d9169`、上传幂等 `5f58d65`、Redis protocol `f67474b`、
 异步入库 `9b95218`、指标与埋点 `4572adf`；请以代码与 §1 状态总览为准，不要按审计当日的旧结论判断。
 仍未落地的**产物**：§7.4 Helm 资源模板、§5.6 Grafana 面板（两者已在 README 标注 Planned）。
+前端空壳页面与死代码（§12 P3 的前端部分）已在 `fcacc25` 清理完毕；Agent / Workflow 若继续推进，
+按 §4 的建议只做一个真实场景（KB 检索 + Calculator），并同步 README / 前端标注，不要重新引入空壳页面。
 
