@@ -19,32 +19,10 @@ import json
 
 import pytest
 
+# 本文件测越权而不是限流：统一关掉限流（见 conftest.no_rate_limits）。
+pytestmark = pytest.mark.usefixtures("no_rate_limits")
+
 PASSWORD = "Str0ng!Passw0rd123"
-
-
-@pytest.fixture(autouse=True)
-def _disable_rate_limits(monkeypatch):
-    """本文件测越权而不是限流：限额置 0（0 = 不限流）并清空进程内计数。
-
-    两个坑都是实测踩出来的，不是防御性代码：
-
-    1. ``app.core.rate_limit`` 用 ``from ..core.config import settings`` 拿到的
-       是它**自己的模块级引用**；先前的用例若 reload 过 ``app.core.config``，
-       两处就不是同一个对象，只改 ``app.core.config.settings`` 不生效。
-    2. 限流键基于 IP/token 摘要，同一次 pytest 进程里其它用例的注册登录会
-       累计计数（``RATE_LIMIT_LOGIN`` 默认 5/分钟），本文件会被 429 误伤。
-    """
-    from app.core import config as config_module
-    from app.core import rate_limit as rate_limit_module
-    from app.services.security.rate_limiter import rate_limiter
-
-    for target in (config_module.settings, rate_limit_module.settings):
-        monkeypatch.setattr(target, "RATE_LIMIT_LOGIN", 0)
-        monkeypatch.setattr(target, "RATE_LIMIT_CHAT", 0)
-
-    rate_limiter.clear()
-    yield
-    rate_limiter.clear()
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,17 @@
+"""RBAC 权限服务（角色 / 权限码查询与分配）。
+
+现状与边界（审计 §6.3）
+-----------------------
+* ``has_permission`` / ``has_role`` 是管理后台 ``require_permission`` /
+  ``require_role`` 依赖的唯一实现，join 链条必须完整（§6.3-1）。
+* ``user_roles``（用户 ↔ 角色）**目前没有生产写入路径**：只有
+  :meth:`RBACService.assign_role` 会写它，而该方法只被测试调用；
+  实际生效的角色始终是 ``users.role`` 单字段。因此细粒度权限码
+  （permissions / role_permissions）目前只对「按 name 匹配的默认角色」生效，
+  即 **Planned**，不是已上线能力 —— 不要在业务代码里假设多角色可用。
+* ``check_default_roles`` / ``init_default_roles`` 在启动时幂等初始化
+  roles / permissions / role_permissions，是权限码得以生效的前提。
+"""
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert, delete
 from loguru import logger
@@ -5,6 +19,16 @@ from loguru import logger
 from ...models.user import User
 from ...models.permission import Role, Permission, user_roles, role_permissions
 from ...core.rbac import UserRole
+
+
+# ``users.role``（历史单角色字段）→ RBAC 角色名（roles.name）的映射。
+# 默认 RBAC 角色集是 ROOT / ADMIN / MEMBER / VIEWER，没有名为 USER 的角色；
+# 普通用户在权限表里对应 MEMBER（dashboard:view + knowledge:view）。
+# 审计 §6.3-2：user_roles 没有生产写入路径，因此这条映射是细粒度权限码
+# "真的生效"的唯一通道；将来启用多角色（Planned）后它仍作为兜底保留。
+LEGACY_ROLE_TO_RBAC_ROLE: dict[str, str] = {
+    UserRole.USER.value: "MEMBER",
+}
 
 
 class RBACService:
@@ -28,20 +52,22 @@ class RBACService:
         if not user:
             return False
         
-        # 向后兼容：检查 user.role 字段
-        if user.role == role_name:
+        # 向后兼容：检查 user.role 字段。默认 RBAC 角色名与 users.role 同名
+        # （ROOT / ADMIN），USER 需要映射到 MEMBER（见 LEGACY_ROLE_TO_RBAC_ROLE）。
+        if role_name in (user.role, LEGACY_ROLE_TO_RBAC_ROLE.get(user.role, user.role)):
             return True
         
-        # 检查 RBAC 角色
+        # 检查 RBAC 角色（显式 join 链，Role 必须真的进入 FROM）
         role_result = await db.execute(
             select(Role)
             .join(user_roles, Role.id == user_roles.c.role_id)
             .where(
                 user_roles.c.user_id == user_id,
-                Role.name == role_name
+                Role.name == role_name,
             )
+            .limit(1)  # user_roles 主键 (user_id, role_id) 已保证唯一，limit 是兜底
         )
-        return role_result.scalar_one_or_none() is not None
+        return role_result.first() is not None
 
     @staticmethod
     async def has_permission(user_id: int, permission_code: str, db: AsyncSession) -> bool:
@@ -66,16 +92,59 @@ class RBACService:
             return True
         
         # 检查 RBAC 权限
-        result = await db.execute(
-            select(Permission)
+        #
+        # 审计 §6.3-1（P0）：原写法只把 Role 写进 ON 条件
+        #   .join(role_permissions, Permission.id == role_permissions.c.permission_id)
+        #   .join(user_roles, Role.id == user_roles.c.role_id)
+        # 生成的 SQL 里 roles **没有进入 FROM**（"... JOIN user_roles ON
+        # roles.id = user_roles.role_id"），SQLite 直接报 "no such column:
+        # roles.id" —— 于是所有 require_permission 的管理后台接口一律 500。
+        if await RBACService._has_permission_via_user_roles(db, user_id, permission_code):
+            return True
+
+        # 兼容路径（审计 §6.3-2）：user_roles 目前没有生产写入路径（见模块
+        # docstring，状态 Planned），真正生效的一直是 users.role 单字段。
+        # 所以还要按"单角色 → 同名 RBAC 角色"再查一次；否则修完 join，ADMIN
+        # 依旧拿不到 user:view，管理后台还是进不去（实测）。
+        rbac_role_name = LEGACY_ROLE_TO_RBAC_ROLE.get(user.role, user.role)
+        return await RBACService._role_name_has_permission(
+            db, rbac_role_name, permission_code
+        )
+
+    @staticmethod
+    async def _has_permission_via_user_roles(
+        db: AsyncSession, user_id: int, permission_code: str
+    ) -> bool:
+        """多角色（user_roles）路径：Permission ← role_permissions ← roles ← user_roles。"""
+        stmt = (
+            select(Permission.id)
             .join(role_permissions, Permission.id == role_permissions.c.permission_id)
-            .join(user_roles, Role.id == user_roles.c.role_id)
+            .join(Role, Role.id == role_permissions.c.role_id)
+            .join(user_roles, user_roles.c.role_id == Role.id)
             .where(
                 user_roles.c.user_id == user_id,
-                Permission.code == permission_code
+                Permission.code == permission_code,
             )
+            .limit(1)  # 多角色权限重叠时只取一行：避免 MultipleResultsFound → 500
         )
-        return result.scalar_one_or_none() is not None
+        return (await db.execute(stmt)).first() is not None
+
+    @staticmethod
+    async def _role_name_has_permission(
+        db: AsyncSession, role_name: str, permission_code: str
+    ) -> bool:
+        """单角色路径：roles.name → role_permissions → permissions。"""
+        stmt = (
+            select(Permission.id)
+            .join(role_permissions, Permission.id == role_permissions.c.permission_id)
+            .join(Role, Role.id == role_permissions.c.role_id)
+            .where(
+                Role.name == role_name,
+                Permission.code == permission_code,
+            )
+            .limit(1)
+        )
+        return (await db.execute(stmt)).first() is not None
 
     @staticmethod
     async def assign_role(user_id: int, role_name: str, db: AsyncSession) -> bool:

@@ -85,6 +85,34 @@ def temp_db(tmp_path) -> TempDatabase:
 
 
 @pytest.fixture
+def no_rate_limits(monkeypatch):
+    """关闭限流（0 = 不限流）并清空进程内计数，供"不是测限流"的用例使用。
+
+    两个坑都是实测踩出来的：
+
+    1. 限流键基于 IP / token 摘要，同一次 pytest 进程里的计数是**共享**的：
+       任何一个用例打满 ``RATE_LIMIT_LOGIN``（默认 5/分钟）都会让后续用例被
+       429 误伤（实测整包跑 ``test_knowledge_access_control`` 全红，
+       单文件跑却全绿）。
+    2. ``app.core.rate_limit`` 用的是 ``from ..core.config import settings``
+       拿到的**自己的模块级引用**；若先前有用例 reload 过 ``app.core.config``，
+       两处就不是同一个对象，只改配置模块的 settings 不生效。
+    """
+    from app.core import config as config_module
+    from app.core import rate_limit as rate_limit_module
+    from app.services.security.rate_limiter import rate_limiter
+
+    for target in (config_module.settings, rate_limit_module.settings):
+        monkeypatch.setattr(target, "RATE_LIMIT_LOGIN", 0)
+        monkeypatch.setattr(target, "RATE_LIMIT_CHAT", 0)
+        monkeypatch.setattr(target, "RATE_LIMIT_UPLOAD", 0)
+
+    rate_limiter.clear()
+    yield
+    rate_limiter.clear()
+
+
+@pytest.fixture
 def client(temp_db):
     """HTTP client with ``get_db`` pointed at the temp DB.
 

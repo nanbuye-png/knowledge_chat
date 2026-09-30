@@ -353,6 +353,15 @@ async def update_user_role(
             detail=f"无效角色，仅支持: {', '.join(sorted(valid_roles))}",
         )
 
+    # 审计 §6.3-4（P0）：ROOT 只能由 ROOT 授予。
+    # 否则 ADMIN 可以先把任意账号提成 ROOT（再用那个账号或让自己被提升），
+    # 而创建用户只允许 {USER, ADMIN} —— 两条入口策略必须一致。
+    if request.role == UserRole.ROOT and current_user.role != UserRole.ROOT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有 ROOT 可以将用户设为 ROOT",
+        )
+
     result = await db.execute(
         select(User).where(User.id == user_id, active_user_filter())
     )
@@ -362,6 +371,13 @@ async def update_user_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="用户不存在",
+        )
+
+    # ROOT 账号的角色同样只能由 ROOT 改动（避免 ADMIN 反向降级 ROOT 造成接管）
+    if target_user.role == UserRole.ROOT and current_user.role != UserRole.ROOT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="只有 ROOT 可以修改 ROOT 用户的角色",
         )
 
     # 系统账号保护：不能修改系统账号角色
