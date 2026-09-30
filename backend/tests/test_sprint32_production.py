@@ -67,6 +67,59 @@ class TestDockerCompose:
         assert "proxy_pass" in content
         print(f"[PASS] nginx.conf: gzip, proxy, api routes configured")
 
+    def test_dockerignore_excludes_secrets_and_build_artifacts(self):
+        """审计 §7.1-1（P0）：没有 .dockerignore 时 backend/.env 会被打进镜像。
+
+        这条断言直接盯着"密钥不能进镜像"，以及"构建上下文不能把本机 venv/
+        运行期数据一起打包"（实测上下文约 2.8GB）。
+        """
+        path = os.path.join(_backend_dir, "..", ".dockerignore")
+        assert os.path.exists(path), "根目录必须有 .dockerignore（审计 §7.1-1）"
+
+        with open(path, encoding="utf-8") as f:
+            patterns = {
+                line.strip()
+                for line in f
+                if line.strip() and not line.strip().startswith("#")
+            }
+
+        for required in (".env", ".env.*", ".venv/", "venv/", "node_modules/",
+                         "*.db", "chroma_db/", "uploads/", "**/__pycache__/",
+                         "**/node_modules/"):
+            assert required in patterns, f".dockerignore 缺少 {required}"
+        # 构建输入不能被排除（否则 COPY requirements.txt 直接失败）
+        assert "backend/requirements.txt" not in patterns
+        assert "frontend/package.json" not in patterns
+        print(f"[PASS] .dockerignore 覆盖 {len(patterns)} 条规则（含密钥与环境排除）")
+
+    def test_backend_image_has_healthcheck_and_build_cleanup(self):
+        """审计 §7.1-2：补 HEALTHCHECK、清理编译期依赖、声明优雅退出信号。"""
+        path = os.path.join(_backend_dir, "..", "Dockerfile.backend")
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+
+        assert "HEALTHCHECK" in content, "后端镜像必须有健康检查（审计 §7.1-2）"
+        assert "/api/health" in content, "健康检查必须打真实接口，而不是恒返回 200"
+        assert "apt-get purge -y --auto-remove gcc" in content, "编译期 gcc 必须清掉"
+        assert "STOPSIGNAL SIGTERM" in content, "必须让 uvicorn 收到 SIGTERM 走优雅关闭"
+        print("[PASS] Dockerfile.backend: HEALTHCHECK + gcc 清理 + STOPSIGNAL")
+
+    def test_frontend_image_ships_spa_rewrite(self):
+        """审计 §7.1-4：前端镜像必须自带 SPA 回退，否则深链接刷新 404。"""
+        dockerfile = os.path.join(_backend_dir, "..", "Dockerfile.frontend")
+        with open(dockerfile, encoding="utf-8") as f:
+            content = f.read()
+        assert "frontend/nginx.conf" in content, "SPA 配置必须 COPY 进镜像"
+
+        conf_path = os.path.join(_backend_dir, "..", "frontend", "nginx.conf")
+        assert os.path.exists(conf_path), "frontend/nginx.conf 必须存在"
+        with open(conf_path, encoding="utf-8") as f:
+            conf = f.read()
+        assert "try_files $uri $uri/ /index.html;" in conf, "缺少 SPA 回退"
+        assert "/healthz" in conf, "缺少容器健康检查端点"
+        print("[PASS] 前端镜像内置 SPA 回退 + /healthz")
+
+
 
 class TestGithubActions:
     """Step 2: GitHub Actions CI/CD"""

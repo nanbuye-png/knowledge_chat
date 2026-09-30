@@ -1,18 +1,26 @@
 # Backend Dockerfile
 FROM python:3.12-slim
 
+# 审计 §7.1-2：容器运行时不需要 .pyc / 缓冲输出 / pip 缓存
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 WORKDIR /app
 
-# 安装系统依赖
+# 安装系统依赖（gcc 只在 pip 编译扩展时需要，装完立即清掉）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && apt-get purge -y --auto-remove gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# 复制项目代码
+# 复制项目代码（.dockerignore 已排除 .env / venv / *.db / chroma_db 等，
+# 审计 §7.1-1：修好前 backend/.env 会被一并打进镜像）
 COPY backend/ .
 
 # 创建必要目录
@@ -21,5 +29,18 @@ RUN mkdir -p uploads chroma_db logs
 # 暴露端口
 EXPOSE 8000
 
+# 审计 §7.1-2：补 HEALTHCHECK —— 原来没有，容器"活着但接口挂了"不会被发现。
+# slim 镜像没有 curl，用标准库发一次真实请求。
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"
+
+# 优雅退出：uvicorn 收到 SIGTERM 才会走 lifespan 关闭流程
+STOPSIGNAL SIGTERM
+
 # 启动命令
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# 待办（审计 §7.1-2 的"非 root 运行"）：必须与部署一起改，不能只改镜像 ——
+# docker-compose 目前把 ./backend/logs 以 root 属主 bind mount 进容器，切成
+# 非 root 后日志写不进去。正确做法是同批完成：Dockerfile 建 appuser(10001)
+# 并 chown /app，compose 的日志挂载改命名卷（或要求宿主 chown 10001）。

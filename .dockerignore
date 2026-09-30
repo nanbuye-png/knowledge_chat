@@ -1,0 +1,61 @@
+# 构建上下文排除清单（审计 §7.1-1：此前**根目录与 backend/ 都没有** .dockerignore，
+# 而 Dockerfile.backend 是 COPY backend/ . —— 本地构建会把 backend/.env（真实
+# API Key）打进镜像，构建上下文更是高达 ~2.8GB）
+#
+# 注意：两个镜像的构建上下文都是仓库根目录（docker-compose 的 context: .），
+# 所以这里既管后端也管前端。**不要**排除 backend/requirements.txt 或
+# frontend/package*.json —— 它们是构建的输入。
+
+# ---- 密钥 / 本地配置（最关键：绝不能进镜像）----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- 依赖与虚拟环境（体积大头，容器内会重新安装）----
+.venv/
+venv/
+**/venv/
+backend/venv/
+node_modules/
+**/node_modules/
+
+# ---- 构建产物与缓存 ----
+frontend/dist/
+frontend/.vite/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- 运行期数据（挂在卷里，不该烘进镜像）----
+*.db
+**/*.db
+**/*.db-journal
+chroma_db/
+**/chroma_db/
+uploads/
+**/uploads/
+logs/
+backend/logs/
+*.log
+
+# ---- 与镜像无关的仓库内容 ----
+.git/
+.github/
+.vscode/
+docs/
+helm/
+k8s/
+monitoring/
+nginx/
+docker-compose*.yml
+Dockerfile.*
+*.md
+CHANGELOG.md
+VERSION
+
+# ---- 评测产物（跑评测才需要，且含大量 JSON 历史）----
+backend/evaluation/reports/

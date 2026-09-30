@@ -17,7 +17,14 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=0 /app/dist /usr/share/nginx/html
 
-# nginx 配置将在 docker-compose 中挂载
+# 审计 §7.1-4：把 SPA 配置烤进镜像 —— 此前依赖 docker-compose 挂载，
+# 结果前端容器用的是官方默认配置，深链接刷新直接 404。
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
 EXPOSE 80
+
+# 镜像自带健康检查（nginx:alpine 有 wget）
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
