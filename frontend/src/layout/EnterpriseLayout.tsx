@@ -32,8 +32,8 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Audit Logs', icon: BarChart3, path: '/admin/audit', roles: ['ROOT'] },
       { label: 'Models', icon: Cpu, path: '/platform/models', roles: ['ROOT'] },
       { label: 'Prompts', icon: FileText, path: '/platform/prompts', roles: ['ROOT'] },
-      { label: 'Agents', icon: Bot, path: '/platform/agents', roles: ['ROOT'] },
-      { label: 'Workflows', icon: GitBranch, path: '/platform/workflows', roles: ['ROOT'] },
+      // 审计 §4：Agents / Workflows 的空壳编排器已删除，入口统一收敛到 AI Console 组
+      // 下的 /ai/agents、/ai/workflows（带 Planned 标注），此处不再重复列条目。
     ],
   },
   {

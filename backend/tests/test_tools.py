@@ -474,12 +474,10 @@ class TestFrontendPlannedMarks:
         for relative in (
             "frontend/src/pages/ai/AgentManagementPage.tsx",
             "frontend/src/pages/ai/WorkflowManagementPage.tsx",
-            "frontend/src/pages/platform/agents/AgentStudioPage.tsx",
-            "frontend/src/pages/platform/workflows/WorkflowStudioPage.tsx",
         ):
             source = self._read(relative)
             assert "PlannedNotice" in source, f"{relative} 未使用 Planned 标注"
-        print("[PASS] Agent / Workflow 四个页面统一使用 PlannedNotice")
+        print("[PASS] Agent / Workflow 两个 Planned 页面统一使用 PlannedNotice")
 
     def test_agent_management_page_has_no_placeholder_data(self):
         source = self._read("frontend/src/pages/ai/AgentManagementPage.tsx")
@@ -500,6 +498,51 @@ class TestFrontendPlannedMarks:
         assert "'/tools'" in api_client
         assert "/tools/${toolName}/invoke" in api_client
         print("[PASS] ToolRegistryPage 已接真实 /api/tools")
+
+    def test_agent_workflow_fake_surfaces_are_removed(self):
+        """审计 §4 改进建议 3 + §12 P3：打 404 的空壳编排器与假 API 客户端必须删除。
+
+        ``AgentStudioPage``（15KB）/ ``WorkflowStudioPage``（16KB）会真实调用
+        ``listAgents`` / ``listWorkflows`` / ``execute*``，而后端**不存在**这些路由，
+        失败还被 ``.catch(() => [])`` 吞掉 —— 页面看起来能用，实际永远为空。
+        删除只是"止血"（不是"实现"），因此用文本契约禁止这类客户端复活。
+        """
+        for relative in (
+            "frontend/src/api/agents.ts",
+            "frontend/src/api/workflows.ts",
+            "frontend/src/store/agent.ts",
+            "frontend/src/store/workflow.ts",
+            "frontend/src/pages/platform/agents/AgentStudioPage.tsx",
+            "frontend/src/pages/platform/workflows/WorkflowStudioPage.tsx",
+        ):
+            assert not (self.REPO_ROOT / relative).exists(), (
+                f"{relative} 指向不存在的后端接口，禁止重新引入"
+            )
+
+        offenders = []
+        for path in (self.REPO_ROOT / "frontend" / "src").rglob("*"):
+            if not path.is_file() or path.suffix not in {".ts", ".tsx"}:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for pattern in (
+                "apiClient.get('/agents",
+                "apiClient.post('/agents",
+                "apiClient.get('/workflows",
+                "apiClient.post('/workflows",
+            ):
+                if pattern in text:
+                    offenders.append(f"{path.name}: {pattern}")
+        assert not offenders, f"仍存在调用不存在后端的客户端: {offenders}"
+
+        router = self._read("frontend/src/router/index.tsx")
+        assert '<Navigate to="/ai/agents" replace />' in router
+        assert '<Navigate to="/ai/workflows" replace />' in router
+
+        nav = self._read("frontend/src/layout/EnterpriseLayout.tsx")
+        assert "'/platform/agents'" not in nav and "'/platform/workflows'" not in nav, (
+            "侧边栏不应再直接指向已删除的空壳编排器"
+        )
+        print("[PASS] Agent / Workflow 空壳页面与假 API 客户端已删除，旧 URL 改为 redirect")
 
     def test_readme_no_longer_claims_agent_platform(self):
         readme = self._read("README.md")

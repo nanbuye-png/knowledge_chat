@@ -244,7 +244,7 @@ class TestWorkflow:
         paths = app.openapi()["paths"]
         assert not [p for p in paths if p.startswith("/api/workflows")], (
             "若已实现 /api/workflows，需要同步 README 与 "
-            "WorkflowManagementPage/WorkflowStudioPage 的 Planned 标注"
+            "WorkflowManagementPage 的 Planned 标注（空壳 WorkflowStudioPage 已删除）"
         )
         assert importlib.util.find_spec("app.api.workflows") is None
         print("[PASS] /api/workflows 未实现（README / 前端已标注 Planned）")
@@ -272,7 +272,7 @@ class TestAgent:
         paths = app.openapi()["paths"]
         assert not [p for p in paths if p.startswith("/api/agents")], (
             "若已实现 /api/agents，需要同步 README 与 "
-            "AgentManagementPage/AgentStudioPage 的 Planned 标注"
+            "AgentManagementPage 的 Planned 标注（空壳 AgentStudioPage 已删除）"
         )
         assert importlib.util.find_spec("app.api.agents") is None
         print("[PASS] /api/agents 未实现（README / 前端已标注 Planned）")
