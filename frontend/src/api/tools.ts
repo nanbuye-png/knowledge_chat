@@ -7,9 +7,11 @@ import apiClient from './client'
  *   GET  /api/tools                     → 工具清单（含 JSON Schema 参数描述）
  *   POST /api/tools/{tool_name}/invoke  → 单次调用（body: { arguments })
  *
- * 注意：Agent / Workflow 的客户端（原 ``api/agents.ts``、``api/workflows.ts``）指向的后端
- * **不存在**，已随空壳编排器一并删除（审计 §12 P3）；`/platform/agents`、`/platform/workflows`
- * 现在只是 redirect 到带 Planned 标注的 `/ai/agents`、`/ai/workflows`。不要把它们当成可用能力。
+ * 这里的工具是 **Agent 的执行底座**：``/api/agents/{id}/execute`` 的选择与执行
+ * 走同一份注册表（``backend/app/services/tools``）。Agent 客户端见 ``api/agents.ts``。
+ *
+ * Workflow 的客户端（原 ``api/workflows.ts``）指向的后端**仍不存在**，已删除
+ * （审计 §12 P3）；``/ai/workflows`` 只是带 Planned 标注的页面，不要把它当成可用能力。
  */
 export interface ToolInfo {
   name: string

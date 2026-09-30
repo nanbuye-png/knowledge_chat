@@ -276,7 +276,8 @@ class Settings(BaseSettings):
 
     # ---- 工具调用（审计 §4：Agent / Workflow / Tools 的最小真实路径）----
     # 只做「工具」这一层：可被选择的工具（自带参数 Schema）+ 可执行的调用端点。
-    # Agent loop / Workflow 编排仍未实现（前端与 README 统一标注 Planned）。
+    # Workflow 编排仍未实现（前端与 README 标注 Planned）；Agent 由
+    # app/services/agent 以薄层复用这些工具（见下方 AGENT_* 配置）。
     # 单次工具执行的超时（秒）；超时按 504 返回，绝不无限挂起
     TOOL_TIMEOUT_SECONDS: float = 15.0
     # 一次请求内最多执行的工具调用次数（POST /api/tools/run 的硬上限）
@@ -287,6 +288,16 @@ class Settings(BaseSettings):
     TOOL_KB_SEARCH_SNIPPET_CHARS: int = 500
     # calculator 表达式长度上限（字符）
     TOOL_CALCULATOR_MAX_CHARS: int = 200
+
+    # ---- Agent 执行（审计 §4：Agent 的最小真实路径）----
+    # Agent 只是"工具选择 + 受限执行 +（可选）LLM 汇总"的薄层：
+    # 工具超时 / 次数上限 / 失败处理全部复用 app/services/tools。
+    # 新建 Agent 时的默认单次工具调用上限（不能超过 TOOL_MAX_CALLS_PER_REQUEST）
+    AGENT_DEFAULT_MAX_TOOL_CALLS: int = 3
+    # Agent 执行时送给 LLM 的最大知识库片段数（防止上下文无限膨胀）
+    AGENT_ANSWER_MAX_SNIPPETS: int = 5
+    # Agent 执行时每个片段的正文截断长度（与 TOOL_KB_SEARCH_SNIPPET_CHARS 独立）
+    AGENT_ANSWER_SNIPPET_CHARS: int = 300
 
     # ---- RAG 评测（Phase 2，见 backend/evaluation/README.md）----
     # 裁判模型单次最大 token。Agens 的 agnes-2.5-flash 属于推理型模型，

@@ -59,11 +59,12 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 - Prompt Templates：提示词模板 CRUD 与版本管理
 - AI Configuration：运行时配置概览
 - Tool Calling：工具层 `kb_search`（知识库检索）+ `calculator`（数学表达式，AST 白名单）
-- Agents / Workflows：Agent 平台框架 —— ⚠️ **Planned**（后端无对应模型/路由/服务；
-  前端只保留 `AgentManagementPage` / `WorkflowManagementPage` 两个**显式 Planned** 页面，
-  会打 404 的 `AgentStudioPage` / `WorkflowStudioPage` 空壳编排器、`api/agents.ts`、
-  `api/workflows.ts` 及对应 store 已删除，旧 URL `/platform/agents`、`/platform/workflows`
-  改为 redirect 到上述 Planned 页）
+- Agents：Agent 最小真实路径 —— `agents` 表 + `/api/agents` CRUD + `POST /api/agents/{id}/execute`
+  （确定性工具选择 → 复用工具层的超时/次数上限/失败处理 → 回答；未绑定模型时
+  `answer_mode=tools_only`，如实标注"工具结果汇总"而非模型生成）
+- Workflows：⚠️ **Planned**（后端无模型/路由/服务；前端 `WorkflowManagementPage` 为显式
+  Planned 页面。会打 404 的 `WorkflowStudioPage` 空壳编排器、`api/workflows.ts` 及对应
+  store 已删除，旧 URL `/platform/workflows` 改为 redirect 到 `/ai/workflows`）
 
 ### 📊 可观测性中心 (v1.0.1 新增)
 - Monitoring Dashboard：系统 + AI 健康度监控（管理后台"监控"页）

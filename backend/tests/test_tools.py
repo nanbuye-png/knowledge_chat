@@ -461,6 +461,10 @@ class TestFrontendPlannedMarks:
     这些断言直接读源码文本（与 ``test_sprint32_production`` 检查 Dockerfile /
     nginx 配置同一种做法）——前端没有 UI 测试框架，用文本契约把"不许再用假数据
     冒充功能"钉住，比截图/人工检查可靠。
+
+    2026-09 更新：Agent 已落地最小真实路径（``agents`` 表 + ``/api/agents`` +
+    ``AgentRunner``），因此 ``AgentManagementPage`` **不再是** Planned 页，而必须
+    打真实接口；Workflow 仍未实现，继续保持 Planned。
     """
 
     REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -470,49 +474,34 @@ class TestFrontendPlannedMarks:
         assert path.is_file(), f"缺少文件: {relative}"
         return path.read_text(encoding="utf-8")
 
-    def test_agent_pages_are_marked_planned(self):
-        for relative in (
-            "frontend/src/pages/ai/AgentManagementPage.tsx",
-            "frontend/src/pages/ai/WorkflowManagementPage.tsx",
-        ):
-            source = self._read(relative)
-            assert "PlannedNotice" in source, f"{relative} 未使用 Planned 标注"
-        print("[PASS] Agent / Workflow 两个 Planned 页面统一使用 PlannedNotice")
+    def test_workflow_page_is_marked_planned(self):
+        source = self._read("frontend/src/pages/ai/WorkflowManagementPage.tsx")
+        assert "PlannedNotice" in source, "Workflow 仍未实现，必须显式标注 Planned"
+        print("[PASS] Workflow 页面保持 Planned 标注")
 
-    def test_agent_management_page_has_no_placeholder_data(self):
+    def test_agent_page_uses_real_api(self):
+        """Agent 已实现：页面必须打真实接口，且不得再出现假数据/Planned 标注。"""
         source = self._read("frontend/src/pages/ai/AgentManagementPage.tsx")
-        # 只匹配代码写法（注释里提到历史问题是允许的）
+
         assert "const placeholderAgents" not in source, "假数据必须删除，不能用假数据冒充功能"
         assert "model: 'agnes-2.5-flash'" not in source
         assert "<table" not in source, "假数据表格应整体删除，不要留下空壳表格"
-        print("[PASS] AgentManagementPage 已删除 placeholderAgents 假数据")
+        assert "PlannedNotice" not in source, "Agent 已实现，不应再标注 Planned"
 
-    def test_tool_registry_page_uses_real_api(self):
-        page = self._read("frontend/src/pages/ai/ToolRegistryPage.tsx")
-        assert "listTools" in page and "invokeTool" in page
-        assert (
-            "<p>当前系统无 Agent/Workflow/Tool 后端 API</p>" not in page
-        ), "工具层已实现，旧文案必须删除"
+        assert "from '../../api/agents'" in source, "必须使用真实 Agent 客户端"
+        for call in ("listAgents", "createAgent", "executeAgent"):
+            assert call in source, f"Agent 页面缺少真实调用: {call}"
 
-        api_client = self._read("frontend/src/api/tools.ts")
-        assert "'/tools'" in api_client
-        assert "/tools/${toolName}/invoke" in api_client
-        print("[PASS] ToolRegistryPage 已接真实 /api/tools")
+        api_client = self._read("frontend/src/api/agents.ts")
+        assert "apiClient.get('/agents')" in api_client
+        assert "apiClient.post(`/agents/${agentId}/execute`" in api_client
+        print("[PASS] AgentManagementPage 打真实 /api/agents（CRUD + execute）")
 
-    def test_agent_workflow_fake_surfaces_are_removed(self):
-        """审计 §4 改进建议 3 + §12 P3：打 404 的空壳编排器与假 API 客户端必须删除。
-
-        ``AgentStudioPage``（15KB）/ ``WorkflowStudioPage``（16KB）会真实调用
-        ``listAgents`` / ``listWorkflows`` / ``execute*``，而后端**不存在**这些路由，
-        失败还被 ``.catch(() => [])`` 吞掉 —— 页面看起来能用，实际永远为空。
-        删除只是"止血"（不是"实现"），因此用文本契约禁止这类客户端复活。
-        """
+    def test_workflow_fake_surfaces_are_removed(self):
+        """Workflow 的假客户端 / 空壳编排器必须删除（Agent 侧已改为真实实现）。"""
         for relative in (
-            "frontend/src/api/agents.ts",
             "frontend/src/api/workflows.ts",
-            "frontend/src/store/agent.ts",
             "frontend/src/store/workflow.ts",
-            "frontend/src/pages/platform/agents/AgentStudioPage.tsx",
             "frontend/src/pages/platform/workflows/WorkflowStudioPage.tsx",
         ):
             assert not (self.REPO_ROOT / relative).exists(), (
@@ -525,8 +514,6 @@ class TestFrontendPlannedMarks:
                 continue
             text = path.read_text(encoding="utf-8")
             for pattern in (
-                "apiClient.get('/agents",
-                "apiClient.post('/agents",
                 "apiClient.get('/workflows",
                 "apiClient.post('/workflows",
             ):
@@ -535,18 +522,18 @@ class TestFrontendPlannedMarks:
         assert not offenders, f"仍存在调用不存在后端的客户端: {offenders}"
 
         router = self._read("frontend/src/router/index.tsx")
-        assert '<Navigate to="/ai/agents" replace />' in router
         assert '<Navigate to="/ai/workflows" replace />' in router
 
         nav = self._read("frontend/src/layout/EnterpriseLayout.tsx")
-        assert "'/platform/agents'" not in nav and "'/platform/workflows'" not in nav, (
+        assert "'/platform/workflows'" not in nav, (
             "侧边栏不应再直接指向已删除的空壳编排器"
         )
-        print("[PASS] Agent / Workflow 空壳页面与假 API 客户端已删除，旧 URL 改为 redirect")
+        print("[PASS] Workflow 空壳页面与假 API 客户端已删除，旧 URL 改为 redirect")
 
-    def test_readme_no_longer_claims_agent_platform(self):
+    def test_readme_describes_agent_and_workflow_accurately(self):
         readme = self._read("README.md")
-        assert "Agents / Workflows / Tools：AI Agent 平台框架" not in readme
-        assert "Agents / Workflows：Agent 平台框架 —— ⚠️ **Planned**" in readme
-        print("[PASS] README 的 Agent / Workflow 措辞已改为 Planned")
+        assert "Agents / Workflows：Agent 平台框架 —— ⚠️ **Planned**" not in readme
+        assert "Agents：Agent 最小真实路径" in readme, "README 应说明 Agent 已实现"
+        assert "Workflows：⚠️ **Planned**" in readme, "Workflow 仍须标注 Planned"
+        print("[PASS] README 对 Agent（已实现）/ Workflow（Planned）的措辞一致")
 

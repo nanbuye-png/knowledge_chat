@@ -6,8 +6,9 @@
 这一份注册表（见 ``tests/test_tools.py``）。
 
 职责边界：
-- **本模块不做编排**：Agent loop / Workflow 仍未实现，:meth:`ToolRegistry.run_plan`
-  只是"按给出的顺序执行 N 次调用"的受限执行器（顺序、次数上限、逐步超时、失败即停）。
+- **本模块不做编排**：Workflow 仍未实现；Agent 的规划/执行在
+  ``app/services/agent``（``AgentRunner``），它调用本模块的 :meth:`ToolRegistry.run_plan`
+  作为受限执行器（顺序、次数上限、逐步超时、失败即停），没有第二套执行实现。
 """
 
 from __future__ import annotations

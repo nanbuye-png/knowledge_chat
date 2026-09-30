@@ -16,7 +16,8 @@ import {
  * 是**真实存在**的：本页改为读取 ``GET /api/tools`` 并支持直接试调用
  * （``POST /api/tools/{tool_name}/invoke``），不再有写死的假工具。
  *
- * Agent / Workflow 仍未实现 —— 那两个页面保持 Planned 标注。
+ * Agent 已实现最小真实路径（``/ai/agents``，执行器复用本页展示的这份注册表）；
+ * Workflow 仍未实现 —— 那个页面保持 Planned 标注。
  */
 export default function ToolRegistryPage() {
   const [data, setData] = useState<ToolListResponse | null>(null)

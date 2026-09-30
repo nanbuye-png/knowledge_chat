@@ -21,6 +21,7 @@ from .api.auth_sessions import router as auth_sessions_router
 from .api.knowledge_bases import router as knowledge_bases_router
 from .api.conversation import router as conversation_router
 from .api.llm_model import router as llm_model_router
+from .api.agents import router as agents_router
 from .api.prompt_template import router as prompt_template_router
 from .api.prompt_version import router as prompt_version_router
 from .api.knowledge_config import router as knowledge_config_router
@@ -232,6 +233,7 @@ app.include_router(prompt_template_router)
 app.include_router(prompt_version_router)
 app.include_router(knowledge_config_router)
 app.include_router(tools_router)
+app.include_router(agents_router)
 app.include_router(usage_router)
 app.include_router(admin_users_router)
 app.include_router(admin_dashboard_router)

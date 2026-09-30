@@ -7,14 +7,15 @@ Sprint 31 AI Enhancement 综合测试 (Step 1-8)
 3. Reranker Framework
 4. Advanced Document Parser
 5. Workflow Engine —— **未实现**（本文件只断言"不存在"，见审计 §4）
-6. Agent Architecture —— **未实现**（同上）
+6. Agent Architecture —— **已实现**最小真实路径（CRUD + execute，执行复用工具层）
 7. Tool Calling —— 打**生产**工具层（app.services.tools），不再是测试内的玩具类
 8. AI Integration Pipeline
 
 审计 §4 的整改要求（"删除或重写 test_sprint31 中与生产无关的玩具用例"）在本文件
-的 Step 5/6/7 落地：Step 5/6 的玩具 Workflow / Agent 类已删除，改为断言后端**确实
-没有**这两套 API；Step 7 改为驱动真实注册表。工具层的端到端 HTTP 覆盖见
-``tests/test_tools.py``。
+的 Step 5/6/7 落地：Step 5/6 的玩具 Workflow / Agent 类已删除 —— Workflow 断言
+"后端确实没有这套 API"，Agent 改为断言真实路由 + 执行器复用生产 ToolRegistry；
+Step 7 改为驱动真实注册表。端到端 HTTP 覆盖见 ``tests/test_tools.py``（工具层）与
+``tests/test_agents.py``（Agent 规划/执行/失败处理）。
 """
 import asyncio
 import os
@@ -257,34 +258,56 @@ class TestWorkflow:
 # ============================================================
 
 class TestAgent:
-    """Agent 架构 —— **后端未实现**（审计 §4）。
+    """Agent 架构 —— **已实现**审计 §4 的最小真实路径（不再是玩具类）。
 
     原先这里自定义了一个玩具 ``Agent``（think/act/observe/answer）并断言它自己
-    跑通；README 与前端页面因此被误认为"Agent 平台已完成"。现在改为断言边界：
-    ``/api/agents`` 不存在，真实存在的是工具层 ``/api/tools``。
+    跑通，容易被误读成"Agent 已实现"。现在断言的是**真实且可执行**的边界：
+
+    * ``/api/agents`` 提供 CRUD + ``/{id}/execute``（``app/api/agents.py``）；
+    * 执行器复用生产工具注册表（``ToolRegistry.run_plan``：超时/次数/失败处理），
+      不再有第二套编排实现；
+    * Workflow 仍未实现（``/api/workflows`` 不存在）。
+
+    端到端行为（规划、tools_only/llm 两种回答来源、失败可见不泄漏）见
+    ``tests/test_agents.py``。
     """
 
-    def test_agent_api_is_not_implemented(self):
-        import importlib.util
-
+    def test_agent_api_is_implemented(self):
         from app.main import app
 
         paths = app.openapi()["paths"]
-        assert not [p for p in paths if p.startswith("/api/agents")], (
-            "若已实现 /api/agents，需要同步 README 与 "
-            "AgentManagementPage 的 Planned 标注（空壳 AgentStudioPage 已删除）"
+        assert "/api/agents" in paths, "Agent CRUD 路由必须存在"
+        assert "/api/agents/{agent_id}" in paths
+        assert "/api/agents/{agent_id}/execute" in paths, "Agent 必须有真实执行端点"
+        assert not [p for p in paths if p.startswith("/api/workflows")], (
+            "Workflow 仍未实现；若实现了需同步 README 与前端 Planned 标注"
         )
-        assert importlib.util.find_spec("app.api.agents") is None
-        print("[PASS] /api/agents 未实现（README / 前端已标注 Planned）")
+        print("[PASS] /api/agents（CRUD + execute）已实现，/api/workflows 仍未实现")
+
+    def test_agent_runner_reuses_production_tool_registry(self):
+        """执行器复用生产注册表，且没有残留的玩具 Agent（think/act/observe）。"""
+        import inspect
+
+        from app.services.agent import runner as runner_module
+        from app.services.tools import ToolRegistry, tool_registry
+
+        source = inspect.getsource(runner_module)
+        assert "run_plan" in source, "执行必须走 ToolRegistry.run_plan（超时/次数/失败兜底）"
+        assert isinstance(tool_registry, ToolRegistry)
+        assert runner_module.AgentRunner()._registry is tool_registry
+        assert "def think(" not in source and "def observe(" not in source, (
+            "玩具 Agent（think/act/observe）必须彻底删除"
+        )
+        print("[PASS] AgentRunner 复用生产 ToolRegistry（无玩具 Agent 残留）")
 
     def test_tool_layer_is_the_real_replacement(self):
-        """Agent 未实现时，真实可用的替代能力是工具层（审计 §4 的最小真实路径）。"""
+        """工具层仍是 Agent 的可执行底座（审计 §4 的最小真实路径）。"""
         from app.main import app
 
         paths = app.openapi()["paths"]
         assert "/api/tools" in paths
         assert "/api/tools/{tool_name}/invoke" in paths
-        print("[PASS] 真实可用的是 /api/tools（kb_search + calculator）")
+        print("[PASS] /api/tools 仍在（kb_search + calculator 是 Agent 的执行底座）")
 
 
 
@@ -429,7 +452,9 @@ if __name__ == "__main__":
     # Step 6
     print("\n--- Step 6: Agent Architecture ---")
     t6 = TestAgent()
-    t6.test_agent_loop()
+    t6.test_agent_api_is_implemented()
+    t6.test_agent_runner_reuses_production_tool_registry()
+    t6.test_tool_layer_is_the_real_replacement()
 
     # Step 7
     print("\n--- Step 7: Tool Calling ---")

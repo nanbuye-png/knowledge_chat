@@ -3,7 +3,7 @@
 ## v1.0.1 (2026-09-30) — Reality Audit 整改（Phase 1–3）
 
 基于 `docs/KNOWLEDGE_CHAT_REALITY_AUDIT.md`（审计基线 `a689bf2`）的实际修复，每个条目对应一个独立 commit。
-后端测试基线：**235 passed → 629 passed**（`cd backend && python -m pytest -q`）。
+后端测试基线：**235 passed → 659 passed**（`cd backend && python -m pytest -q`）。
 
 ### 安全 / 鉴权（P0）
 - **知识库越权读修复** — 此前只在「无会话」分支校验知识库归属，导致「自己的会话 + 他人的 `knowledge_base_id`」可越权检索；现在两条分支统一校验知识库归属 + 会话归属 + 二者一致性（`4ac39e8`）
@@ -16,6 +16,7 @@
 - **前端契约适配** — 按 Phase 3 后端契约调整前端解析（`760d383`）
 - **工具层落地（最小真实路径）** — 新增 `kb_search`（复用生产检索链路 + 归属校验）与 `calculator`（AST 白名单，不使用 eval）两个真实工具，端点 `GET /api/tools`、`POST /api/tools/run`、`POST /api/tools/{tool_name}[/invoke]`，含超时 / 最大调用次数 / 失败处理；删除前端占位假数据，Agent / Workflow 页面统一标注 Planned（`474ebfa`）
 - **前端空壳页面与死代码清理** — 删除会真实调用（且失败被 `catch` 吞掉）的 `AgentStudioPage` / `WorkflowStudioPage` 两个空壳编排器、`api/agents.ts` / `api/workflows.ts` 两个假客户端与无人引用的 `store/agent.ts` / `store/workflow.ts`；`/platform/agents`、`/platform/workflows` 保留为 redirect 到带 Planned 标注的 `/ai/agents`、`/ai/workflows`，侧边栏去掉重复入口（`fcacc25`）
+- **Agent 最小真实路径落地（§4）** — 新增 `agents` 表（迁移 `9015d1a85a71`，含 user_id / knowledge_base_id / model_id 外键与工具白名单校验）、`/api/agents` 的 CRUD 与 `POST /api/agents/{id}/execute`；执行链是「确定性工具选择（`app/services/agent/planner.py`）→ 复用 `ToolRegistry.run_plan` 的超时/次数上限/失败即停 → 回答」，绑定模型时走真实 LLM Provider（`answer_mode=llm`），未绑定模型时如实返回 `tools_only`（工具结果汇总，不冒充模型生成）；工具失败/被丢弃的步骤出现在 `steps`/`warnings` 中而不是被吞掉。前端 `/ai/agents` 从 Planned 页改回真实页面（配置知识库/模型/工具 + 执行面板展示执行轨迹），README 与 `api/tools.ts`、`EnterpriseLayout` 注释同步；Workflow 仍未实现，继续标注 Planned
 
 ### 工程 / 数据
 - **`api_keys` 表缺失修复** — 迁移文件此前是空桩（`upgrade()/downgrade()` 均为 `pass`），现由迁移建表；不再手工维护模型 import 列表（`4c24dc5`）
@@ -29,6 +30,15 @@
 ### 测试
 - 新增 `tests/test_tools.py`（工具端点 / 注册表 / 前端 Planned 文本契约）、`tests/test_error_contract.py`（500 不泄漏 + 统一契约）等；前端契约新增「空壳页面与假 API 客户端必须不存在、旧 URL 必须 redirect」断言（`fcacc25`）；按审计 §4 删除 `test_sprint31` 内与生产无关的玩具
   `Tool` / `Workflow` / `Agent` 类，改为断言「未实现」这一事实
+- 新增 `tests/test_agents.py`（29 例）：`agents` 表 CRUD 与归属校验（非本人一律 404）、
+  配置校验（未注册工具 / 他人知识库 / 假模型 / 超上限调用次数 → 400）、规划器单测
+  （数学意图识别的正反例、计划顺序、`max_tool_calls` 截断与 `warnings`）、执行覆盖
+  （`tools_only` 与 `llm` 两种回答来源、`top_k` 透传、停用 409、无能力 400、工具失败
+  200 + `steps[].error` 且不泄漏内部细节、LLM 故障 502 + `request_id`、模型被禁用
+  400 而不是静默降级）；`test_sprint31` 的 `TestAgent` 改为断言「路由存在 + 执行器
+  复用生产 `ToolRegistry` + 无玩具类残留」；`test_tools.py` 的前端契约改为
+  「Agent 页必须打真实 `/api/agents`（且不得再出现 PlannedNotice / 假数据）、
+  Workflow 侧继续禁止假客户端复活」
 
 ## v1.0.1 (2026-09-22)
 

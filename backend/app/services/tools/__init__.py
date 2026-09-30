@@ -7,7 +7,8 @@ kb_search     指定知识库内检索（复用生产 RetrievalPipeline，含归
 calculator    数学表达式求值（AST 白名单，不用 eval）
 ============  ==========================================================
 
-Agent loop / Workflow 编排仍未实现 —— 前端页面与 README 统一标注 Planned，
+Agent loop 由 ``app/services/agent``（选择 + 受限执行 + 可选 LLM 汇总）承担，
+Workflow 编排仍未实现 —— 前端页面与 README 对 Workflow 统一标注 Planned，
 不要在文档或前端里把 ``/api/tools`` 说成"Agent 平台已完成"。
 """
 
