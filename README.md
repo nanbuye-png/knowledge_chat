@@ -224,7 +224,11 @@ cp .env.production .env.production.local
 #    - AGENS_API_KEY            Agens API Key（LLM_PROVIDER=agens 时必填）
 #    - DEEPSEEK_API_KEY         DeepSeek API Key（LLM_PROVIDER=deepseek 时必填）
 #    - SECRET_KEY               JWT 密钥（openssl rand -hex 32 生成）
+#                               留空或占位串时，生产环境启动会直接报错退出（fail-fast）
 #    - CORS_ORIGINS             替换为实际访问域名
+#
+#    注意：生产环境默认关闭 /docs、/redoc、/openapi.json；
+#    需要临时查看接口文档时在 .env.production.local 里加 ENABLE_API_DOCS=true。
 
 # 3. 构建并启动
 docker compose --env-file .env.production.local -f docker-compose.prod.yml up -d --build
@@ -347,7 +351,7 @@ helm install knowledge-chat ./helm/knowledge-chat \
 | `AGENS_API_BASE` | Agens API 地址 | `https://apihub.agnes-ai.com/v1` |
 | `LLM_MODEL` | LLM 模型（须与 `LLM_PROVIDER` 匹配） | `deepseek-chat` |
 | `EMBEDDING_MODEL` | 嵌入模型 | `BAAI/bge-small-zh-v1.5` |
-| `SECRET_KEY` | JWT 密钥 | 默认值仅限开发 |
+| `SECRET_KEY` | JWT 密钥 | 默认值仅限开发（生产启动时 fail-fast） |
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | 数据库账号配置 | `postgres` |
 
@@ -363,7 +367,7 @@ helm install knowledge-chat ./helm/knowledge-chat \
 |------|------|----------|
 | `POSTGRES_PASSWORD` | PostgreSQL 密码 | ✅ |
 | `DEEPSEEK_API_KEY` | DeepSeek API Key | ✅ |
-| `SECRET_KEY` | JWT 密钥（随机长字符串） | ✅ |
+| `SECRET_KEY` | JWT 密钥（随机长字符串，`openssl rand -hex 32`） | ✅（占位/过短会拒绝启动） |
 | `LLM_PROVIDER` | LLM 提供商 | 否 |
 | `LLM_MODEL` | LLM 模型（须与 Provider 匹配，如 `agnes-2.5-flash`） | 否 |
 | `AGENS_API_KEY` / `AGENS_API_BASE` | Agens 配置（使用 `LLM_PROVIDER=agens` 时必填） | 否 |

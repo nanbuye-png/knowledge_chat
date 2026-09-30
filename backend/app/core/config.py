@@ -42,6 +42,33 @@ KNOWN_MODELS: dict[str, tuple[str, ...]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# 安全常量（审计 §6.1）
+# ---------------------------------------------------------------------------
+# 默认 SECRET_KEY 是**仓库里的公开值**：用它签发 JWT 等于把 ROOT 权限公开
+# （任何人都能自签 token）。因此生产环境启动时 fail-fast 拒绝启动，
+# 开发/测试环境只告警。改这个值必须同步更新 PLACEHOLDER_SECRET_KEYS。
+DEFAULT_SECRET_KEY = "knowledge-chat-secret-key-change-in-production"
+
+# 已知占位串：仓库里的模板/脚手架用过这些值，任何一个出现在生产环境都视为
+# 「没配置」。含 .env.production、docker-compose.yml、k8s/secret.yaml 的示例。
+PLACEHOLDER_SECRET_KEYS: frozenset[str] = frozenset({
+    DEFAULT_SECRET_KEY,
+    "knowledge-chat-secret-change-in-production",
+    "change-me-to-a-random-secret",
+    "your-secret-key-change-in-production",
+    "your-secret-key",
+    "change-me",
+    "changeme",
+    "secret",
+    "dev-only-insecure-secret-key-not-for-production",
+})
+
+# 最短 SECRET_KEY（字节）。HS256 的强度完全取决于这个字符串的熵，
+# `openssl rand -hex 32` = 64 字符。
+MIN_SECRET_KEY_BYTES = 32
+
+
 class Settings(BaseSettings):
     # 应用
     APP_NAME: str = "智能知识库问答系统"
@@ -263,8 +290,13 @@ class Settings(BaseSettings):
     EVAL_JUDGE_OUTPUT_RETRY_DELAY: float = 1.0
 
     # JWT 认证
-    SECRET_KEY: str = "knowledge-chat-secret-key-change-in-production"
+    # 默认值是**公开占位串**（审计 §6.1）：开发环境开箱可用，生产环境启动时会
+    # 被 assert_secure_config() 拒绝（fail-fast），必须换成 openssl rand -hex 32。
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_HOURS: int = 24
+    # 是否暴露 /docs、/redoc、/openapi.json（None = 按 ENVIRONMENT 推断：
+    # production 关闭，其余开启）。审计 §6.1-7「暴露面」。
+    ENABLE_API_DOCS: bool | None = None
 
     # 跨域
     CORS_ORIGINS: list = ["http://localhost:5173", "http://localhost:3000", "http://localhost"]
@@ -285,6 +317,59 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+
+    # ------------------------------------------------------------------
+    # 安全配置（审计 §6.1）
+    # ------------------------------------------------------------------
+
+    @property
+    def is_production(self) -> bool:
+        """是否生产环境（ENVIRONMENT 大小写、空格不敏感）。"""
+        return self.ENVIRONMENT.strip().lower() == "production"
+
+    @property
+    def docs_enabled(self) -> bool:
+        """是否暴露 /docs、/redoc、/openapi.json（审计 §6.1-7）。
+
+        显式配置 ``ENABLE_API_DOCS`` 优先；未配置时按环境推断：生产关闭。
+        """
+        if self.ENABLE_API_DOCS is not None:
+            return self.ENABLE_API_DOCS
+        return not self.is_production
+
+    def check_security_config(self) -> list[str]:
+        """返回 SECRET_KEY 的问题列表（空列表 = 通过）。只读，不抛异常。"""
+        problems: list[str] = []
+        secret = (self.SECRET_KEY or "").strip()
+        if not secret:
+            problems.append("SECRET_KEY 为空")
+        elif secret in PLACEHOLDER_SECRET_KEYS:
+            problems.append("SECRET_KEY 仍是仓库模板里的公开占位值")
+        elif len(secret.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
+            problems.append(f"SECRET_KEY 太短（< {MIN_SECRET_KEY_BYTES} 字节，熵不足）")
+        return problems
+
+    def assert_secure_config(self) -> list[str]:
+        """启动期安全自检：生产环境不安全就**拒绝启动**（fail-fast）。
+
+        审计 §6.1-1：默认 SECRET_KEY 是公开值，按仓库现状部署任何人都能签发
+        ROOT token。这里把它变成"起不来"，而不是"起来了但没人知道"。
+
+        Returns:
+            list[str]: 问题列表；生产环境有问题时抛 :class:`RuntimeError`，
+            开发/测试环境返回问题列表交给调用方告警（本地开箱可用）。
+        """
+        problems = self.check_security_config()
+        if not problems:
+            return []
+        if self.is_production:
+            raise RuntimeError(
+                "拒绝启动："
+                + "；".join(problems)
+                + "。请执行 `openssl rand -hex 32` 生成后写入 SECRET_KEY"
+                "（环境变量或 .env.production），审计 §6.1。"
+            )
+        return problems
 
     def check_llm_config(self) -> list[str]:
         """校验 LLM Provider / 模型 / API Key 组合，返回警告信息列表。

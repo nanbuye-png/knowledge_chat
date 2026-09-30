@@ -68,7 +68,9 @@ services:
       REDIS_URL: redis://redis:6379/0
 
       # 应用配置
-      SECRET_KEY: ${SECRET_KEY:-knowledge-chat-secret-change-in-production}
+      # 开发集群保留一个「一眼就不是生产」的默认值：即使有人误把
+      # ENVIRONMENT 改成 production，SECRET_KEY 也会被启动自检拦下（审计 §6.1）。
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-secret-key-not-for-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:80","http://localhost","http://frontend"]}
 

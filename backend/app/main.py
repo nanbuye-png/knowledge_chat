@@ -55,11 +55,36 @@ def _mask_dsn(url: str) -> str:
     return url
 
 
+def _api_docs_kwargs(cfg) -> dict:
+    """按环境决定是否暴露 /docs、/redoc、/openapi.json（审计 §6.1-7）。
+
+    生产环境默认全部关闭（``ENABLE_API_DOCS=true`` 可显式打开，仅用于受控
+    调试）——接口文档等于把攻击面直接摊开给扫描器。开发环境保持可用，
+    否则本地开发体验会明显变差。
+
+    抽成函数而不是内联，是为了让"关掉了吗"能被单测直接断言，
+    不必 reload 整个 ``app.main``（reload 会连带重建引擎，见 conftest 的说明）。
+    """
+    if cfg.docs_enabled:
+        return {"docs_url": "/docs", "redoc_url": "/redoc"}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理器。"""
+    # 1) 安全配置自检必须最先执行（审计 §6.1）：占位 SECRET_KEY 的生产环境
+    #    直接拒绝启动，绝不"带病上线"；开发环境只告警。
+    security_problems = settings.assert_secure_config()
+
     # 启动
     setup_logging()
+    if security_problems:
+        logger.warning(
+            "⚠️  不安全的 SECRET_KEY（开发环境允许，禁止用于生产）："
+            + "；".join(security_problems)
+            + "。生产环境会拒绝启动。"
+        )
     logger.info("=" * 60)
     logger.info(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 正在启动...")
     logger.info("=" * 60)
@@ -139,8 +164,8 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="智能知识库问答系统 - 支持文档上传、RAG 问答、通用 AI 闲聊",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # /docs、/redoc、/openapi.json：生产默认关闭（审计 §6.1-7）
+    **_api_docs_kwargs(settings),
 )
 
 # 跨域中间件

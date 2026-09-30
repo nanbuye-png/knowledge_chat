@@ -75,7 +75,7 @@ class TestGithubActions:
         """CI workflow 配置"""
         path = os.path.join(_backend_dir, "..", ".github", "workflows", "ci.yml")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
         assert "test" in workflow.get("jobs", {})
         steps = workflow["jobs"]["test"]["steps"]
@@ -88,7 +88,7 @@ class TestGithubActions:
         """Docker build workflow"""
         path = os.path.join(_backend_dir, "..", ".github", "workflows", "docker-build.yml")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             workflow = yaml.safe_load(f)
         assert "build" in workflow.get("jobs", {})
         print(f"[PASS] Docker build workflow configured")
@@ -176,7 +176,7 @@ class TestKubernetes:
         path = os.path.join(_backend_dir, "..", "k8s", "backend-deployment.yaml")
         assert os.path.exists(path)
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             docs = list(yaml.safe_load_all(f))
         kinds = [d["kind"] for d in docs]
         assert "Deployment" in kinds
@@ -194,7 +194,7 @@ class TestKubernetes:
         path = os.path.join(_backend_dir, "..", "k8s", "configmap.yaml")
         assert os.path.exists(path)
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             cm = yaml.safe_load(f)
         data = cm["data"]
         assert data["ENVIRONMENT"] == "production"
@@ -202,13 +202,21 @@ class TestKubernetes:
         print(f"[PASS] K8s ConfigMap: production config")
 
     def test_secret(self):
-        """Secret 配置"""
+        """Secret 配置：SECRET_KEY 必须是"未配置"状态，强制显式提供。
+
+        审计 §6.1：模板里曾留 ``your-secret-key-change-in-production`` 这类
+        占位串 —— 看上去"配过了"，实际是公开值。现在模板留空，由启动自检
+        fail-fast 逼出一次显式赋值（``openssl rand -hex 32``）。
+        """
         path = os.path.join(_backend_dir, "..", "k8s", "secret.yaml")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             secret = yaml.safe_load(f)
         assert secret["kind"] == "Secret"
-        print(f"[PASS] K8s Secret defined (values need replacement)")
+        assert secret["stringData"]["SECRET_KEY"] == "", (
+            "k8s Secret 模板不得留下可用的占位密钥（审计 §6.1）"
+        )
+        print("[PASS] K8s Secret defined (SECRET_KEY 必须由运维显式提供)")
 
 
 class TestHelm:
@@ -218,7 +226,7 @@ class TestHelm:
         """Chart.yaml 存在"""
         path = os.path.join(_backend_dir, "..", "helm", "knowledge-chat", "Chart.yaml")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             chart = yaml.safe_load(f)
         assert chart["name"] == "knowledge-chat"
         assert chart["appVersion"] == "1.0.1"
@@ -228,7 +236,7 @@ class TestHelm:
         """values.yaml 配置完整"""
         path = os.path.join(_backend_dir, "..", "helm", "knowledge-chat", "values.yaml")
         assert os.path.exists(path)
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             values = yaml.safe_load(f)
         assert values["replicaCount"] == 2
         assert "backend" in values
@@ -252,7 +260,7 @@ class TestHPA:
         path = os.path.join(_backend_dir, "..", "k8s", "hpa.yaml")
         assert os.path.exists(path)
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             hpa = yaml.safe_load(f)
         assert hpa["spec"]["minReplicas"] == 2
         assert hpa["spec"]["maxReplicas"] == 10
@@ -286,7 +294,7 @@ class TestSecurity:
         """HTTPS/TLS 配置"""
         # Ingress TLS
         ingress_path = os.path.join(_backend_dir, "..", "k8s", "frontend-deployment.yaml")
-        with open(ingress_path) as f:
+        with open(ingress_path, encoding="utf-8") as f:
             docs = list(yaml.safe_load_all(f))
         ingress = next((d for d in docs if d.get("kind") == "Ingress"), None)
         if ingress:
