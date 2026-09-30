@@ -22,7 +22,23 @@ corpus（语料） ──真实入库──> 临时知识库 ──逐题提问�
 | `judge.py` | LLM 裁判（严格 JSON、容错解析、失败隔离） |
 | `runner.py` | CLI：建临时工作区 → 入库 → 逐题跑 → 写 JSON |
 | `report.py` | JSON → Markdown 报告（`docs/RAG_EVALUATION.md` 由它生成） |
-| `reports/` | 运行结果 JSON（可提交，便于对比历史） |
+| `reports/` | 运行结果 JSON（**只提交正式报告**，规则见下） |
+
+## 产物归档规则
+
+评测运行会产出两类 JSON，归档口径不同：
+
+| 类型 | 例子 | 是否入库 | 原因 |
+|---|---|---|---|
+| **正式报告** | `hybrid.json`（含 LLM 生成 + 裁判）、`hybrid_retrieval.json`、`vector_retrieval.json`（基线） | **提交** | 是 `docs/RAG_EVALUATION.md` 与后续对比引用的数据源，需要可追溯 |
+| **冒烟 / 中间产物** | `_smoke_llm.json`、`smoke_no_llm.json`、`hybrid_before_rejudge.json` | **不提交**（`.gitignore` 已覆盖：`_*.json`、`smoke_*.json`、`*_before_*.json`） | 一次性的质量门禁与调参中间态，重跑即失效；入库只会让 `git log` 充满无意义的数字变更 |
+
+判断标准只有一条：**这份 JSON 是否被文档或对比结论引用**。被引用 → 提交并连同
+生成它的命令一起说明；没被引用 → 视为脚手架，留在本地。
+
+> 重新生成正式报告时（会产生 API 费用）务必同时更新报告头部的运行配置，
+> 否则「报告数字」与「报告声称的配置」会脱节 —— 这正是 `report.py` 从 JSON
+> 直接渲染、不手工改数的原因。
 
 ## 快速开始
 

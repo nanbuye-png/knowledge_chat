@@ -42,6 +42,14 @@ backend/venv/
 # 临时诊断脚本
 _*_tmp.py
 
+# 评测运行产物（backend/evaluation/reports/）
+# 只提交"正式报告"（hybrid.json / hybrid_retrieval.json / vector_retrieval.json），
+# 冒烟运行与中间产物不入库，理由见 backend/evaluation/README.md「产物归档规则」。
+# 注意：`_` 前缀同样覆盖 `_smoke_llm.json` 这类一次性的冒烟输出。
+backend/evaluation/reports/_*.json
+backend/evaluation/reports/smoke_*.json
+backend/evaluation/reports/*_before_*.json
+
 # 个人材料（不提交到公开仓库）
 docs/INTERVIEW_GUIDE.md
 
