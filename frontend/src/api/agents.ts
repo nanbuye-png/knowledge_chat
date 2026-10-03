@@ -13,8 +13,7 @@ import apiClient from './client'
  *   DELETE /api/agents/{id}               → 删除
  *   POST   /api/agents/{id}/execute       → 执行（回答 + 完整执行轨迹）
  *
- * Workflow 的客户端（原 `api/workflows.ts`）指向的后端仍然**不存在**，已删除；
- * `/ai/workflows` 是带 Planned 标注的页面，不要恢复那个客户端。
+ * Workflow 的客户端见 `api/workflows.ts`（对应真实存在的 `/api/workflows`）。
  */
 
 export interface Agent {

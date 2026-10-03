@@ -10,7 +10,8 @@
          Tool 选择逻辑、Tool 超时、最大执行次数、失败处理
 
 本模块是该建议的落点：**先做工具这一层**（Agent 的规划/执行在
-``app/services/agent`` 里以薄层复用本注册表；Workflow 编排仍未实现）。四条硬要求与代码的对应关系：
+``app/services/agent``、Workflow 的编排在 ``app/services/workflow``，都以薄层复用
+本注册表）。四条硬要求与代码的对应关系：
 
 ====================  ========================================================
 Tool 选择逻辑         :meth:`BaseTool.describe` 输出 JSON Schema，

@@ -456,15 +456,16 @@ class TestToolRunEndpoint:
 
 
 class TestFrontendPlannedMarks:
-    """审计 §4 改进建议 1：前端空壳页面必须统一 Planned 标注，并删除假数据。
+    """审计 §4 改进建议 1：前端页面必须打真实接口，并用文本契约钉住。
 
     这些断言直接读源码文本（与 ``test_sprint32_production`` 检查 Dockerfile /
     nginx 配置同一种做法）——前端没有 UI 测试框架，用文本契约把"不许再用假数据
     冒充功能"钉住，比截图/人工检查可靠。
 
     2026-09 更新：Agent 已落地最小真实路径（``agents`` 表 + ``/api/agents`` +
-    ``AgentRunner``），因此 ``AgentManagementPage`` **不再是** Planned 页，而必须
-    打真实接口；Workflow 仍未实现，继续保持 Planned。
+    ``AgentRunner``）；2026-10 更新：Workflow 也已落地（``workflows`` 表 +
+    ``/api/workflows`` + ``app/services/workflow``），两个页面都必须是真实页面，
+    不再允许 Planned 标注或假数据。
     """
 
     REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -474,10 +475,19 @@ class TestFrontendPlannedMarks:
         assert path.is_file(), f"缺少文件: {relative}"
         return path.read_text(encoding="utf-8")
 
-    def test_workflow_page_is_marked_planned(self):
+    def test_workflow_page_uses_real_api(self):
+        """Workflow 已实现：页面必须打真实接口，且不得再出现 Planned 标注。"""
         source = self._read("frontend/src/pages/ai/WorkflowManagementPage.tsx")
-        assert "PlannedNotice" in source, "Workflow 仍未实现，必须显式标注 Planned"
-        print("[PASS] Workflow 页面保持 Planned 标注")
+
+        assert "PlannedNotice" not in source, "Workflow 已实现，不应再标注 Planned"
+        assert "from '../../api/workflows'" in source, "必须使用真实 Workflow 客户端"
+        for call in ("listWorkflows", "createWorkflow", "executeWorkflow"):
+            assert call in source, f"Workflow 页面缺少真实调用: {call}"
+
+        api_client = self._read("frontend/src/api/workflows.ts")
+        assert "apiClient.get('/workflows')" in api_client
+        assert "apiClient.post(`/workflows/${workflowId}/execute`" in api_client
+        print("[PASS] WorkflowManagementPage 打真实 /api/workflows（CRUD + execute）")
 
     def test_agent_page_uses_real_api(self):
         """Agent 已实现：页面必须打真实接口，且不得再出现假数据/Planned 标注。"""
@@ -497,29 +507,15 @@ class TestFrontendPlannedMarks:
         assert "apiClient.post(`/agents/${agentId}/execute`" in api_client
         print("[PASS] AgentManagementPage 打真实 /api/agents（CRUD + execute）")
 
-    def test_workflow_fake_surfaces_are_removed(self):
-        """Workflow 的假客户端 / 空壳编排器必须删除（Agent 侧已改为真实实现）。"""
+    def test_workflow_shells_are_removed(self):
+        """Workflow 的空壳编排器 / 死 store 必须删除（真实页面与客户端已就位）。"""
         for relative in (
-            "frontend/src/api/workflows.ts",
             "frontend/src/store/workflow.ts",
             "frontend/src/pages/platform/workflows/WorkflowStudioPage.tsx",
         ):
             assert not (self.REPO_ROOT / relative).exists(), (
-                f"{relative} 指向不存在的后端接口，禁止重新引入"
+                f"{relative} 是会打 404 的空壳编排器残留，禁止重新引入"
             )
-
-        offenders = []
-        for path in (self.REPO_ROOT / "frontend" / "src").rglob("*"):
-            if not path.is_file() or path.suffix not in {".ts", ".tsx"}:
-                continue
-            text = path.read_text(encoding="utf-8")
-            for pattern in (
-                "apiClient.get('/workflows",
-                "apiClient.post('/workflows",
-            ):
-                if pattern in text:
-                    offenders.append(f"{path.name}: {pattern}")
-        assert not offenders, f"仍存在调用不存在后端的客户端: {offenders}"
 
         router = self._read("frontend/src/router/index.tsx")
         assert '<Navigate to="/ai/workflows" replace />' in router
@@ -528,12 +524,16 @@ class TestFrontendPlannedMarks:
         assert "'/platform/workflows'" not in nav, (
             "侧边栏不应再直接指向已删除的空壳编排器"
         )
-        print("[PASS] Workflow 空壳页面与假 API 客户端已删除，旧 URL 改为 redirect")
+        assert "'/ai/workflows'" in nav, "真实 Workflow 页面必须保留侧边栏入口"
+        print("[PASS] Workflow 空壳编排器已删除，旧 URL 改为 redirect，真实页面在架")
 
     def test_readme_describes_agent_and_workflow_accurately(self):
         readme = self._read("README.md")
         assert "Agents / Workflows：Agent 平台框架 —— ⚠️ **Planned**" not in readme
         assert "Agents：Agent 最小真实路径" in readme, "README 应说明 Agent 已实现"
-        assert "Workflows：⚠️ **Planned**" in readme, "Workflow 仍须标注 Planned"
-        print("[PASS] README 对 Agent（已实现）/ Workflow（Planned）的措辞一致")
+        assert "Workflows：Workflow 最小真实路径" in readme, (
+            "README 应说明 Workflow 已实现（不再标 Planned）"
+        )
+        assert "Workflows：⚠️ **Planned**" not in readme
+        print("[PASS] README 对 Agent / Workflow（均已实现）的措辞一致")
 

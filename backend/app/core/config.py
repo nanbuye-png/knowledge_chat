@@ -276,8 +276,8 @@ class Settings(BaseSettings):
 
     # ---- 工具调用（审计 §4：Agent / Workflow / Tools 的最小真实路径）----
     # 只做「工具」这一层：可被选择的工具（自带参数 Schema）+ 可执行的调用端点。
-    # Workflow 编排仍未实现（前端与 README 标注 Planned）；Agent 由
-    # app/services/agent 以薄层复用这些工具（见下方 AGENT_* 配置）。
+    # Agent 由 app/services/agent、Workflow 由 app/services/workflow 以薄层复用这些
+    # 工具（超时 / 参数校验 / 失败处理全部在这里兜底，见各自 *_* 配置）。
     # 单次工具执行的超时（秒）；超时按 504 返回，绝不无限挂起
     TOOL_TIMEOUT_SECONDS: float = 15.0
     # 一次请求内最多执行的工具调用次数（POST /api/tools/run 的硬上限）
@@ -298,6 +298,12 @@ class Settings(BaseSettings):
     AGENT_ANSWER_MAX_SNIPPETS: int = 5
     # Agent 执行时每个片段的正文截断长度（与 TOOL_KB_SEARCH_SNIPPET_CHARS 独立）
     AGENT_ANSWER_SNIPPET_CHARS: int = 300
+
+    # ---- Workflow 编排（审计 §4：Workflow 的最小真实路径）----
+    # Workflow = 用户显式声明的有序步骤 + 条件分支 + 状态传递 + 失败处理
+    # （app/services/workflow）；工具超时 / 参数校验 / 异常包装复用 tools 层。
+    # 一条 Workflow 最多多少步（创建时由 Schema 校验，执行时再兜底一次）
+    WORKFLOW_MAX_STEPS: int = 5
 
     # ---- RAG 评测（Phase 2，见 backend/evaluation/README.md）----
     # 裁判模型单次最大 token。Agens 的 agnes-2.5-flash 属于推理型模型，

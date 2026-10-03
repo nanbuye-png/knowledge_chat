@@ -62,9 +62,13 @@ Document → Parser → Chunker → Embedding → VectorStore → Retriever → 
 - Agents：Agent 最小真实路径 —— `agents` 表 + `/api/agents` CRUD + `POST /api/agents/{id}/execute`
   （确定性工具选择 → 复用工具层的超时/次数上限/失败处理 → 回答；未绑定模型时
   `answer_mode=tools_only`，如实标注"工具结果汇总"而非模型生成）
-- Workflows：⚠️ **Planned**（后端无模型/路由/服务；前端 `WorkflowManagementPage` 为显式
-  Planned 页面。会打 404 的 `WorkflowStudioPage` 空壳编排器、`api/workflows.ts` 及对应
-  store 已删除，旧 URL `/platform/workflows` 改为 redirect 到 `/ai/workflows`）
+- Workflows：Workflow 最小真实路径 —— `workflows` 表 + `/api/workflows` CRUD +
+  `POST /api/workflows/{id}/execute`（用户**显式声明**的有序步骤 + 条件分支
+  `when`（`always` / `previous_succeeded` / `previous_failed` / `input_is_math`）+
+  状态传递 `{{input}}` / `{{steps.<步骤ID>.output.<字段>}}` + 逐步失败策略
+  `on_error`（abort / continue）；工具执行复用 `/api/tools` 同一份注册表，
+  被跳过的步骤带 `skip_reason`、失败的步骤带 `error.code`，都不静默）
+  与 Agents 的分工：Agent 是"动态规划 + 工具选择 + 循环"，Workflow 是显式编排。
 
 ### 📊 可观测性中心 (v1.0.1 新增)
 - Monitoring Dashboard：系统 + AI 健康度监控（管理后台"监控"页）

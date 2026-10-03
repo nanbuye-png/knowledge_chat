@@ -6,16 +6,17 @@ Sprint 31 AI Enhancement 综合测试 (Step 1-8)
 2. Hybrid Search (BM25 + Vector)
 3. Reranker Framework
 4. Advanced Document Parser
-5. Workflow Engine —— **未实现**（本文件只断言"不存在"，见审计 §4）
+5. Workflow Engine —— **已实现**最小真实路径（workflows 表 + /api/workflows CRUD +
+   /{id}/execute；显式步骤 + 条件分支 + 状态传递 + 失败策略，执行复用工具层）
 6. Agent Architecture —— **已实现**最小真实路径（CRUD + execute，执行复用工具层）
 7. Tool Calling —— 打**生产**工具层（app.services.tools），不再是测试内的玩具类
 8. AI Integration Pipeline
 
 审计 §4 的整改要求（"删除或重写 test_sprint31 中与生产无关的玩具用例"）在本文件
-的 Step 5/6/7 落地：Step 5/6 的玩具 Workflow / Agent 类已删除 —— Workflow 断言
-"后端确实没有这套 API"，Agent 改为断言真实路由 + 执行器复用生产 ToolRegistry；
-Step 7 改为驱动真实注册表。端到端 HTTP 覆盖见 ``tests/test_tools.py``（工具层）与
-``tests/test_agents.py``（Agent 规划/执行/失败处理）。
+的 Step 5/6/7 落地：Step 5/6/7 的玩具 Workflow / Agent / Tool 类已删除，改为断言
+**真实路由与真实实现**（Workflow / Agent 的 CRUD + execute、工具层注册表）；
+端到端 HTTP 覆盖见 ``tests/test_tools.py``（工具层）、``tests/test_agents.py``（Agent）
+与 ``tests/test_workflows.py``（Workflow 编排）。
 """
 import asyncio
 import os
@@ -229,26 +230,32 @@ class TestDocumentParser:
 # ============================================================
 
 class TestWorkflow:
-    """Workflow 引擎 —— **后端未实现**（审计 §4）。
+    """Workflow 引擎 —— **已实现**审计 §4 的最小真实路径（不再是玩具类）。
 
     原先这里自定义了一个玩具 ``Workflow`` 类并断言它自己跑通，容易被误读成
-    "Workflow 已实现"。现在断言的是**未实现这一事实**：真实可用的编排能力只有
-    工具执行器（``app.services.tools.ToolRegistry.run_plan``）。
+    "Workflow 已实现"；后来一度改为断言"未实现这一事实"。现在后端已真实落地
+    （``app/api/workflows.py`` + ``app/services/workflow`` + ``workflows`` 表），
+    因此断言的是**真实且可执行**的边界；端到端行为（多步骤 / 条件分支 / 状态
+    传递 / 失败处理 / 越权）见 ``tests/test_workflows.py``。
     """
 
-    def test_workflow_api_is_not_implemented(self):
-        """``/api/workflows`` 不应存在 —— 与 README / 前端 Planned 标注保持一致。"""
+    def test_workflow_api_is_implemented(self):
+        """``/api/workflows`` 必须存在 —— 与 README / 前端真实页面保持一致。"""
         import importlib.util
 
         from app.main import app
 
         paths = app.openapi()["paths"]
-        assert not [p for p in paths if p.startswith("/api/workflows")], (
-            "若已实现 /api/workflows，需要同步 README 与 "
-            "WorkflowManagementPage 的 Planned 标注（空壳 WorkflowStudioPage 已删除）"
-        )
-        assert importlib.util.find_spec("app.api.workflows") is None
-        print("[PASS] /api/workflows 未实现（README / 前端已标注 Planned）")
+        expected = {
+            "/api/workflows",
+            "/api/workflows/{workflow_id}",
+            "/api/workflows/{workflow_id}/execute",
+        }
+        missing = sorted(expected - set(paths))
+        assert not missing, f"/api/workflows 缺少路径: {missing}"
+        assert importlib.util.find_spec("app.api.workflows") is not None
+        assert importlib.util.find_spec("app.services.workflow") is not None
+        print("[PASS] /api/workflows 已实现（CRUD + execute）")
 
 
 
@@ -266,7 +273,8 @@ class TestAgent:
     * ``/api/agents`` 提供 CRUD + ``/{id}/execute``（``app/api/agents.py``）；
     * 执行器复用生产工具注册表（``ToolRegistry.run_plan``：超时/次数/失败处理），
       不再有第二套编排实现；
-    * Workflow 仍未实现（``/api/workflows`` 不存在）。
+    * Workflow 同样已落地（``/api/workflows`` CRUD + ``/{id}/execute``），
+      见 ``TestWorkflow`` 与 ``tests/test_workflows.py``。
 
     端到端行为（规划、tools_only/llm 两种回答来源、失败可见不泄漏）见
     ``tests/test_agents.py``。
@@ -279,10 +287,10 @@ class TestAgent:
         assert "/api/agents" in paths, "Agent CRUD 路由必须存在"
         assert "/api/agents/{agent_id}" in paths
         assert "/api/agents/{agent_id}/execute" in paths, "Agent 必须有真实执行端点"
-        assert not [p for p in paths if p.startswith("/api/workflows")], (
-            "Workflow 仍未实现；若实现了需同步 README 与前端 Planned 标注"
+        assert "/api/workflows/{workflow_id}/execute" in paths, (
+            "Workflow 也已落地（见 TestWorkflow），不要再按'未实现'断言"
         )
-        print("[PASS] /api/agents（CRUD + execute）已实现，/api/workflows 仍未实现")
+        print("[PASS] /api/agents 与 /api/workflows（CRUD + execute）均已实现")
 
     def test_agent_runner_reuses_production_tool_registry(self):
         """执行器复用生产注册表，且没有残留的玩具 Agent（think/act/observe）。"""
@@ -447,7 +455,7 @@ if __name__ == "__main__":
     # Step 5
     print("\n--- Step 5: Workflow Engine ---")
     t5 = TestWorkflow()
-    t5.test_workflow_execution()
+    t5.test_workflow_api_is_implemented()
 
     # Step 6
     print("\n--- Step 6: Agent Architecture ---")

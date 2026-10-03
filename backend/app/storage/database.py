@@ -24,6 +24,11 @@ from ..models.llm_usage import LLMUsage  # noqa: F401 - 注册 LLMUsage 模型�
 from ..models.permission import Role, Permission, user_roles, role_permissions  # noqa: F401 - RBAC 模型
 from ..models.token_blacklist import TokenBlacklist  # noqa: F401 - Token 黑名单模型
 from ..models.api_key import ApiKey  # noqa: F401 - API Key 模型
+# 审计 §4：Agent / Workflow 也必须在这里注册 —— ``init_db`` 的 create_all 兜底
+# （alembic 不可用时）只会建 ``Base.metadata`` 里已有的表，漏 import 就会
+# "迁移跑过了、回退模式下却少表"。
+from ..models.agent import Agent  # noqa: F401 - 注册 Agent 模型用于建表
+from ..models.workflow import Workflow  # noqa: F401 - 注册 Workflow 模型用于建表
 
 
 # ---- 根据 DATABASE_TYPE 动态创建引擎 ----

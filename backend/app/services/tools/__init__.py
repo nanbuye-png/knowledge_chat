@@ -8,8 +8,8 @@ calculator    数学表达式求值（AST 白名单，不用 eval）
 ============  ==========================================================
 
 Agent loop 由 ``app/services/agent``（选择 + 受限执行 + 可选 LLM 汇总）承担，
-Workflow 编排仍未实现 —— 前端页面与 README 对 Workflow 统一标注 Planned，
-不要在文档或前端里把 ``/api/tools`` 说成"Agent 平台已完成"。
+Workflow 编排由 ``app/services/workflow``（显式有序步骤 + 条件分支 + 状态传递 +
+失败策略）承担 —— 两者都复用本注册表，工具层自身仍然不做编排。
 """
 
 from .base import (

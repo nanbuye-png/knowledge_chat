@@ -17,7 +17,7 @@ import {
  * （``POST /api/tools/{tool_name}/invoke``），不再有写死的假工具。
  *
  * Agent 已实现最小真实路径（``/ai/agents``，执行器复用本页展示的这份注册表）；
- * Workflow 仍未实现 —— 那个页面保持 Planned 标注。
+ * Workflow 也已实现（``/ai/workflows``，逐步调用同一份注册表）。
  */
 export default function ToolRegistryPage() {
   const [data, setData] = useState<ToolListResponse | null>(null)
@@ -74,7 +74,7 @@ export default function ToolRegistryPage() {
             <Wrench className="w-6 h-6 text-sky-500" />Tool Registry
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            后端已实现的工具（Agent / Workflow 仍为 Planned）
+            后端已实现的工具（Agent / Workflow 共用这一份注册表）
           </p>
         </div>
         <button onClick={load} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm rounded-xl hover:bg-slate-50">

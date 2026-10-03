@@ -155,9 +155,9 @@ export default function AppRouter() {
         </RoleRoute>
       } />
       {/* 审计 §4 / §12 P3：AgentStudioPage / WorkflowStudioPage 是"看起来能用、实际 404"
-          的空壳编排器，已整体删除（连同 api/agents.ts、api/workflows.ts 与对应 store）。
-          这里保留 URL 做 redirect，避免旧书签与侧边栏入口出现 404，统一落到带 Planned
-          标注的 AI Center 页面（/ai/agents、/ai/workflows）。 */}
+          的空壳编排器，已整体删除（连同对应 store）。这里保留 URL 做 redirect，避免旧
+          书签与侧边栏入口出现 404，统一落到 AI Center 的真实页面
+          （/ai/agents、/ai/workflows —— 后端分别是 /api/agents、/api/workflows）。 */}
       <Route path="/platform/agents" element={
         <RoleRoute allowedRoles={['ROOT']}>
           <Navigate to="/ai/agents" replace />

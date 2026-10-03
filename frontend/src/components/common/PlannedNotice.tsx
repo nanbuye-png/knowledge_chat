@@ -14,9 +14,10 @@ interface PlannedNoticeProps {
  *
  * 审计指出前端存在多处"看起来能用、实际 404"的空壳页面：AgentManagementPage 曾用
  * hardcoded 假数据渲染表格，AgentStudioPage/WorkflowStudioPage 曾真实发请求打不存在的
- * /agents、/workflows。现在假数据与空壳编排器都已删除：**Agent 已落地最小真实路径**
- * （`/ai/agents` 打真实 `/api/agents`），只剩下 Workflow 等仍未实现的页面必须显式标注，
- * 与 README 的措辞对齐 —— 宁可显示"未实现"，也不要让假数据冒充功能。
+ * /agents、/workflows。现在假数据与空壳编排器都已删除，Agent（`/ai/agents`）与
+ * Workflow（`/ai/workflows`）都打真实接口；本组件留给**仍未实现**的能力（例如
+ * Grafana 面板这类只有配置模板的功能），与 README 的措辞对齐 —— 宁可显示"未实现"，
+ * 也不要让假数据冒充功能。
  */
 export default function PlannedNotice({ feature, reason, available }: PlannedNoticeProps) {
   return (

@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Models', icon: Cpu, path: '/platform/models', roles: ['ROOT'] },
       { label: 'Prompts', icon: FileText, path: '/platform/prompts', roles: ['ROOT'] },
       // 审计 §4：Agents / Workflows 的空壳编排器已删除，入口统一收敛到 AI Console 组
-      // 下的 /ai/agents（已实现：/api/agents CRUD + execute）与 /ai/workflows（仍为 Planned）。
+      // 下的 /ai/agents 与 /ai/workflows（两者都已打真实后端：/api/agents、/api/workflows）。
     ],
   },
   {
