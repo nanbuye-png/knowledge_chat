@@ -15,7 +15,7 @@ from ..models.knowledge_base import KnowledgeBase
 from ..storage.database import get_db
 from .admin.users import active_user_filter
 from ..services.user_service import update_user_activity
-from ..services.session_service import create_session
+from ..services.session_service import create_session, revoke_other_sessions
 from ..core.config import settings
 from ..core.password_policy import validate_password_strength
 from ..core.rate_limit import rate_limit
@@ -275,6 +275,97 @@ async def logout(
             ip_address=ip, user_agent=ua, status="SUCCESS",
         )
     return LogoutResponse(message="已成功退出登录")
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求体（字段名与前端 SecurityPage 一致）。"""
+
+    current_password: str = Field(..., min_length=1, max_length=100)
+    new_password: str = Field(..., min_length=1, max_length=100)
+
+
+class ChangePasswordResponse(BaseModel):
+    message: str
+    revoked_sessions: int = 0
+
+
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+    summary="修改当前用户密码",
+)
+async def change_password(
+    request: Request,
+    payload: ChangePasswordRequest,
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """修改密码（审计 §5.14：前端此前调用的此接口**后端根本不存在** → 404）。
+
+    规则：
+
+    1. 必须携带有效 JWT（``get_current_user``）并给出**正确的当前密码**；
+    2. 新密码必须满足 ``validate_password_strength``
+       （≥12 位，且含数字/大写/小写/特殊字符）；
+    3. 新密码不得与当前密码相同；
+    4. 成功后**注销该用户其他所有 Session**（改密码即踢掉其他设备），
+       当前请求所属 Session 保留 —— 否则用户改完密码自己立刻 401 掉线。
+
+    失败与成功都会写审计日志（``PASSWORD_CHANGE``），便于事后追溯。
+    """
+    ip, ua = _extract_client_info(request)
+    user_id = current_user.id
+
+    # --- 1. 当前密码校验（这里用户已登录，可以直接说"当前密码不正确"） ---
+    if not verify_password(payload.current_password, current_user.password_hash):
+        await create_audit_log(
+            db=db, operator_id=user_id, action="PASSWORD_CHANGE",
+            target_type="user", target_id=user_id,
+            detail={"reason": "current_password_mismatch"},
+            ip_address=ip, user_agent=ua, status="FAILURE",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前密码不正确",
+        )
+
+    # --- 2. 新密码强度（与注册/管理员重置同一条策略） ---
+    is_valid, errors = validate_password_strength(payload.new_password)
+    if not is_valid:
+        await create_audit_log(
+            db=db, operator_id=user_id, action="PASSWORD_CHANGE",
+            target_type="user", target_id=user_id,
+            detail={"reason": "weak_password"},
+            ip_address=ip, user_agent=ua, status="FAILURE",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="；".join(errors),
+        )
+
+    # --- 3. 新旧密码不得相同 ---
+    if verify_password(payload.new_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="新密码不能与当前密码相同",
+        )
+
+    # --- 4. 落库 + 作废其他会话 ---
+    current_user.password_hash = hash_password(payload.new_password)
+    db.add(current_user)
+    await db.commit()
+
+    revoked = await revoke_other_sessions(db, user_id, token)
+
+    await create_audit_log(
+        db=db, operator_id=user_id, action="PASSWORD_CHANGE",
+        target_type="user", target_id=user_id,
+        detail={"revoked_sessions": revoked},
+        ip_address=ip, user_agent=ua, status="SUCCESS",
+    )
+    logger.info(f"Password changed: user_id={user_id}, revoked_sessions={revoked}")
+    return ChangePasswordResponse(message="密码修改成功", revoked_sessions=revoked)
 
 
 @router.get("/me", response_model=UserResponse, summary="当前用户信息")

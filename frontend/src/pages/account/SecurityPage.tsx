@@ -3,6 +3,27 @@ import { Shield, Key, Lock, CheckCircle, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import apiClient from '../../api/client'
 
+/**
+ * 密码强度（与后端 core/password_policy.py **逐条对应**）
+ * ---------------------------------------------------------------------------
+ * 后端 validate_password_strength：≥12 位 + 数字 + 大写 + 小写 + 特殊字符。
+ * 这里此前只判 `length < 6`（与后端策略不一致，用户会先被放过去再吃 400），
+ * 现在前端提示与后端同源，最多只做"提前告知"，最终仍以后端 400 为准。
+ */
+const PASSWORD_RULES: { test: (pw: string) => boolean; label: string }[] = [
+  { test: (pw) => pw.length >= 12, label: '至少 12 位' },
+  { test: (pw) => /\d/.test(pw), label: '含数字' },
+  { test: (pw) => /[A-Z]/.test(pw), label: '含大写字母' },
+  { test: (pw) => /[a-z]/.test(pw), label: '含小写字母' },
+  { test: (pw) => /[^\w\s]/.test(pw), label: '含特殊字符' },
+]
+
+function policyErrorOf(password: string): string | null {
+  const failed = PASSWORD_RULES.filter((rule) => !rule.test(password))
+  if (failed.length === 0) return null
+  return `新密码需满足：${failed.map((rule) => rule.label).join('、')}`
+}
+
 export default function SecurityPage() {
   const { user } = useAuthStore()
 
@@ -16,21 +37,29 @@ export default function SecurityPage() {
     e.preventDefault()
     setMsg('')
 
-    if (newPw.length < 6) { setMsg('新密码至少 6 位'); return }
+    if (!currentPw) { setMsg('请输入当前密码'); return }
+    const policyError = policyErrorOf(newPw)
+    if (policyError) { setMsg(policyError); return }
     if (newPw !== confirmPw) { setMsg('两次密码不一致'); return }
 
     setChanging(true)
     try {
-      await apiClient.post('/auth/change-password', {
+      const res = await apiClient.post('/auth/change-password', {
         current_password: currentPw,
         new_password: newPw,
       })
-      setMsg('✅ 密码修改成功')
+      // 后端改密码后会作废其他设备的 Session（当前设备保留）
+      const revoked = Number(res.data?.revoked_sessions ?? 0)
+      setMsg(revoked > 0
+        ? `✅ 密码修改成功，已退出其他 ${revoked} 台设备的登录`
+        : '✅ 密码修改成功')
       setCurrentPw('')
       setNewPw('')
       setConfirmPw('')
-    } catch (err: any) {
-      setMsg(err?.response?.data?.detail || '密码修改失败')
+    } catch (err) {
+      // 响应拦截器已把错误统一成 `new Error(message)`（见 api/client.ts）。
+      // 旧代码只读 err.response.data.detail，会漏掉统一信封的顶层 message。
+      setMsg(err instanceof Error && err.message ? err.message : '密码修改失败')
     } finally {
       setChanging(false)
     }
@@ -65,6 +94,9 @@ export default function SecurityPage() {
             onChange={(e) => setNewPw(e.target.value)}
             className="w-full px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
           />
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            至少 12 位，且包含大写字母、小写字母、数字与特殊字符
+          </p>
           <input
             type="password"
             placeholder="Confirm New Password"
@@ -104,7 +136,7 @@ export default function SecurityPage() {
           </div>
           <div className="flex items-center justify-between py-1">
             <span className="text-slate-500">Password Policy</span>
-            <span className="text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Strong</span>
+            <span className="text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> ≥12 位 + 大小写 + 数字 + 特殊字符</span>
           </div>
         </div>
       </div>
