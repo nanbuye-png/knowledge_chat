@@ -17,9 +17,9 @@
   不做"原样透传"——否则工具会收到字面量 ``{{...}}`` 并返回一个看不懂的 400。
 
 * **条件分支** —— ``when`` 支持 ``always`` / ``previous_succeeded`` /
-  ``previous_failed`` / ``input_is_math``。最后一项目复用 Agent 规划器的
-  :func:`~app.services.agent.planner.extract_math_expression`（同一份识别规则，
-  不新增第二套"是不是数学题"的判断）。
+  ``previous_failed`` / ``input_is_math``。最后一项目复用**唯一**的数学意图规则
+  :func:`~app.services.math_intent.extract_math_expression`
+  （Agent 规划器 / calculator 工具用的是同一份，不新增第二套"是不是数学题"的判断）。
 
 被跳过的步骤会带 ``skip_reason`` 出现在响应里，绝不静默跳过。
 """
@@ -29,7 +29,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..agent.planner import extract_math_expression
+from ..math_intent import extract_math_expression
 
 #: ``{{ 引用 }}``；内部不允许出现大括号，避免跨占位符误匹配
 PLACEHOLDER_RE = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")

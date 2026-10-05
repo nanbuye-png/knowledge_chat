@@ -23,7 +23,7 @@ function SystemConfig() {
         {
           title: 'LLM Provider', icon: Cpu,
           fields: [
-            { key: 'llm_provider', label: 'Provider', type: 'text', value: data.llm_provider || 'agens' },
+            { key: 'llm_provider', label: 'Provider', type: 'text', value: data.llm_provider || 'agnes' },
             { key: 'llm_model', label: 'Model', type: 'text', value: data.llm_model || 'agnes-2.5-flash' },
           ],
         },

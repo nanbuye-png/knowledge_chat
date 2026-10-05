@@ -1,4 +1,5 @@
 import sys
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 from typing import Optional
 from pathlib import Path
@@ -19,19 +20,19 @@ def _make_absolute(path: str) -> str:
 
 
 # ---- LLM Provider / 模型元数据（用于配置校验与文档提示） ----
-# 已支持的 Provider
-LLM_PROVIDERS: tuple[str, ...] = ("deepseek", "agens")
+# 已支持的 Provider（规范键 = 厂商品牌名，与模型 ID ``agnes-*`` 一致）
+LLM_PROVIDERS: tuple[str, ...] = ("deepseek", "agnes")
 
 # 每个 Provider 的模型名前缀（用于校验 LLM_PROVIDER 与 LLM_MODEL 是否匹配）
 PROVIDER_MODEL_PREFIXES: dict[str, str] = {
     "deepseek": "deepseek",
-    "agens": "agnes",
+    "agnes": "agnes",
 }
 
-# 各 Provider 的已知模型名（可通过 GET {AGENS_API_BASE}/models 查询）
+# 各 Provider 的已知模型名（可通过 GET {AGNES_API_BASE}/models 查询）
 KNOWN_MODELS: dict[str, tuple[str, ...]] = {
     "deepseek": ("deepseek-chat", "deepseek-reasoner"),
-    "agens": (
+    "agnes": (
         "agnes-2.0-flash",
         "agnes-2.5-flash",
         "agnes-2.5-pro",
@@ -40,6 +41,41 @@ KNOWN_MODELS: dict[str, tuple[str, ...]] = {
         "agnes-3.0-flash",
     ),
 }
+
+# Provider 名称别名表：把「历史写法 / 手填拼写」收敛到规范键 ``agnes``。
+#
+# 实测缺陷（Agent / 工作流报「Agent 生成回答失败」）：
+# 代码里的 Provider 键曾写作 ``agens``（字母顺序写反），而厂商品牌名、模型 ID
+# （``agnes-2.5-flash``）与 Base URL（apihub.agnes-ai.com）都是 ``agnes``。
+# 用户在「Model Registry」按品牌名填 ``agnes`` 时被工厂拒绝：
+# ``LLMProviderFactory.create_from_model()`` 抛 ``Unknown LLM provider: 'agnes'``，
+# 而 Agent 层对外只回一句通用文案，排查成本极高（实测就是这么踩的）。
+# 现规范键统一为 ``agnes``；历史 ``agens`` 保留为别名，避免已有 .env / 数据库 /
+# 部署清单立刻失效（库内历史值由迁移 ``b7c1d5e9a3f2`` 一次性收敛）。
+PROVIDER_ALIASES: dict[str, str] = {
+    "agnes": "agnes",
+    "agens": "agnes",
+    "agness": "agnes",
+    "agnes-ai": "agnes",
+    "agnesai": "agnes",
+    "deepseek": "deepseek",
+    "deep-seek": "deepseek",
+    "deepseek-ai": "deepseek",
+}
+
+
+def normalize_provider(name: str | None) -> str:
+    """把 Provider 名称收敛为规范键（去空白、转小写、解析别名）。
+
+    Args:
+        name: 用户输入的 Provider 名称，例如 ``" Agnes "``。
+
+    Returns:
+        规范键（如 ``"agnes"``）；未登记的写法原样返回（交由调用方判定是否支持，
+        便于上层给出"可选值: ..."的明确报错）。
+    """
+    key = (name or "").strip().lower()
+    return PROVIDER_ALIASES.get(key, key)
 
 
 # ---------------------------------------------------------------------------
@@ -76,8 +112,8 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"  # development | production | testing
 
-    # LLM 提供商
-    LLM_PROVIDER: str = "deepseek"  # deepseek 或 agens
+    # LLM 提供商（规范键：deepseek 或 agnes；历史写法 agens 会自动归一）
+    LLM_PROVIDER: str = "deepseek"
 
     # DeepSeek 配置
     DEEPSEEK_API_KEY: str = ""
@@ -86,9 +122,15 @@ class Settings(BaseSettings):
     # 当前使用的模型（随 LLM_PROVIDER 切换），如 deepseek-chat / agnes-2.5-flash
     LLM_MODEL: str = "deepseek-chat"
 
-    # Agens 配置
-    AGENS_API_KEY: str = ""
-    AGENS_API_BASE: str = "https://apihub.agnes-ai.com/v1"
+    # Agnes 配置（规范变量名；历史 AGENS_API_KEY / AGENS_API_BASE 仍可读取）
+    AGNES_API_KEY: str = Field(
+        default="",
+        validation_alias=AliasChoices("AGNES_API_KEY", "AGENS_API_KEY"),
+    )
+    AGNES_API_BASE: str = Field(
+        default="https://apihub.agnes-ai.com/v1",
+        validation_alias=AliasChoices("AGNES_API_BASE", "AGENS_API_BASE"),
+    )
 
     # ---- LLM HTTP 客户端（代理开关 / 超时）----
     # 当系统代理（如 Clash 的 127.0.0.1:7897）干扰 LLM API 连接时设为 True，
@@ -306,7 +348,7 @@ class Settings(BaseSettings):
     WORKFLOW_MAX_STEPS: int = 5
 
     # ---- RAG 评测（Phase 2，见 backend/evaluation/README.md）----
-    # 裁判模型单次最大 token。Agens 的 agnes-2.5-flash 属于推理型模型，
+    # 裁判模型单次最大 token。Agnes 的 agnes-2.5-flash 属于推理型模型，
     # 会先消耗 token 输出 reasoning_content，留太小会导致正文为空。
     EVAL_JUDGE_MAX_TOKENS: int = 800
     # 裁判温度（0 = 尽量确定性）
@@ -352,6 +394,17 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
     # 安全配置（审计 §6.1）
     # ------------------------------------------------------------------
+
+    # ---- 历史变量名兼容（已废弃，仅为外部脚本保留属性访问）----
+    @property
+    def AGENS_API_KEY(self) -> str:  # noqa: N802 — 历史拼写，仅兼容保留
+        """已废弃：请使用 ``AGNES_API_KEY``（``AGENS_API_KEY`` 环境变量仍可读取）。"""
+        return self.AGNES_API_KEY
+
+    @property
+    def AGENS_API_BASE(self) -> str:  # noqa: N802 — 历史拼写，仅兼容保留
+        """已废弃：请使用 ``AGNES_API_BASE``（``AGENS_API_BASE`` 环境变量仍可读取）。"""
+        return self.AGNES_API_BASE
 
     @property
     def is_production(self) -> bool:
@@ -412,7 +465,9 @@ class Settings(BaseSettings):
             list[str]: 人类可读的配置警告；空列表代表未发现明显问题。
         """
         issues: list[str] = []
-        provider = (self.LLM_PROVIDER or "").strip().lower()
+        # 别名归一（历史 agens → agnes）：既避免旧配置被误报为"不受支持"，
+        # 也让归一后的键与 PROVIDER_MODEL_PREFIXES 的取值空间严格一致。
+        provider = normalize_provider(self.LLM_PROVIDER)
         model = (self.LLM_MODEL or "").strip()
 
         if provider not in LLM_PROVIDERS:
@@ -426,7 +481,7 @@ class Settings(BaseSettings):
             issues.append("LLM_MODEL 为空，无法确定要调用的模型名")
             return issues
 
-        # Provider 与模型名前缀匹配校验（例如 agens 只能用 agnes-* 模型）
+        # Provider 与模型名前缀匹配校验（例如 agnes 只能用 agnes-* 模型）
         expected_prefix = PROVIDER_MODEL_PREFIXES[provider]
         if not model.startswith(expected_prefix):
             issues.append(
@@ -440,11 +495,11 @@ class Settings(BaseSettings):
             )
 
         # API Key / Base URL 校验
-        if provider == "agens":
-            if not (self.AGENS_API_KEY or "").strip():
-                issues.append("AGENS_API_KEY 未配置，Agens 接口调用将返回 401")
-            if not (self.AGENS_API_BASE or "").strip():
-                issues.append("AGENS_API_BASE 未配置，无法定位 Agens 接口地址")
+        if provider == "agnes":
+            if not (self.AGNES_API_KEY or "").strip():
+                issues.append("AGNES_API_KEY 未配置，Agnes 接口调用将返回 401")
+            if not (self.AGNES_API_BASE or "").strip():
+                issues.append("AGNES_API_BASE 未配置，无法定位 Agnes 接口地址")
         elif provider == "deepseek":
             if not (self.DEEPSEEK_API_KEY or "").strip():
                 issues.append("DEEPSEEK_API_KEY 未配置，DeepSeek 接口调用将返回 401")

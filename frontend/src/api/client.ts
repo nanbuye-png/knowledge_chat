@@ -75,8 +75,8 @@ apiClient.interceptors.response.use(
       if (error.response) {
         const status = error.response.status
         const contentType = String(error.response.headers?.['content-type'] ?? '')
-        if (status === 401) message = 'API 密钥未配置或无效，请在 .env 文件中设置有效的 AGENS_API_KEY（或 DEEPSEEK_API_KEY）'
-        else if (status === 402) message = 'API 余额不足，请检查当前 LLM Provider（Agens / DeepSeek）的账户余额'
+        if (status === 401) message = 'API 密钥未配置或无效，请在 .env 文件中设置有效的 AGNES_API_KEY（或 DEEPSEEK_API_KEY）'
+        else if (status === 402) message = 'API 余额不足，请检查当前 LLM Provider（Agnes / DeepSeek）的账户余额'
         else if (status === 422) message = '请求参数有误，请检查输入'
         else if (status === 429) message = '请求过于频繁，请稍后重试'
         else if (status >= 500) {

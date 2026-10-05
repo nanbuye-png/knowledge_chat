@@ -2,8 +2,8 @@
 
 覆盖范围：
 1. ``Settings.check_llm_config()``：Provider / 模型名前缀 / API Key 的一致性校验。
-2. ``LLMProviderFactory``：agens Provider 是否使用配置中的 *agnes-2.5-flash*。
-3. ``AgensProvider``：推理型模型（先 ``reasoning_content`` 后正文）的输出规范化。
+2. ``LLMProviderFactory``：agnes Provider 是否使用配置中的 *agnes-2.5-flash*。
+3. ``AgnesProvider``：推理型模型（先 ``reasoning_content`` 后正文）的输出规范化。
 
 Run: cd backend && python -m pytest tests/test_llm_config.py -v
 """
@@ -18,8 +18,9 @@ from app.core.config import (
     KNOWN_MODELS,
     PROVIDER_MODEL_PREFIXES,
     Settings,
+    normalize_provider,
 )
-from app.services.llm.agens_provider import AgensProvider
+from app.services.llm.agnes_provider import AgnesProvider
 from app.services.llm.factory import LLMProviderFactory
 
 AGNES_MODEL = "agnes-2.5-flash"
@@ -31,13 +32,13 @@ AGNES_BASE_URL = "https://apihub.agnes-ai.com/v1"
 # ---------------------------------------------------------------------------
 
 
-def _agens_settings(**overrides) -> Settings:
+def _agnes_settings(**overrides) -> Settings:
     """构造一份默认使用 agnes-2.5-flash 的配置。"""
     values = {
-        "LLM_PROVIDER": "agens",
+        "LLM_PROVIDER": "agnes",
         "LLM_MODEL": AGNES_MODEL,
-        "AGENS_API_KEY": "sk-test-agens-key",
-        "AGENS_API_BASE": AGNES_BASE_URL,
+        "AGNES_API_KEY": "sk-test-agnes-key",
+        "AGNES_API_BASE": AGNES_BASE_URL,
     }
     values.update(overrides)
     return Settings(**values)
@@ -95,9 +96,9 @@ def _async_return(value):
     return _coro
 
 
-def _provider_with_stream(chunks) -> AgensProvider:
-    """返回一个使用假流对象的 AgensProvider。"""
-    provider = AgensProvider("k", AGNES_BASE_URL, AGNES_MODEL)
+def _provider_with_stream(chunks) -> AgnesProvider:
+    """返回一个使用假流对象的 AgnesProvider。"""
+    provider = AgnesProvider("k", AGNES_BASE_URL, AGNES_MODEL)
     provider._client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(create=_async_return(_FakeStream(chunks)))
@@ -106,11 +107,11 @@ def _provider_with_stream(chunks) -> AgensProvider:
     return provider
 
 
-def _provider_with_response(content) -> AgensProvider:
-    """返回一个使用假非流式响应的 AgensProvider。"""
+def _provider_with_response(content) -> AgnesProvider:
+    """返回一个使用假非流式响应的 AgnesProvider。"""
     message = SimpleNamespace(content=content)
     response = SimpleNamespace(choices=[SimpleNamespace(message=message)])
-    provider = AgensProvider("k", AGNES_BASE_URL, AGNES_MODEL)
+    provider = AgnesProvider("k", AGNES_BASE_URL, AGNES_MODEL)
     provider._client = SimpleNamespace(
         chat=SimpleNamespace(
             completions=SimpleNamespace(create=_async_return(response))
@@ -119,7 +120,7 @@ def _provider_with_response(content) -> AgensProvider:
     return provider
 
 
-def _collect_stream(provider: AgensProvider) -> list[str]:
+def _collect_stream(provider: AgnesProvider) -> list[str]:
     """同步收集流式输出（与 ``test_agens_fix.py`` 保持一致的 asyncio.run 风格）。"""
 
     async def _run() -> list[str]:
@@ -142,12 +143,12 @@ class TestLlmConfigCheck:
 
     def test_agnes_2_5_flash_is_a_known_model(self):
         """agnes-2.5-flash 应登记在 KNOWN_MODELS 中。"""
-        assert AGNES_MODEL in KNOWN_MODELS["agens"]
-        assert PROVIDER_MODEL_PREFIXES["agens"] == "agnes"
+        assert AGNES_MODEL in KNOWN_MODELS["agnes"]
+        assert PROVIDER_MODEL_PREFIXES["agnes"] == "agnes"
 
     def test_valid_agnes_config_has_no_issues(self):
         """LLM_PROVIDER=agens + agnes-2.5-flash + API Key 齐备 → 无告警。"""
-        assert _agens_settings().check_llm_config() == []
+        assert _agnes_settings().check_llm_config() == []
 
     def test_valid_deepseek_config_has_no_issues(self):
         """DeepSeek 默认组合仍然自洽（回归保护）。"""
@@ -161,32 +162,32 @@ class TestLlmConfigCheck:
 
     def test_provider_model_mismatch_is_reported(self):
         """agens Provider 搭配 deepseek 模型 → 报“不匹配”。"""
-        issues = _agens_settings(LLM_MODEL="deepseek-chat").check_llm_config()
+        issues = _agnes_settings(LLM_MODEL="deepseek-chat").check_llm_config()
         assert any("不匹配" in issue for issue in issues)
 
     def test_unknown_agnes_model_is_reported(self):
         """未知的 agnes 模型名 → 提示不在已知模型列表。"""
-        issues = _agens_settings(LLM_MODEL="agnes-9.9-turbo").check_llm_config()
+        issues = _agnes_settings(LLM_MODEL="agnes-9.9-turbo").check_llm_config()
         assert any("不在已知模型列表" in issue for issue in issues)
 
-    def test_missing_agens_api_key_is_reported(self):
-        """缺失 AGENS_API_KEY → 提示将返回 401。"""
-        issues = _agens_settings(AGENS_API_KEY="").check_llm_config()
-        assert any("AGENS_API_KEY" in issue for issue in issues)
+    def test_missing_AGNES_API_KEY_is_reported(self):
+        """缺失 AGNES_API_KEY → 提示将返回 401。"""
+        issues = _agnes_settings(AGNES_API_KEY="").check_llm_config()
+        assert any("AGNES_API_KEY" in issue for issue in issues)
 
-    def test_missing_agens_api_base_is_reported(self):
-        """缺失 AGENS_API_BASE → 提示无法定位接口地址。"""
-        issues = _agens_settings(AGENS_API_BASE="").check_llm_config()
-        assert any("AGENS_API_BASE" in issue for issue in issues)
+    def test_missing_AGNES_API_BASE_is_reported(self):
+        """缺失 AGNES_API_BASE → 提示无法定位接口地址。"""
+        issues = _agnes_settings(AGNES_API_BASE="").check_llm_config()
+        assert any("AGNES_API_BASE" in issue for issue in issues)
 
     def test_unsupported_provider_is_reported(self):
         """不支持的 Provider → 提示可选值列表。"""
-        issues = _agens_settings(LLM_PROVIDER="openai").check_llm_config()
+        issues = _agnes_settings(LLM_PROVIDER="openai").check_llm_config()
         assert any("不受支持" in issue for issue in issues)
 
     def test_empty_model_is_reported(self):
         """LLM_MODEL 为空 → 提示无法确定模型名。"""
-        issues = _agens_settings(LLM_MODEL="").check_llm_config()
+        issues = _agnes_settings(LLM_MODEL="").check_llm_config()
         assert any("LLM_MODEL 为空" in issue for issue in issues)
 
 
@@ -206,15 +207,17 @@ class TestEnvFileRegression:
             key, value = line.split("=", 1)
             values[key.strip()] = value.strip()
 
-        if values.get("LLM_PROVIDER", "").strip().lower() != "agens":
-            pytest.skip("backend/.env 未启用 agens Provider，跳过")
+        if normalize_provider(values.get("LLM_PROVIDER", "")) != "agnes":
+            pytest.skip("backend/.env 未启用 agnes Provider（历史写法 agens 亦可），跳过")
 
         model = values.get("LLM_MODEL", "").strip()
-        assert model in KNOWN_MODELS["agens"], (
+        assert model in KNOWN_MODELS["agnes"], (
             f"backend/.env 的 LLM_MODEL='{model}' 不是合法的 agnes 模型"
         )
-        assert values.get("AGENS_API_KEY", "").strip(), "backend/.env 缺少 AGENS_API_KEY"
-        assert values.get("AGENS_API_BASE", "").strip(), "backend/.env 缺少 AGENS_API_BASE"
+        api_key = values.get("AGNES_API_KEY") or values.get("AGENS_API_KEY")
+        api_base = values.get("AGNES_API_BASE") or values.get("AGENS_API_BASE")
+        assert (api_key or "").strip(), "backend/.env 缺少 AGNES_API_KEY（旧名 AGENS_API_KEY 亦可）"
+        assert (api_base or "").strip(), "backend/.env 缺少 AGNES_API_BASE（旧名 AGENS_API_BASE 亦可）"
 
 
 # ---------------------------------------------------------------------------
@@ -223,33 +226,33 @@ class TestEnvFileRegression:
 
 
 class TestFactoryUsesConfiguredAgnesModel:
-    """``LLMProviderFactory`` 应把配置中的模型名透传给 AgensProvider。"""
+    """``LLMProviderFactory`` 应把配置中的模型名透传给 AgnesProvider。"""
 
     def test_create_uses_llm_model_from_settings(self):
-        provider = LLMProviderFactory.create(_agens_settings())
+        provider = LLMProviderFactory.create(_agnes_settings())
 
-        assert isinstance(provider, AgensProvider)
+        assert isinstance(provider, AgnesProvider)
         assert provider._model == AGNES_MODEL
         assert provider._base_url == AGNES_BASE_URL
-        assert provider._api_key == "sk-test-agens-key"
+        assert provider._api_key == "sk-test-agnes-key"
 
     def test_create_with_name_uses_llm_model_from_settings(self):
-        provider = LLMProviderFactory.create_with_name("agens", _agens_settings())
+        provider = LLMProviderFactory.create_with_name("agnes", _agnes_settings())
 
-        assert isinstance(provider, AgensProvider)
+        assert isinstance(provider, AgnesProvider)
         assert provider._model == AGNES_MODEL
 
     def test_create_from_model_uses_record_model_name(self):
-        record = SimpleNamespace(provider="agens", model_name=AGNES_MODEL)
+        record = SimpleNamespace(provider="agnes", model_name=AGNES_MODEL)
 
-        provider = LLMProviderFactory.create_from_model(record, _agens_settings())
+        provider = LLMProviderFactory.create_from_model(record, _agnes_settings())
 
-        assert isinstance(provider, AgensProvider)
+        assert isinstance(provider, AgnesProvider)
         assert provider._model == AGNES_MODEL
 
     def test_unknown_provider_raises(self):
         with pytest.raises(ValueError):
-            LLMProviderFactory.create_with_name("openai", _agens_settings())
+            LLMProviderFactory.create_with_name("openai", _agnes_settings())
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +260,7 @@ class TestFactoryUsesConfiguredAgnesModel:
 # ---------------------------------------------------------------------------
 
 
-class TestAgensOutputNormalization:
+class TestAgnesOutputNormalization:
     """agnes-2.5-flash 会先输出 reasoning_content，正文带前导换行，需要清理。"""
 
     def test_stream_strips_leading_newlines(self):
@@ -304,4 +307,87 @@ class TestAgensOutputNormalization:
             provider.chat([{"role": "user", "content": "hi"}], stream=False)
         )
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# 4. Provider 别名归一（历史 agens → 规范 agnes）
+# ---------------------------------------------------------------------------
+
+
+class TestProviderAliasNormalization:
+    """规范键是厂商品牌名 ``agnes``；历史拼写 ``agens`` 必须继续等价。
+
+    回归背景（真实事故）：早期代码把 Provider 键写作 ``agens``（字母顺序写反），
+    用户按品牌名 ``agnes`` 填写「Model Registry」后，
+    ``LLMProviderFactory.create_from_model()`` 抛
+    ``Unknown LLM provider: 'agnes'``，Agent / 工作流对外统一显示
+    「Agent 生成回答失败」，用户无从定位。
+    """
+
+    def test_normalize_provider_uses_brand_name(self):
+        """大小写 / 空白 / 品牌名都应收敛到规范键 ``agnes``。"""
+        assert normalize_provider(" Agnes ") == "agnes"
+        assert normalize_provider("AGNES") == "agnes"
+        assert normalize_provider("agnes-ai") == "agnes"
+
+    def test_normalize_provider_accepts_legacy_spelling(self):
+        """历史拼写 ``agens`` 仍收敛到 ``agnes``（旧 .env / 库内老数据可用）。"""
+        assert normalize_provider("agens") == "agnes"
+        assert normalize_provider("AGENS") == "agnes"
+        assert normalize_provider("agness") == "agnes"
+        assert normalize_provider("deep-seek") == "deepseek"
+
+    def test_normalize_provider_keeps_unknown_name(self):
+        """未登记的写法原样返回，便于上层报出"可选值"（不吞错、不猜测）。"""
+        assert normalize_provider("openai") == "openai"
+        assert normalize_provider("") == ""
+        assert normalize_provider(None) == ""
+
+    def test_check_llm_config_accepts_brand_spelling(self):
+        """``LLM_PROVIDER=agnes`` 不应被误报为"不受支持"。"""
+        assert _agnes_settings(LLM_PROVIDER="agnes").check_llm_config() == []
+
+    def test_check_llm_config_accepts_legacy_spelling(self):
+        """历史 ``LLM_PROVIDER=agens`` 也照旧可用（升级后旧 .env 不用立刻改）。"""
+        assert _agnes_settings(LLM_PROVIDER="agens").check_llm_config() == []
+
+    def test_legacy_env_var_names_still_readable(self):
+        """旧环境变量名 ``AGENS_API_KEY`` / ``AGENS_API_BASE`` 仍能被读取。"""
+        legacy = Settings(
+            LLM_PROVIDER="agnes",
+            LLM_MODEL=AGNES_MODEL,
+            AGENS_API_KEY="sk-legacy",
+            AGENS_API_BASE=AGNES_BASE_URL,
+        )
+        assert legacy.AGNES_API_KEY == "sk-legacy"
+        assert legacy.AGNES_API_BASE == AGNES_BASE_URL
+        assert legacy.AGENS_API_KEY == "sk-legacy"  # 已废弃属性，兼容外部脚本
+        assert legacy.check_llm_config() == []
+
+    def test_check_llm_config_still_rejects_unknown_provider(self):
+        """回归保护：真正的未知 Provider 依旧报警。"""
+        issues = _agnes_settings(LLM_PROVIDER="openai").check_llm_config()
+        assert any("不受支持" in issue for issue in issues)
+
+    def test_create_from_model_accepts_legacy_spelling(self):
+        """历史数据（``llm_models.provider='agens'``）仍能构造出 AgnesProvider。"""
+        record = SimpleNamespace(provider="agens", model_name=AGNES_MODEL)
+
+        provider = LLMProviderFactory.create_from_model(record, _agnes_settings())
+
+        assert isinstance(provider, AgnesProvider)
+        assert provider._model == AGNES_MODEL
+        assert provider._base_url == AGNES_BASE_URL
+
+    def test_create_with_name_accepts_legacy_spelling(self):
+        provider = LLMProviderFactory.create_with_name("agens", _agnes_settings())
+
+        assert isinstance(provider, AgnesProvider)
+        assert provider._model == AGNES_MODEL
+
+    def test_create_with_settings_brand_spelling(self):
+        """``LLM_PROVIDER=agnes``（.env 写成品牌名）同样能用。"""
+        provider = LLMProviderFactory.create(_agnes_settings(LLM_PROVIDER="agnes"))
+
+        assert isinstance(provider, AgnesProvider)
 

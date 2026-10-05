@@ -9,10 +9,15 @@
    * ``when`` 条件不成立 → **跳过**并记录 ``skip_reason``（不静默跳过）；
    * 参数里的 ``{{input}}`` / ``{{steps.<id>.output.<字段>}}`` 由
      :mod:`app.services.workflow.templating` 解析（**状态**传递）；
+   * 参数补齐由 :func:`apply_argument_defaults` 负责（清单见
+     :data:`INPUT_FILLED_ARGUMENTS`）：``calculator`` 步骤没写 ``expression`` 时按
+     输入取表达式，``kb_search`` 步骤没写 ``query`` 时原样取用本次输入（补了什么 /
+     为什么补不了都会进 ``warnings``，不静默）；
    * 工具调用走 :meth:`ToolRegistry.invoke` —— 超时（``asyncio.wait_for``）、
      参数校验、异常包装全部复用工具层，本模块**不另写一套执行**；
    * 单步失败按该步的 ``on_error`` 处理：``abort``（默认）中止整条流程并记下
      ``aborted_at``；``continue`` 继续后续步骤。失败信息同时进入 ``warnings``。
+
 4. 每一步的结果（含被跳过的步骤）都进入 ``steps``，成功 / 失败 / 跳过同一形状，
    靠 ``ok`` / ``skipped`` 区分，前端可以统一渲染。
 
@@ -27,6 +32,7 @@ from typing import Any
 from loguru import logger
 
 from ...core.config import settings
+from ..math_intent import extract_math_expression
 from ..tools import ToolContext, ToolError
 from ..tools import tool_registry as default_tool_registry
 from .errors import WorkflowDisabled, WorkflowInvalidStep, WorkflowNotConfigured
@@ -34,6 +40,122 @@ from .templating import TemplateError, evaluate_condition, resolve_value
 
 #: 参数模板解析失败时该步的错误码（与工具层的 TOOL_* 区分开，便于按码排查）
 TEMPLATE_ERROR_CODE = "WORKFLOW_TEMPLATE_ERROR"
+
+#: "只有一个明确答案 = 本次输入"的参数：缺失 / 空白时由执行器按输入补齐，不要求用户手填。
+#: 写入口（``app/api/workflows.py``）与前端提示共用这一份清单 —— 所以"哪些参数可以留空"
+#: 在保存校验、执行补齐、页面提示三处是同一个答案，不会各说一套。
+INPUT_FILLED_ARGUMENTS: dict[str, tuple[str, ...]] = {
+    "calculator": ("expression",),
+    "kb_search": ("query",),
+}
+
+#: warning 里引用用户输入时的截断长度（输入可达 2000 字符，不能原样塞进提示）
+_PREVIEW_CHARS = 60
+
+
+def _preview(text: str) -> str:
+    """把用户输入压成适合写进 warning 的短预览。"""
+    compact = " ".join(text.split())
+    return compact if len(compact) <= _PREVIEW_CHARS else f"{compact[:_PREVIEW_CHARS]}…"
+
+
+def apply_argument_defaults(
+    tool: str, arguments: dict[str, Any], input_text: str
+) -> tuple[dict[str, Any], str | None]:
+    """给"只有一个明确答案"的工具参数补默认值，避免漏填就永远跑不通。
+
+    覆盖 :data:`INPUT_FILLED_ARGUMENTS` 里声明的参数（与写入口共用同一份清单）：
+
+    * ``calculator.expression`` —— 缺失 / 空白时，用与 Agent 规划器、``input_is_math``
+      条件**同一套**规则
+      （:func:`~app.services.math_intent.extract_math_expression`）从本次输入里取表达式
+      —— 于是"一个 calculator 步骤 + 输入 ``1+2是多少``"能直接算出 3，而不是抛
+      ``缺少必填参数: expression``；
+    * ``kb_search.query`` —— 缺失 / 空白时**原样取用**本次输入：KB 检索的问题就是用户
+      输入的自然语言，与 Agent 规划器把 ``query`` 交给 ``kb_search`` 是同一个约定。
+      （此前只有 calculator 享受补齐，于是同一个页面上"calculator 留空能跑通、
+      kb_search 留空必失败"—— 两套口径已合并，见本模块 docstring。）
+
+    刻意不做的事：不改动用户显式写下的值（含类型写错的情况 —— 那交给工具层按契约
+    报 ``类型应为 string``）；**不猜** ``kb_search.knowledge_base_id``（猜不出来也不能
+    猜：那是数据归属问题，猜错只会换来一个看不懂的 403）—— 它缺失时只给一条能照做的
+    提示，并由写入口直接 400（不让"存进去也必然失败"的编排进库）。
+
+    Returns:
+        ``(arguments, warning)``：``warning`` 非空时说明发生了什么（补了什么 /
+        为什么补不了），由调用方写进 ``warnings`` —— 自动补齐不静默。
+    """
+    if tool == "calculator":
+        return _fill_calculator_expression(arguments, input_text)
+    if tool == "kb_search":
+        return _fill_kb_search_arguments(arguments, input_text)
+    return arguments, None
+
+
+def _fill_calculator_expression(
+    arguments: dict[str, Any], input_text: str
+) -> tuple[dict[str, Any], str | None]:
+    """``calculator.expression`` 缺失 / 空白时按输入取表达式（规则与 Agent 规划器同一份）。"""
+    expression = arguments.get("expression")
+    if isinstance(expression, str) and expression.strip():
+        return arguments, None
+    if expression is not None and not isinstance(expression, str):
+        return arguments, None
+
+    derived = extract_math_expression(input_text)
+    if derived is None:
+        return arguments, (
+            "未提供 expression，且本次输入不是可识别的数学表达式；"
+            '请在步骤参数里写 {"expression": "{{input}}"}（输入为纯表达式时直接生效）'
+            '或直接写 {"expression": "(1+2)*3"}'
+        )
+
+    filled = dict(arguments)
+    filled["expression"] = derived
+    return filled, (
+        f"未提供 expression，已按本次输入自动取用 {derived!r}"
+        "（与 Agent 规划器同一套识别规则）"
+    )
+
+
+def _fill_kb_search_arguments(
+    arguments: dict[str, Any], input_text: str
+) -> tuple[dict[str, Any], str | None]:
+    """``kb_search.query`` 缺失 / 空白时取用本次输入；``knowledge_base_id`` 只提示不猜。
+
+    ``knowledge_base_id`` 是数据归属参数（工具层会按当前用户校验归属），猜错只会换来一个
+    看不懂的 403 —— 所以这里既不补也不静默：缺了就写进 ``warnings`` 并给一条照做即可的
+    指引（写入口还会在保存时直接 400，见 ``app/api/workflows.py``）。
+    """
+    filled = dict(arguments)
+    warnings: list[str] = []
+
+    query = filled.get("query")
+    if query is None or (isinstance(query, str) and not query.strip()):
+        if input_text.strip():
+            filled["query"] = input_text
+            warnings.append(
+                f"未提供 query，已按本次输入自动取用 {_preview(input_text)!r}"
+                "（与 Agent 规划器同一约定；若输入超过 500 字符会被工具拒绝，"
+                "请改成显式写 query）"
+            )
+        else:
+            warnings.append(
+                "未提供 query，且本次输入为空、无法取用；"
+                '请在步骤参数里写 {"query": "{{input}}"} 或一个固定问题'
+            )
+
+    if "knowledge_base_id" not in filled:
+        warnings.append(
+            "未提供 knowledge_base_id：知识库归属不能自动推断，"
+            '请在步骤参数里显式写 {"knowledge_base_id": <知识库ID>}'
+            "（GET /api/knowledge-bases 可查看自己的知识库 ID）"
+        )
+
+    if not warnings:
+        return arguments, None
+    return filled, "；".join(warnings)
+
 
 
 class WorkflowRunner:
@@ -128,6 +250,10 @@ class WorkflowRunner:
                     aborted, aborted_at = True, step_id
                     break
                 continue
+
+            arguments, default_warning = apply_argument_defaults(tool, arguments, input_text)
+            if default_warning:
+                warnings.append(f"步骤 {step_id}（{tool}）：{default_warning}")
 
             try:
                 result = await self._registry.invoke(tool, arguments, context)

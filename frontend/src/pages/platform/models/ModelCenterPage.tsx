@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { Cpu, Plus, ToggleLeft, ToggleRight, Edit3, Trash2 } from 'lucide-react'
 import LoadingState from '../../../components/common/LoadingState'
 import EmptyState from '../../../components/common/EmptyState'
-import { listModels, updateModel, createModel, deleteModel, type LLMModel, type LLMModelCreate } from '../../../api/models'
+import { listModels, updateModel, createModel, deleteModel, normalizeProvider, isSupportedProvider, LLM_PROVIDERS, type LLMModel, type LLMModelCreate } from '../../../api/models'
 
 export default function ModelCenterPage() {
   const [models, setModels] = useState<LLMModel[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<LLMModelCreate>({ name: '', provider: 'agens', model_name: '' })
+  const [form, setForm] = useState<LLMModelCreate>({ name: '', provider: 'agnes', model_name: '' })
   const [editId, setEditId] = useState<number | null>(null)
 
   const load = () => {
@@ -30,14 +30,20 @@ export default function ModelCenterPage() {
   }
 
   const handleSubmit = async () => {
+    // 别名归一 + 白名单校验：历史写法 'agens' 先收敛成 'agnes'，不支持的取值不发请求
+    const provider = normalizeProvider(form.provider)
+    if (!isSupportedProvider(provider)) {
+      alert(`Provider "${form.provider}" 不受支持，可选值: ${LLM_PROVIDERS.join(' / ')}`)
+      return
+    }
     if (editId) {
-      await updateModel(editId, form)
+      await updateModel(editId, { ...form, provider })
     } else {
-      await createModel(form)
+      await createModel({ ...form, provider })
     }
     setShowForm(false)
     setEditId(null)
-    setForm({ name: '', provider: 'agens', model_name: '' })
+    setForm({ name: '', provider: 'agnes', model_name: '' })
     load()
   }
 
@@ -56,7 +62,7 @@ export default function ModelCenterPage() {
           <Cpu className="w-6 h-6 text-purple-500" />
           Model Center
         </h1>
-        <button onClick={() => { setShowForm(true); setEditId(null); setForm({ name: '', provider: 'agens', model_name: '' }) }}
+        <button onClick={() => { setShowForm(true); setEditId(null); setForm({ name: '', provider: 'agnes', model_name: '' }) }}
           className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-xl bg-primary-500 text-white hover:bg-primary-600">
           <Plus className="w-3.5 h-3.5" /> Add Model
         </button>
@@ -67,7 +73,7 @@ export default function ModelCenterPage() {
           <div className="grid grid-cols-3 gap-3 mb-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
-            <input placeholder="Provider (e.g. agens)" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}
+            <input placeholder="Provider (e.g. agnes)" value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}
               className="px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />
             <input placeholder="Model Name (e.g. agnes-2.5-flash)" value={form.model_name} onChange={(e) => setForm({ ...form, model_name: e.target.value })}
               className="px-3 py-2 text-sm rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500" />

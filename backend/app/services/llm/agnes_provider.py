@@ -1,4 +1,4 @@
-"""DeepSeek provider — OpenAI‑compatible LLM provider for DeepSeek API.
+"""Agnes provider — OpenAI‑compatible LLM provider for Agnes API.
 
 Implements :class:`LLMProvider` using the ``AsyncOpenAI`` client.
 Merges streaming and non‑streaming calls into a single ``chat`` entry‑point.
@@ -10,8 +10,8 @@ from openai import AsyncOpenAI
 from .base import LLMProvider, LLMUsageInfo, build_llm_http_client, estimate_tokens
 
 
-class DeepSeekProvider(LLMProvider):
-    """LLM provider for DeepSeek API (OpenAI‑compatible).
+class AgnesProvider(LLMProvider):
+    """LLM provider for Agnes API (OpenAI‑compatible).
 
     All configuration is injected via constructor parameters.
     The provider is only responsible for calling the LLM API — it does
@@ -27,10 +27,10 @@ class DeepSeekProvider(LLMProvider):
         timeout: float | None = None,
         connect_timeout: float | None = None,
     ) -> None:
-        """Initialize the DeepSeek provider.
+        """Initialize the Agnes provider.
 
         Args:
-            api_key: DeepSeek API key (required, injected from config).
+            api_key: Agnes API key (required, injected from config).
             base_url: API base URL (required, injected from config).
             model: Default model name (required, injected from config).
             disable_proxy: When ``True``, bypass the system/environment proxy
@@ -71,7 +71,7 @@ class DeepSeekProvider(LLMProvider):
         stream: bool = False,
         **kwargs: Any,
     ) -> Union[str, AsyncIterator[str]]:
-        """Send a chat completion request to DeepSeek.
+        """Send a chat completion request to Agnes.
 
         Args:
             messages: List of message dicts with ``role`` and ``content``.
@@ -101,8 +101,9 @@ class DeepSeekProvider(LLMProvider):
             max_tokens=max_tokens,
             **kwargs,
         )
-        content = response.choices[0].message.content
-        return content or ""
+        content = response.choices[0].message.content or ""
+        # Agnes 推理型模型（如 agnes-2.5-flash）正文前会带前导换行，去掉以免前端出现空白段落
+        return content.lstrip()
 
     async def chat_with_usage(
         self,
@@ -111,8 +112,8 @@ class DeepSeekProvider(LLMProvider):
     ) -> tuple[Any, LLMUsageInfo]:
         """非流式调用并透出 provider 回报的真实 usage（审计 §3.4）。
 
-        与 :class:`AgnesProvider` 同构：OpenAI 兼容接口的 ``response.usage``
-        就是权威 token 数；拿不到时回退为估算并标记 ``estimated=True``。
+        OpenAI 兼容接口在非流式响应里带 ``usage``；拿不到时回退为启发式估算，
+        并把 ``estimated=True`` 一路带到 ``llm_usages`` 记录里。
         """
         import time
 
@@ -129,7 +130,7 @@ class DeepSeekProvider(LLMProvider):
             **kwargs,
         )
         latency_ms = (time.perf_counter() - start) * 1000
-        content = response.choices[0].message.content or ""
+        content = (response.choices[0].message.content or "").lstrip()
 
         raw_usage = getattr(response, "usage", None)
         if raw_usage is not None:
@@ -163,8 +164,8 @@ class DeepSeekProvider(LLMProvider):
         max_tokens: int,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Internal async generator for streaming responses."""
-        stream = await self._async_client.chat.completions.create(
+        """Internal async generator for streaming responses (with defensive access)."""
+        stream_obj = await self._async_client.chat.completions.create(
             model=model,
             messages=messages,
             temperature=temperature,
@@ -173,12 +174,36 @@ class DeepSeekProvider(LLMProvider):
             **kwargs,
         )
         try:
-            async for chunk in stream:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    yield delta.content
+            is_first_chunk = True
+            async for chunk in stream_obj:
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+                delta = getattr(choice, "delta", None)
+
+                if not delta:
+                    continue
+
+                content = getattr(delta, "content", None)
+
+                if not content:
+                    continue
+
+                # Agnes 推理型模型（如 agnes-2.5-flash）会先输出 reasoning_content，
+                # 正文首个 chunk 带前导换行，这里在首块去除，避免前端出现空白段落。
+                if is_first_chunk:
+                    content = content.lstrip()
+                    if not content:
+                        continue
+                    is_first_chunk = False
+
+                yield content
         finally:
-            try:
-                stream.close()
-            except Exception:
-                pass
+            close = getattr(stream_obj, "close", None)
+
+            if close:
+                result = close()
+
+                if hasattr(result, "__await__"):
+                    await result

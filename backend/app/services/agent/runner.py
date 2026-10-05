@@ -48,6 +48,31 @@ def _build_provider(model: LLMModel, settings_obj: Any):
     return LLMProviderFactory.create_from_model(model, settings_obj)
 
 
+def _generation_failure_hint(llm_model: LLMModel, exc: Exception) -> str:
+    """把底层异常翻译成「可操作」的中文提示，默认仍是通用文案。
+
+    实测踩坑：早期代码内的 Provider 规范键写作 ``agens``（字母顺序写反），与厂商
+    品牌名 ``agnes``（模型 ID 也是 ``agnes-*``）不一致。用户在「Model Registry」
+    按品牌名填 ``agnes`` 后，Agent 执行只会回一句
+    「Agent 生成回答失败，请稍后重试」，完全无从下手 —— 真实事故的排查
+    成本全部花在"文案没给线索"上。
+
+    这里只对「Provider 不认识」这一种**配置类**故障给出明确指引（去哪改、改成
+    什么）；其余异常（网络、鉴权、超时……）保持通用文案：原始异常仍然只落日志，
+    绝不回传响应体，避免 DSN / Key 之类的细节泄漏（审计 §5.5 / test_agents.py
+    的 ``test_llm_failure_returns_502_without_leaking`` 就是这条底线）。
+    """
+    if "Unknown LLM provider" not in str(exc):
+        return "Agent 生成回答失败，请稍后重试"
+
+    display = getattr(llm_model, "name", "") or getattr(llm_model, "model_name", "")
+    provider = getattr(llm_model, "provider", "")
+    return (
+        f"模型「{display}」的 Provider 配置不受支持（当前为 '{provider}'），"
+        "请在「Model Registry」把 Provider 改为 agnes 或 deepseek 后重试。"
+    )
+
+
 class AgentRunner:
     """Agent 执行器（无状态，可安全复用）。"""
 
@@ -188,11 +213,11 @@ class AgentRunner:
         try:
             provider = _build_provider(llm_model, settings)
             response = await provider.chat(messages=messages, stream=False)
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 f"Agent LLM 生成失败: agent_id={agent.id} model_id={llm_model.id}"
             )
-            raise AgentGenerationFailed()
+            raise AgentGenerationFailed(_generation_failure_hint(llm_model, exc)) from exc
 
         if not isinstance(response, str) or not response.strip():
             logger.error(

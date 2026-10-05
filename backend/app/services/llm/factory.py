@@ -14,19 +14,24 @@ To add a new provider:
     1. Write a provider module under ``services/llm/`` that inherits
        :class:`LLMProvider`.
     2. Register it in :data:`_PROVIDERS`.
+
+:data:`_PROVIDERS` 的键是**规范名**（``agnes`` —— 与厂商品牌名、``agnes-*``
+模型 ID、``apihub.agnes-ai.com`` 一致）；历史写法 ``agens`` 等别名统一由
+:func:`app.core.config.normalize_provider` 收敛
+（别名表见 ``app/core/config.py::PROVIDER_ALIASES``），这里不再各写一套。
 """
 
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, normalize_provider
 from app.models.llm_model import LLMModel
 from app.services.model_registry import get_model_registry
 
 from .base import LLMProvider
 from .deepseek_provider import DeepSeekProvider
-from .agens_provider import AgensProvider
+from .agnes_provider import AgnesProvider
 
 # ---------------------------------------------------------------------------
 # Provider Registry
@@ -34,7 +39,7 @@ from .agens_provider import AgensProvider
 
 _PROVIDERS: dict[str, type[LLMProvider]] = {
     "deepseek": DeepSeekProvider,
-    "agens": AgensProvider,
+    "agnes": AgnesProvider,
 }
 """Mapping from provider name (lowercase) to its concrete class.
 
@@ -53,7 +58,7 @@ class LLMProviderFactory:
         provider = LLMProviderFactory.create(settings)
 
         # Explicit provider
-        provider = LLMProviderFactory.create_with_name("agens", settings)
+        provider = LLMProviderFactory.create_with_name("agnes", settings)
 
         # From database model
         provider = LLMProviderFactory.create_from_model(llm_model, settings)
@@ -84,7 +89,9 @@ class LLMProviderFactory:
             ValueError: If the configured provider name is not registered
                 in :data:`_PROVIDERS`.
         """
-        provider_name = settings.LLM_PROVIDER.lower().strip()
+        # 别名归一：历史 ``agens`` / ``deep-seek`` 等写法都能落到规范实现，
+        # 早期 ``llm_models.provider`` 与注册表键不一致时曾让 Agent 全线 502。
+        provider_name = normalize_provider(settings.LLM_PROVIDER)
         return LLMProviderFactory._build(provider_name, settings.LLM_MODEL, settings)
 
     @staticmethod
@@ -92,7 +99,7 @@ class LLMProviderFactory:
         """Create a provider by explicit name.
 
         Args:
-            provider_name: Provider name (e.g. ``"deepseek"``, ``"agens"``).
+            provider_name: Provider name (e.g. ``"deepseek"``, ``"agnes"``).
             settings: Application settings object.
 
         Returns:
@@ -101,7 +108,7 @@ class LLMProviderFactory:
         Raises:
             ValueError: If *provider_name* is not registered.
         """
-        name = provider_name.lower().strip()
+        name = normalize_provider(provider_name)
         return LLMProviderFactory._build(name, settings.LLM_MODEL, settings)
 
     @staticmethod
@@ -119,7 +126,7 @@ class LLMProviderFactory:
         Raises:
             ValueError: If ``model.provider`` is not registered.
         """
-        name = model.provider.lower().strip()
+        name = normalize_provider(model.provider)
         return LLMProviderFactory._build(name, model.model_name, settings)
 
     @staticmethod
@@ -165,6 +172,7 @@ class LLMProviderFactory:
         Raises:
             ValueError: If *provider_name* is unknown.
         """
+        provider_name = normalize_provider(provider_name)
         provider_cls = _PROVIDERS.get(provider_name)
         if provider_cls is None:
             raise ValueError(
@@ -181,10 +189,10 @@ class LLMProviderFactory:
                 timeout=settings.LLM_TIMEOUT,
                 connect_timeout=settings.LLM_CONNECT_TIMEOUT,
             )
-        if provider_name == "agens":
+        if provider_name == "agnes":
             return provider_cls(
-                api_key=settings.AGENS_API_KEY,
-                base_url=settings.AGENS_API_BASE,
+                api_key=settings.AGNES_API_KEY,
+                base_url=settings.AGNES_API_BASE,
                 model=model_name,
                 disable_proxy=settings.LLM_DISABLE_PROXY,
                 timeout=settings.LLM_TIMEOUT,

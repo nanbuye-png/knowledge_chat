@@ -13,12 +13,17 @@
   ``app/services/workflow/runner.py``，工具执行复用
   ``app/services/tools``（与 ``/api/tools``、Agent 同一份注册表，含超时与失败包装）。
 
-写入口的三道校验（**不让"看起来配好了"进库**）：
+写入口的四道校验（**不让"看起来配好了"进库**）：
 
 1. 步骤里的工具必须在注册表中（与 ``GET /api/tools`` 一致）；
 2. 步骤 ``id`` 唯一；
 3. 参数里的 ``{{steps.<id>...}}`` 只能引用**前面已定义**的步骤（拼错即 400，
-   而不是等到执行时才炸）。
+   而不是等到执行时才炸）；
+4. **必填参数不能留空**：执行器只会自动补齐
+   :data:`~app.services.workflow.INPUT_FILLED_ARGUMENTS` 声明的参数（
+   calculator 的 ``expression``、kb_search 的 ``query`` —— 它们"要的就是本次输入"），
+   其余必填参数缺失就是"存进去也必然失败"（典型是 kb_search 的
+   ``knowledge_base_id``：数据归属，不能替用户猜），保存时直接 400 并给出照做的写法。
 
 鉴权：要求登录；所有查询都带 ``user_id == current_user.id``，别人的 Workflow
 一律 404（不区分"不存在"与"不是你的"，避免探测）。
@@ -36,15 +41,18 @@ from ..core.rate_limit import rate_limit
 from ..models.user import User
 from ..models.workflow import Workflow
 from ..schemas.workflow import (
+    MAX_INPUT_CHARS,
     WorkflowCreate,
     WorkflowExecuteRequest,
     WorkflowExecuteResponse,
+    WorkflowLimitsResponse,
     WorkflowResponse,
     WorkflowUpdate,
 )
 from ..services.audit_service import create_audit_log
 from ..services.tools import ToolContext, tool_registry
 from ..services.workflow import (
+    INPUT_FILLED_ARGUMENTS,
     WorkflowNotFound,
     WorkflowRunner,
     known_step_references,
@@ -72,6 +80,34 @@ async def _load_owned_workflow(
     if workflow is None:
         raise WorkflowNotFound(workflow_id)
     return workflow
+
+
+def _missing_required_arguments(steps: list[dict]) -> list[str]:
+    """列出"必填但没写、执行时也补不上"的参数 —— 不让必然失败的编排进库。
+
+    执行期只会补齐 :data:`~app.services.workflow.INPUT_FILLED_ARGUMENTS` 声明的参数
+    （"要的就是本次输入"：calculator 的 ``expression``、kb_search 的 ``query``）；其余
+    必填参数缺失就是必然失败。典型例子是 ``kb_search.knowledge_base_id``：它是数据归属，
+    不能替用户猜（猜错只会换来一个看不懂的 403），所以保存时就把话说清楚。
+    """
+    problems: list[str] = []
+    for step in steps:
+        tool = step["tool"]
+        fillable = INPUT_FILLED_ARGUMENTS.get(tool, ())
+        spec = tool_registry.get(tool)
+        arguments = step["arguments"]
+        for name in spec.required_parameters():
+            if name in arguments or name in fillable:
+                continue
+            description = spec.parameters.get(name, {}).get("description") or "无说明"
+            problem = (
+                f"步骤 {step['id']}（{tool}）缺少必填参数 {name}（{description}）："
+                "它不能按本次输入自动取用，请在步骤参数里显式写上"
+            )
+            if fillable:
+                problem += f"（可省略并自动取用的参数：{', '.join(fillable)}）"
+            problems.append(problem)
+    return problems
 
 
 def _validate_steps(steps: list[dict]) -> list[dict]:
@@ -116,11 +152,33 @@ def _validate_steps(steps: list[dict]) -> list[dict]:
     references = known_step_references(normalized)
     if references:
         raise ValidationError("；".join(references))
+
+    problems = _missing_required_arguments(normalized)
+    if problems:
+        raise ValidationError("；".join(problems))
     return normalized
 
 
 # 进程内执行器（无状态）；测试可注入替身注册表，不需要替换 API 逻辑
 workflow_runner = WorkflowRunner()
+
+
+@router.get(
+    "/limits",
+    response_model=WorkflowLimitsResponse,
+    summary="编排 / 执行上限",
+)
+async def get_workflow_limits(current_user: User = Depends(get_current_user)):
+    """返回本次部署真正生效的编排上限（前端用它显示"最多 N 步"，不硬编码）。
+
+    路由必须声明在 ``/{workflow_id}`` **之前**，否则 ``limits`` 会被当成
+    ``workflow_id`` 去解析（422）。
+    """
+    return WorkflowLimitsResponse(
+        max_steps=int(settings.WORKFLOW_MAX_STEPS),
+        max_input_chars=MAX_INPUT_CHARS,
+        tools=tool_registry.names(),
+    )
 
 
 @router.get("", response_model=list[WorkflowResponse], summary="列出当前用户的 Workflow")

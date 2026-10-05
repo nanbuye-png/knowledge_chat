@@ -53,14 +53,14 @@ hpa:
 config:
   environment: production
   logLevel: INFO
-  llmProvider: agens
+  llmProvider: agnes
   llmModel: agnes-2.5-flash
-  agensApiBase: https://apihub.agnes-ai.com/v1
+  agnesApiBase: https://apihub.agnes-ai.com/v1
   cacheBackend: redis
   workerBackend: local
 
 secrets:
   postgresPassword: ""
-  agensApiKey: ""
+  agnesApiKey: ""
   deepseekApiKey: ""
   secretKey: ""

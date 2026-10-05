@@ -3,6 +3,12 @@ import { motion } from 'framer-motion'
 import { Cpu, Power, PowerOff, Star, Plus, Trash2, Edit3, RefreshCw } from 'lucide-react'
 import * as modelApi from '../../api/models'
 import type { LLMModel, LLMModelCreate } from '../../api/models'
+import {
+  LLM_PROVIDERS,
+  PROVIDER_MODEL_SUGGESTIONS,
+  isSupportedProvider,
+  normalizeProvider,
+} from '../../api/models'
 
 export default function ModelRegistryPage() {
   const [models, setModels] = useState<LLMModel[]>([])
@@ -10,7 +16,8 @@ export default function ModelRegistryPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState<LLMModelCreate>({ name: '', provider: '', model_name: '' })
+  // 默认选中 agnes（规范键，与 backend/.env 的 LLM_PROVIDER / LLMModel.provider 一致）
+  const [createForm, setCreateForm] = useState<LLMModelCreate>({ name: '', provider: 'agnes', model_name: '' })
 
   const showMessage = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(null), 3000) }
 
@@ -45,11 +52,17 @@ export default function ModelRegistryPage() {
 
   const handleCreate = async () => {
     if (!createForm.name || !createForm.provider || !createForm.model_name) return
+    // 别名归一 + 白名单校验：历史写法 'agens' 先收敛成 'agnes'，不支持的取值不再发请求
+    const provider = normalizeProvider(createForm.provider)
+    if (!isSupportedProvider(provider)) {
+      showMessage(`Provider "${createForm.provider}" 不受支持，可选值: ${LLM_PROVIDERS.join(' / ')}`)
+      return
+    }
     try {
-      await modelApi.createModel(createForm)
+      await modelApi.createModel({ ...createForm, provider })
       showMessage('模型创建成功')
       setShowCreate(false)
-      setCreateForm({ name: '', provider: '', model_name: '' })
+      setCreateForm({ name: '', provider: 'agnes', model_name: '' })
       await fetchModels()
     } catch (err: any) { showMessage(`创建失败: ${err.message}`) }
   }
@@ -94,13 +107,25 @@ export default function ModelRegistryPage() {
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Provider</label>
-                <input value={createForm.provider} onChange={e => setCreateForm({ ...createForm, provider: e.target.value })}
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+                <select value={createForm.provider} onChange={e => setCreateForm({ ...createForm, provider: e.target.value })}
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                  {LLM_PROVIDERS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">
+                  厂商品牌名 <span className="font-medium">agnes</span> 就是规范键（模型名形如 agnes-2.5-flash）；
+                  历史写法 agens 也会自动归一。
+                </p>
               </div>
               <div>
                 <label className="block text-xs text-slate-500 mb-1">模型名</label>
                 <input value={createForm.model_name} onChange={e => setCreateForm({ ...createForm, model_name: e.target.value })}
+                  list="model-name-suggestions"
                   className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" />
+                <datalist id="model-name-suggestions">
+                  {(PROVIDER_MODEL_SUGGESTIONS[normalizeProvider(createForm.provider)] ?? []).map(m => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
@@ -134,7 +159,16 @@ export default function ModelRegistryPage() {
                 models.map((m, i) => (
                   <motion.tr key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }}
                     className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                    <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">{m.provider}</td>
+                    <td className="px-4 py-3 font-medium text-slate-700 dark:text-slate-300">
+                      {isSupportedProvider(m.provider) ? m.provider : (
+                        <span className="inline-flex flex-col text-red-500" title="后端不支持该 Provider，Agent / 工作流调用会直接失败">
+                          <span>{m.provider}</span>
+                          <span className="text-xs font-normal">
+                            不受支持，请改为 {LLM_PROVIDERS.join(' / ')}
+                          </span>
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-300">{m.model_name}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{m.name}</td>
                     <td className="px-4 py-3">

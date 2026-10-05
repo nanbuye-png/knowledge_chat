@@ -1,4 +1,10 @@
-"""Test script to verify AgensProvider compatibility (migrated to services/llm).
+"""Test script to verify AgnesProvider compatibility (migrated to services/llm).
+
+历史兼容回归套件：本文件刻意保留 **旧类名 / 旧环境变量名**（``AgensProvider``、
+``AGENS_API_KEY``、``AGENS_API_BASE``）的调用方式，用来锁定向后兼容能力 ——
+规范名现在是 ``agnes``（``app/services/llm/agnes_provider.py`` / ``AGNES_API_KEY``），
+旧名通过 ``app/services/llm/agens_provider.py`` 垫片与
+``AliasChoices("AGNES_API_KEY", "AGENS_API_KEY")`` 继续可用。
 
 Run: cd backend && python -m pytest tests/test_agens_fix.py -v
 """

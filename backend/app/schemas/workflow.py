@@ -7,6 +7,10 @@
 与 Agent 的契约保持同一形状（``steps[].{tool, ok, output, error, elapsed_ms}``），
 前端可以用同一套渲染逻辑；多出来的 ``skipped`` / ``skip_reason`` 用于**条件分支**
 被跳过的情况 —— 跳过必须可见。
+
+编排上限（``WORKFLOW_MAX_STEPS`` / 单次输入长度）同时通过
+``GET /api/workflows/limits`` 暴露给前端：页面据此显示"最多 N 步"并在到达上限时
+禁用"添加步骤"，而不是让用户填完一大堆步骤后才在保存时收到一句英文 422。
 """
 
 from typing import Any, Literal, Optional
@@ -14,6 +18,9 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from ..core.config import settings
+
+#: 单次执行的输入长度上限（``/execute`` 与 ``GET /api/workflows/limits`` 共用同一常量）
+MAX_INPUT_CHARS = 2000
 
 
 class WorkflowStep(BaseModel):
@@ -86,8 +93,18 @@ class WorkflowExecuteRequest(BaseModel):
     input: str = Field(
         ...,
         min_length=1,
-        max_length=2000,
+        max_length=MAX_INPUT_CHARS,
         description="本次执行的输入（可用 {{input}} 在步骤参数里引用）",
+    )
+
+
+class WorkflowLimitsResponse(BaseModel):
+    """编排 / 执行上限（前端据此做前置提示，不靠硬编码）。"""
+
+    max_steps: int = Field(..., description="单条 Workflow 的步骤上限（settings.WORKFLOW_MAX_STEPS）")
+    max_input_chars: int = Field(..., description="单次执行输入的长度上限")
+    tools: list[str] = Field(
+        default_factory=list, description="已注册工具名（与 GET /api/tools 同一份注册表）"
     )
 
 

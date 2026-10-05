@@ -64,7 +64,7 @@ def _create_agent(client, headers: dict, **payload) -> dict:
 def _add_llm_model(
     temp_db,
     name: str = "测试模型",
-    provider: str = "agens",
+    provider: str = "agnes",
     model_name: str = "agnes-2.5-flash",
     enabled: bool = True,
 ) -> int:
@@ -318,6 +318,10 @@ class TestAgentPlanning:
             ("1+1=?", "1+1"),
             ("sqrt(16) + pi", "sqrt(16) + pi"),
             ("What is 12 * 12", "12 * 12"),
+            # 2026-10 起：问句的"首尾措辞"被裁掉后再判断，问法不再改变数学意图
+            ("1+1 等于多少", "1+1"),
+            ("1+2是多少", "1+2"),
+            ("计算 1+2 等于多少？", "1+2"),
         ],
     )
     def test_extracts_math_expression(self, query, expected):
@@ -329,10 +333,12 @@ class TestAgentPlanning:
         "query",
         [
             "门诊时间是什么时候",
-            "1+1 等于多少",
             "第 2026 年的营收",
             "SELECT * FROM users",
             "3 天内回复我",
+            # 裁后缀不会放宽白名单：中文出现在表达式位置、没有运算符、没有数字都判否
+            "今天的汇率是多少",
+            "3.14 是多少",
             "2026",
         ],
     )

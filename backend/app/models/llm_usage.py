@@ -23,7 +23,7 @@ class LLMUsage(Base):
         Integer, ForeignKey("conversations.id"), nullable=True, index=True
     )
 
-    provider = Column(String(50), nullable=False, comment="如 deepseek、agens")
+    provider = Column(String(50), nullable=False, comment="如 deepseek、agnes")
     model = Column(String(100), nullable=False, comment="如 deepseek-chat")
 
     prompt_tokens = Column(Integer, nullable=False, default=0)

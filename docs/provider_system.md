@@ -9,22 +9,27 @@
 | Provider | 文件 | 配置 | 常用模型 |
 |----------|------|------|----------|
 | DeepSeek | `services/llm/deepseek_provider.py` | `DEEPSEEK_API_KEY`, `DEEPSEEK_API_BASE` | `deepseek-chat` |
-| Agens | `services/llm/agens_provider.py` | `AGENS_API_KEY`, `AGENS_API_BASE` | `agnes-2.5-flash`（默认）、`agnes-2.5-pro`、`agnes-3.0-flash`、`agnes-2.0-flash` |
+| Agnes | `services/llm/agnes_provider.py` | `AGNES_API_KEY`, `AGNES_API_BASE` | `agnes-2.5-flash`（默认）、`agnes-2.5-pro`、`agnes-3.0-flash`、`agnes-2.0-flash` |
 
 Provider 与模型名通过 `.env` 配置：
 
 ```bash
-LLM_PROVIDER=agens                       # deepseek | agens
+LLM_PROVIDER=agnes                       # deepseek | agnes（历史写法 agens 同样可用）
 LLM_MODEL=agnes-2.5-flash                # 必须与 LLM_PROVIDER 匹配
-AGENS_API_KEY=sk-xxx
-AGENS_API_BASE=https://apihub.agnes-ai.com/v1
+AGNES_API_KEY=sk-xxx
+AGNES_API_BASE=https://apihub.agnes-ai.com/v1
 ```
+
+> Provider 名称会做**别名归一**：历史写法 `agens`（字母顺序写反）、`agness`、`agnes-ai`
+> 都会收敛到规范键 `agnes`（`app/core/config.py::normalize_provider`）；
+> 环境变量旧名 `AGENS_API_KEY` / `AGENS_API_BASE` 也仍然可读取。
+> 库内历史数据由 alembic 迁移 `b7c1d5e9a3f2` 收敛。
 
 已知模型清单维护在 `app/core/config.py` 的 `KNOWN_MODELS`；
 `Settings.check_llm_config()` 会在启动时校验 Provider / 模型名前缀 / API Key 是否匹配并输出告警。
 
-> 注：Agens 的 `agnes-2.5-flash` 属于推理型模型，会先返回 `reasoning_content` 再返回正文，
-> 且推理 token 计入 `max_tokens`。`AgensProvider` 已忽略 reasoning 增量并去除正文首部前导换行。
+> 注：Agnes 的 `agnes-2.5-flash` 属于推理型模型，会先返回 `reasoning_content` 再返回正文，
+> 且推理 token 计入 `max_tokens`。`AgnesProvider` 已忽略 reasoning 增量并去除正文首部前导换行。
 
 ### 接口
 ```python

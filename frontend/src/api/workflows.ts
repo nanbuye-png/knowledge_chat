@@ -7,6 +7,7 @@ import apiClient from './client'
  * 客户端 —— 空壳版本已随 `WorkflowStudioPage` 一并删除后又按真实后端重建）：
  *
  *   GET    /api/workflows                   → 我的 Workflow 列表
+ *   GET    /api/workflows/limits            → 编排上限（步骤数 / 输入长度，前端不硬编码）
  *   POST   /api/workflows                   → 创建
  *   GET    /api/workflows/{id}              → 详情
  *   PUT    /api/workflows/{id}              → 部分更新（PATCH 同义）
@@ -53,6 +54,16 @@ export interface WorkflowPayload {
   enabled?: boolean
 }
 
+/** 编排 / 执行上限（`GET /api/workflows/limits`）。 */
+export interface WorkflowLimits {
+  /** 单条 Workflow 的步骤上限（后端 settings.WORKFLOW_MAX_STEPS）。 */
+  max_steps: number
+  /** 单次执行的输入长度上限。 */
+  max_input_chars: number
+  /** 已注册工具名（与 GET /api/tools 同一份注册表）。 */
+  tools: string[]
+}
+
 export interface WorkflowStepResult {
   id: string
   tool: string
@@ -80,6 +91,11 @@ export interface WorkflowExecuteResult {
 
 export async function listWorkflows(): Promise<Workflow[]> {
   const { data } = await apiClient.get('/workflows')
+  return data
+}
+
+export async function getWorkflowLimits(): Promise<WorkflowLimits> {
+  const { data } = await apiClient.get('/workflows/limits')
   return data
 }
 

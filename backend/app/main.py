@@ -9,7 +9,7 @@ import sys
 # 将父目录添加到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from .core.config import settings
+from .core.config import normalize_provider, settings
 from .core.logging import setup_logging
 from .core.exceptions import AppError, app_error_handler, http_exception_handler
 from .api.documents import router as documents_router
@@ -137,11 +137,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"📡 API 文档: http://localhost:8000/docs")
     logger.info(f"🔗 LLM Provider: {settings.LLM_PROVIDER} | 🤖 LLM 模型: {settings.LLM_MODEL}")
     
-    # 动态显示当前 Provider 的 endpoint
-    if settings.LLM_PROVIDER == "deepseek":
+    # 动态显示当前 Provider 的 endpoint（别名归一：历史 agens → agnes）
+    active_provider = normalize_provider(settings.LLM_PROVIDER)
+    if active_provider == "deepseek":
         logger.info(f"🔗 DeepSeek API: {settings.DEEPSEEK_API_BASE}")
-    elif settings.LLM_PROVIDER == "agens":
-        logger.info(f"🔗 Agens API: {settings.AGENS_API_BASE}")
+    elif active_provider == "agnes":
+        logger.info(f"🔗 Agnes API: {settings.AGNES_API_BASE}")
 
     # LLM 配置自检（Provider / 模型 / API Key 是否匹配）
     for issue in settings.check_llm_config():

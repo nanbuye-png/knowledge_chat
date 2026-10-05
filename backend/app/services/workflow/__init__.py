@@ -13,6 +13,9 @@
 * **Agent** = 动态规划 + 工具选择 + 循环（``app/services/agent``）；
 * **Workflow** = 用户**显式声明**的有序步骤 + 条件分支 + 状态传递 + 失败处理
   （本包）。两者共用同一份 ``app/services/tools`` 注册表，没有第二套工具执行。
+
+数学意图（``when: input_is_math``）与 calculator 步骤的参数补齐都复用
+``app/services/math_intent.py`` 这一份规则，不另起口径。
 """
 
 from .errors import (
@@ -21,7 +24,12 @@ from .errors import (
     WorkflowNotFound,
     WorkflowNotConfigured,
 )
-from .runner import TEMPLATE_ERROR_CODE, WorkflowRunner
+from .runner import (
+    INPUT_FILLED_ARGUMENTS,
+    TEMPLATE_ERROR_CODE,
+    WorkflowRunner,
+    apply_argument_defaults,
+)
 from .templating import (
     ON_ERROR_CHOICES,
     WHEN_ALWAYS,
@@ -37,6 +45,7 @@ from .templating import (
 )
 
 __all__ = [
+    "INPUT_FILLED_ARGUMENTS",
     "ON_ERROR_CHOICES",
     "TEMPLATE_ERROR_CODE",
     "TemplateError",
@@ -50,6 +59,7 @@ __all__ = [
     "WorkflowNotFound",
     "WorkflowNotConfigured",
     "WorkflowRunner",
+    "apply_argument_defaults",
     "evaluate_condition",
     "iter_references",
     "known_step_references",

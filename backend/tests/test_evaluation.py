@@ -461,7 +461,7 @@ class TestLLMJudge:
 
         from evaluation.judge import create_judge
 
-        conf = Settings(LLM_PROVIDER="agens", LLM_MODEL="agnes-2.5-flash")
+        conf = Settings(LLM_PROVIDER="agnes", LLM_MODEL="agnes-2.5-flash")
         judge = create_judge(conf)
         assert judge.model == "agnes-2.5-flash"
         assert judge._max_tokens == conf.EVAL_JUDGE_MAX_TOKENS
@@ -853,7 +853,7 @@ def _payload(use_llm: bool = True) -> dict:
                 "CHUNK_OVERLAP": 200,
                 "EMBEDDING_MODEL": "BAAI/bge-small-zh-v1.5",
                 "EMBEDDING_DIM": 512,
-                "LLM_PROVIDER": "agens",
+                "LLM_PROVIDER": "agnes",
                 "LLM_MODEL": "agnes-2.5-flash",
             },
             "judge_model": "agnes-2.5-flash" if use_llm else None,

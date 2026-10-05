@@ -5,6 +5,12 @@
 推导式、f-string 与任何非白名单函数调用 —— 即"能算出结果"的前提下，把表达式
 当成数据而不是代码。
 
+求值前还有一道"宽容但同一套规则"的预处理：参数值如果是 ``1+2是多少`` 这类
+**自然语言问句**，先交给 :func:`~app.services.math_intent.extract_math_expression`
+（Agent 规划器 / Workflow ``input_is_math`` 条件用的是同一份规则）把表达式取出来，
+取不出才报语法错误。返回值里 ``expression`` 是**实际参与求值**的表达式，
+``input_expression`` 是收到的原文，两边可对照。
+
 算力保护（否则 ``9**9**9`` 就能让 worker 卡死）：
 - 表达式长度上限 ``settings.TOOL_CALCULATOR_MAX_CHARS``；
 - AST 节点数上限与幂指数上限；
@@ -20,6 +26,7 @@ import operator
 from typing import Any
 
 from ...core.config import settings
+from ..math_intent import extract_math_expression
 from .base import BaseTool, ToolContext, ToolInvalidArguments
 
 # 二元 / 一元运算符白名单
@@ -78,7 +85,8 @@ class CalculatorTool(BaseTool):
     name = "calculator"
     description = (
         "计算数学表达式，支持 + - * / // % ** 与括号，以及 sqrt/log/abs/round/"
-        "min/max/sin/cos/tan 等白名单函数和常量 pi、e。不接受变量、属性访问或代码。"
+        "min/max/sin/cos/tan 等白名单函数和常量 pi、e。不接受变量、属性访问或代码；"
+        "参数值也可以是含表达式的自然语言问句（如「1+2是多少」），会按统一规则先取出表达式。"
     )
 
     @property
@@ -87,13 +95,17 @@ class CalculatorTool(BaseTool):
             "expression": {
                 "type": "string",
                 "required": True,
-                "description": "待计算的数学表达式，例如 (1+2)*3 或 sqrt(16)+pi",
+                "description": (
+                    "待计算的数学表达式，例如 (1+2)*3 或 sqrt(16)+pi；"
+                    "也接受「1+2是多少」这类问句（会先取出 1+2）"
+                ),
                 "maxLength": settings.TOOL_CALCULATOR_MAX_CHARS,
             }
         }
 
     async def run(self, context: ToolContext, expression: str = "", **_: Any) -> dict[str, Any]:
         expression = expression.strip()
+        input_expression = expression
         max_chars = settings.TOOL_CALCULATOR_MAX_CHARS
         if len(expression) > max_chars:
             raise ToolInvalidArguments(f"表达式长度不能超过 {max_chars} 字符")
@@ -101,7 +113,16 @@ class CalculatorTool(BaseTool):
         try:
             tree = ast.parse(expression, mode="eval")
         except SyntaxError as exc:
-            raise ToolInvalidArguments(f"表达式语法错误: {exc.msg}") from exc
+            # 收到的可能是「1+2是多少」这类问句（Workflow 用 {{input}} 透传时很常见）：
+            # 用与 Agent 规划器**同一套**规则把表达式取出来；取不出就报原来的语法错误。
+            extracted = extract_math_expression(expression)
+            if not extracted or extracted == expression:
+                raise ToolInvalidArguments(f"表达式语法错误: {exc.msg}") from exc
+            expression = extracted
+            try:
+                tree = ast.parse(expression, mode="eval")
+            except SyntaxError as inner:
+                raise ToolInvalidArguments(f"表达式语法错误: {inner.msg}") from inner
 
         nodes = list(ast.walk(tree))
         if len(nodes) > _MAX_NODES:
@@ -126,6 +147,7 @@ class CalculatorTool(BaseTool):
 
         return {
             "expression": expression,
+            "input_expression": input_expression,
             "result": value,
             "formatted": f"{value}",
             "result_type": "int" if isinstance(value, int) else "float",

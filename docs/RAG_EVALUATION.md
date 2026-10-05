@@ -24,7 +24,7 @@
 | Query Rewrite | `QUERY_REWRITE_ENABLED=False` |
 | 切分参数 | chunk_size=2000，overlap=200 |
 | 嵌入模型 | `BAAI/bge-small-zh-v1.5`（512 维） |
-| 生成模型 | `agens` / `agnes-2.5-flash` |
+| 生成模型 | `agnes` / `agnes-2.5-flash` |
 | 裁判模型 | `agnes-2.5-flash` |
 
 数据集 `D:\project\knowledge_chat\backend\evaluation\datasets\rag_eval_v1.json`（v1.0）：71 题，其中可答 59、不可答 12；分类 {'commerce': 10, 'cross_doc': 3, 'engineering': 10, 'faq': 15, 'handbook': 3, 'no_answer': 12, 'rag_pipeline': 18}。

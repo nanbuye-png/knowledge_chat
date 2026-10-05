@@ -10,11 +10,15 @@ calculator    输入句能识别为数学表达式 → 选；识别不出就不�
               也不要把普通问题丢给计算器换回一堆 400）
 ============  ==============================================================
 
-数学意图识别（:func:`extract_math_expression`）刻意保守，判据全部是纯文本检查，
-不求值：整句只含 ``0-9 + - * / % ( ) . , 空白`` 与白名单标识符（函数/常量）、
-至少一个数字、至少一个运算符或函数调用、括号配平、长度在
-``settings.TOOL_CALCULATOR_MAX_CHARS`` 以内。于是"门诊时间是什么时候"这类
-自然语言问题不会被误判成表达式（含中文 → 直接否）。
+数学意图识别（:func:`~app.services.math_intent.extract_math_expression`）的**唯一实现**
+在 ``app/services/math_intent.py``：判据全部是纯文本检查（白名单字符 / 至少一个数字 /
+至少一个运算符或函数调用 / 括号配平 / 长度上限），只裁掉"请计算 … 等于多少"这类
+首尾措辞。Agent 规划器、Workflow 的 ``input_is_math`` 条件、calculator 工具共用这一份
+规则 —— 不会出现"规划器认为不是数学题、执行时又要求表达式"的三个口径。
+
+这里继续 re-export 这个名字，历史调用点不受影响：``from app.services.agent import
+extract_math_expression`` 与 ``from ..agent.planner import extract_math_expression``
+都仍然可用。
 
 上限：``agent.max_tool_calls`` 与 ``settings.TOOL_MAX_CALLS_PER_REQUEST``
 取小者；被丢弃的步骤写进 ``warnings``，不会静默少执行。
@@ -22,102 +26,12 @@ calculator    输入句能识别为数学表达式 → 选；识别不出就不�
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from ...core.config import settings
+from ..math_intent import extract_math_expression
 
-# 常见"计算意图"前缀（中英）；命中即去掉，剩下的部分再按表达式判断
-_PREFIXES: tuple[str, ...] = (
-    "请计算一下",
-    "请计算",
-    "帮我计算一下",
-    "帮我计算",
-    "帮我算一下",
-    "帮我算",
-    "计算一下",
-    "计算",
-    "算一下",
-    "calculate",
-    "compute",
-    "what is",
-    "what's",
-    "whats",
-)
-
-# 表达式允许出现的字符：数字 / 字母（白名单标识符）/ 运算符 / 括号 / 逗号 / 空白
-_EXPRESSION_RE = re.compile(r"^[0-9A-Za-z_+\-*/%().,\s]+$")
-_IDENTIFIER_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
-_FUNCTION_CALL_RE = re.compile(r"[A-Za-z_][A-Za-z_0-9]*\s*\(")
-_OPERATOR_CHARS = set("+-*/%")
-
-# 与 calculator 工具的白名单保持一致（函数 + 常量），避免"识别通过但调用必失败"
-_ALLOWED_IDENTIFIERS: frozenset[str] = frozenset(
-    {
-        "abs",
-        "round",
-        "min",
-        "max",
-        "sum",
-        "pow",
-        "sqrt",
-        "exp",
-        "log",
-        "log2",
-        "log10",
-        "sin",
-        "cos",
-        "tan",
-        "asin",
-        "acos",
-        "atan",
-        "floor",
-        "ceil",
-        "fabs",
-        "factorial",
-        "pi",
-        "e",
-        "tau",
-    }
-)
-
-
-def extract_math_expression(query: str) -> str | None:
-    """把"计算意图"的输入转成可交给 calculator 的表达式；无法识别返回 ``None``。"""
-    text = (query or "").strip()
-    if not text:
-        return None
-
-    lowered = text.lower()
-    for prefix in _PREFIXES:
-        if lowered.startswith(prefix):
-            text = text[len(prefix) :]
-            break
-
-    # 去掉引导标点与结尾的"=?/。/！"等（这些字符不在表达式白名单里）
-    text = text.strip().lstrip("：:=,，").strip()
-    text = text.rstrip("？?=。.！!").strip()
-    if not text or len(text) > settings.TOOL_CALCULATOR_MAX_CHARS:
-        return None
-
-    if not _EXPRESSION_RE.fullmatch(text):
-        return None
-    if not any(char.isdigit() for char in text):
-        return None
-    if text.count("(") != text.count(")"):
-        return None
-
-    identifiers = _IDENTIFIER_RE.findall(text)
-    if any(identifier.lower() not in _ALLOWED_IDENTIFIERS for identifier in identifiers):
-        return None
-
-    has_operator = any(char in _OPERATOR_CHARS for char in text)
-    has_call = bool(_FUNCTION_CALL_RE.search(text))
-    if not (has_operator or has_call):
-        return None
-
-    return text
-
+__all__ = ["build_plan", "effective_max_tool_calls", "extract_math_expression"]
 
 def effective_max_tool_calls(agent: Any) -> int:
     """本次执行真正生效的工具调用上限：``agent.max_tool_calls`` 与全局配置取小。"""

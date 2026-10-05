@@ -158,6 +158,21 @@ class TestCalculatorTool:
         assert resp.json()["output"]["result"] == pytest.approx(7.14159265, abs=1e-6)
         print("[PASS] 简写端点 /api/tools/calculator 可用")
 
+    def test_accepts_natural_language_question(self, client):
+        """``1+2是多少`` 这类问句：按与 Agent 同一套规则先取出表达式，再求值。"""
+        headers = _register_and_login(client, "tools_calc_nl")
+        resp = client.post(
+            "/api/tools/calculator/invoke",
+            json={"arguments": {"expression": "1+2是多少"}},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        output = resp.json()["output"]
+        assert output["result"] == 3
+        assert output["expression"] == "1+2", "expression 应是实际参与求值的表达式"
+        assert output["input_expression"] == "1+2是多少", "原始入参必须如实回显"
+        print("[PASS] calculator 接受「1+2是多少」→ 3（同一套识别规则先取出表达式）")
+
 
     @pytest.mark.parametrize(
         "payload, expected_fragment",
@@ -172,6 +187,9 @@ class TestCalculatorTool:
             ({"expression": "x + 1"}, "不支持的变量"),
             ({"expression": "math.pi"}, "不支持的语法"),
             ({"expression": 3}, "类型应为 string"),
+            # 取不出表达式的自然语言问句 / 残缺表达式：仍然是 400（宽容只到"能取出表达式"为止）
+            ({"expression": "门诊时间是什么时候"}, "不支持的变量"),
+            ({"expression": "1 +"}, "表达式语法错误"),
         ],
     )
     def test_rejects_unsafe_or_invalid_input(self, client, payload, expected_fragment):

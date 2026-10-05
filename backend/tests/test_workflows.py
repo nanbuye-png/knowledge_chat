@@ -16,7 +16,9 @@ Agent 同一份 ToolRegistry。逐条覆盖审计硬要求：
    ``test_input_placeholder_is_resolved``；
 4. 失败处理 → ``test_on_error_abort_stops_workflow`` /
    ``test_on_error_continue_keeps_going`` / ``test_template_error_is_visible``；
-5. 写入口校验 → 未注册工具 / 重复步骤 id / 前向引用 / 超过步骤上限。
+5. 写入口校验 → 未注册工具 / 重复步骤 id / 前向引用 / 超过步骤上限 /
+   缺"不能自动取用"的必填参数（`kb_search.knowledge_base_id`，见
+   `test_kb_search_step_without_knowledge_base_is_rejected_on_save`）。
 
 KB 检索通过替换 ``kb_search`` 工具实例的 ``_pipeline``（与 ``test_agents.py``
 同一注入点）来避免真实向量检索，注册表 / 执行器 / API 全部走生产代码。
@@ -129,7 +131,25 @@ class TestWorkflowConfiguration:
         assert client.post(
             "/api/workflows", json={"name": "x", "steps": []}
         ).status_code in (401, 403)
+        assert client.get("/api/workflows/limits").status_code in (401, 403)
         print("[PASS] /api/workflows 未登录一律拒绝")
+
+    def test_limits_endpoint_exposes_real_limits(self, client):
+        """/limits 暴露真实上限（前端不再硬编码步骤数，也不再收到英文 422）。"""
+        from app.core.config import settings
+        from app.services.tools import tool_registry
+
+        headers = _register_and_login(client, "wf_limits")
+        resp = client.get("/api/workflows/limits", headers=headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["max_steps"] == int(settings.WORKFLOW_MAX_STEPS)
+        assert body["max_input_chars"] >= 1
+        assert body["tools"] == tool_registry.names(), "工具清单必须与注册表一致"
+        print(
+            f"[PASS] /api/workflows/limits 暴露真实上限"
+            f"（max_steps={body['max_steps']}，输入上限 {body['max_input_chars']} 字符）"
+        )
 
     def test_crud_roundtrip(self, client):
         headers = _register_and_login(client, "wf_crud")
@@ -333,6 +353,53 @@ class TestWorkflowExecution:
         assert body["steps"][0]["output"]["result"] == 42
         print("[PASS] {{input}} 被解析为本次执行的输入")
 
+    def test_calculator_step_without_expression_uses_input(self, client):
+        """漏填 expression 的 calculator 步骤：按同一套规则从输入取，补齐写进 warnings。"""
+        headers = _register_and_login(client, "wf_exec_default")
+        workflow = _create_workflow(
+            client,
+            headers,
+            name="漏填参数",
+            steps=[{"id": "step1", "tool": "calculator", "arguments": {}}],
+        )
+
+        body = _execute(client, headers, workflow["id"], "1+2是多少").json()
+        assert body["aborted"] is False, body
+        assert body["steps"][0]["ok"] is True, body["steps"]
+        assert body["steps"][0]["output"]["result"] == 3
+        assert any("自动取用" in w for w in body["warnings"]), body["warnings"]
+
+        missed = _execute(client, headers, workflow["id"], "门诊时间是什么时候").json()
+        assert missed["steps"][0]["ok"] is False
+        assert missed["steps"][0]["error"]["code"] == "TOOL_INVALID_ARGUMENTS"
+        assert any(
+            "expression" in w and "{{input}}" in w for w in missed["warnings"]
+        ), missed["warnings"]
+        print("[PASS] calculator 步骤漏填 expression：能自动取就取，取不到给出可执行提示")
+
+    def test_input_placeholder_accepts_natural_language_question(self, client):
+        """``{{input}}`` 拿到问句（1+2是多少）也能算 —— 与 input_is_math 同一套规则。"""
+        headers = _register_and_login(client, "wf_exec_nl")
+        workflow = _create_workflow(
+            client,
+            headers,
+            name="问句计算",
+            steps=[
+                {
+                    "id": "calc",
+                    "tool": "calculator",
+                    "arguments": {"expression": "{{input}}"},
+                    "when": "input_is_math",
+                }
+            ],
+        )
+
+        body = _execute(client, headers, workflow["id"], "1+2是多少").json()
+        assert body["steps"][0]["skipped"] is False, body["steps"]
+        assert body["steps"][0]["output"]["result"] == 3
+        assert body["steps"][0]["output"]["input_expression"] == "1+2是多少"
+        print("[PASS] 问句「1+2是多少」在 Workflow 里算得出来（条件与取值同一套规则）")
+
     def test_condition_skips_step_with_reason(self, client):
         headers = _register_and_login(client, "wf_exec_cond")
         workflow = _create_workflow(
@@ -524,6 +591,61 @@ class TestWorkflowExecution:
         assert body["aborted"] is True
         print("[PASS] Workflow 不能成为绕过知识库归属校验的越权入口")
 
+    def test_kb_search_step_without_knowledge_base_is_rejected_on_save(self, client):
+        """kb_search 缺 knowledge_base_id：保存时 400 —— 不让"存进去也必然失败"的编排进库。
+
+        回归背景：页面此前按扁平结构读工具 Schema（`parameters[名字]` 而实际是
+        `parameters.properties[名字]`），于是新步骤的参数永远是 `{}`；calculator 靠执行器
+        补齐 `expression` 蒙混过关，kb_search 则只能等执行时才抛
+        `TOOL_INVALID_ARGUMENTS: 缺少必填参数: query`。现在写入口直接把话说清楚。
+        """
+        headers = _register_and_login(client, "wf_kb_missing")
+        resp = client.post(
+            "/api/workflows",
+            json={
+                "name": "缺知识库",
+                "steps": [{"id": "search", "tool": "kb_search", "arguments": {}}],
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 400, resp.text
+        body = resp.json()
+        assert body["code"] == "VALIDATION_ERROR"
+        assert "knowledge_base_id" in body["message"]
+        assert "query" in body["message"], (
+            "错误信息应说明 query 可以省略（执行时按本次输入取用），只有知识库必须写"
+        )
+        print("[PASS] kb_search 缺 knowledge_base_id：保存即 400 并给出照做的写法")
+
+    def test_kb_search_query_missing_is_filled_from_input(self, client, monkeypatch):
+        """只写了 knowledge_base_id 的 kb_search 步骤：query 按本次输入自动取用（不静默）。"""
+        headers = _register_and_login(client, "wf_kb_query_default")
+        kb_id = _create_kb(client, headers, "流程库2")
+        workflow = _create_workflow(
+            client,
+            headers,
+            name="只给知识库的检索",
+            steps=[
+                {
+                    "id": "search",
+                    "tool": "kb_search",
+                    "arguments": {"knowledge_base_id": kb_id},
+                }
+            ],
+        )
+        pipeline = _FakePipeline()
+        _patch_kb_search_pipeline(monkeypatch, pipeline)
+
+        body = _execute(client, headers, workflow["id"], "门诊时间是什么时候").json()
+        assert body["steps"][0]["ok"] is True, body
+        assert pipeline.calls == [
+            {"question": "门诊时间是什么时候", "kb": kb_id, "top_k": 5}
+        ], "query 缺失时应取用本次输入（与 Agent 规划器同一约定）"
+        assert any("query" in warning for warning in body["warnings"]), (
+            "自动取用不静默：必须出现在 warnings 里"
+        )
+        print("[PASS] kb_search 缺 query：按本次输入自动取用，并如实写进 warnings")
+
     def test_execute_writes_audit_log(self, client, temp_db):
         import asyncio
 
@@ -613,6 +735,63 @@ class TestWorkflowTemplating:
         )
         assert problems and "尚未定义" in problems[0]
         print("[PASS] 创建期引用校验：前向引用 / 未知步骤被拦截")
+
+    def test_apply_argument_defaults_matrix(self):
+        """参数补齐只做"只有一个明确答案"的事，且如实回报（不静默）。"""
+        from app.services.workflow import apply_argument_defaults
+
+        # calculator：从输入里取数学表达式（与 Agent 规划器同一套规则）
+        filled, warning = apply_argument_defaults("calculator", {}, "1+2是多少")
+        assert filled == {"expression": "1+2"}
+        assert warning and "1+2" in warning
+
+        # 空白字符串等同于缺失
+        filled, warning = apply_argument_defaults(
+            "calculator", {"expression": "   "}, "1+2是多少"
+        )
+        assert filled == {"expression": "1+2"} and warning
+
+        # 显式写了就不动
+        kept, warning = apply_argument_defaults("calculator", {"expression": "6*7"}, "1+2")
+        assert kept == {"expression": "6*7"} and warning is None
+
+        # 输入不是数学表达式：不改参数，只给出一条能照做的提示
+        empty, warning = apply_argument_defaults("calculator", {}, "门诊时间")
+        assert empty == {} and warning and "expression" in warning and "{{input}}" in warning
+
+        # 类型写错时交给工具层按契约报错，这里不自作主张
+        assert apply_argument_defaults("calculator", {"expression": 3}, "1+2") == (
+            {"expression": 3},
+            None,
+        )
+
+        # kb_search 的 query 与 calculator 的 expression 是同一类参数（"要的就是本次输入"），
+        # 必须同口径：否则同一个页面上"calculator 留空能跑通、kb_search 留空必失败"
+        filled, warning = apply_argument_defaults("kb_search", {}, "门诊时间是什么时候")
+        assert filled == {"query": "门诊时间是什么时候"}, (
+            "kb_search.query 缺失时应原样取用本次输入"
+        )
+        assert warning and "query" in warning and "knowledge_base_id" in warning
+        assert "GET /api/knowledge-bases" in warning, (
+            "knowledge_base_id 不能猜，但提示必须给出\"去哪查 ID\""
+        )
+        assert "knowledge_base_id" not in filled
+
+        # 参数齐全时不做任何改动，也不产生 warning
+        kept, warning = apply_argument_defaults(
+            "kb_search", {"query": "门诊", "knowledge_base_id": 1}, "无关输入"
+        )
+        assert kept == {"query": "门诊", "knowledge_base_id": 1} and warning is None
+
+        # query 写成非字符串：不猜，交给工具层按契约报类型错误
+        kept, warning = apply_argument_defaults(
+            "kb_search", {"query": 123, "knowledge_base_id": 1}, "门诊"
+        )
+        assert kept == {"query": 123, "knowledge_base_id": 1} and warning is None
+
+        # 未知工具一律不猜
+        assert apply_argument_defaults("no_such_tool", {}, "1+2是多少") == ({}, None)
+        print("[PASS] 参数补齐矩阵：calculator / kb_search 同口径，knowledge_base_id 只提示不猜")
 
     def test_evaluate_condition_matrix(self):
         from app.services.workflow import evaluate_condition

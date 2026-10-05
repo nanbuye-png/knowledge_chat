@@ -27,7 +27,7 @@ const STEPS = [
   { key: 'embedding' as const, label: 'Embedding', icon: Database, desc: 'BGE / OpenAI / Voyage' },
   { key: 'retrieval' as const, label: 'Retrieval', icon: Search, desc: 'Hybrid Search (Vector + BM25)' },
   { key: 'reranker' as const, label: 'Reranker', icon: Layers, desc: 'Score Re-ranking' },
-  { key: 'llm' as const, label: 'LLM', icon: Cpu, desc: 'DeepSeek / Agens' },
+  { key: 'llm' as const, label: 'LLM', icon: Cpu, desc: 'DeepSeek / Agnes' },
   { key: 'agent' as const, label: 'Agent', icon: Bot, desc: 'Planner + Tools + Memory' },
 ]
 
