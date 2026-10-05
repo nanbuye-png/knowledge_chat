@@ -42,6 +42,19 @@
   「Agent 页必须打真实 `/api/agents`（且不得再出现 PlannedNotice / 假数据）、
   Workflow 侧继续禁止假客户端复活」
 
+### CI 全绿修复（2026-10-05）— 让"本地绿 / CI 红"的四类环境依赖归零
+
+上一次 CI（`bc70930`）失败 8 例（733 passed / 8 failed），逐条定位到的都是"测试依赖本机环境"：
+
+- **语料 sha256 被行尾绑架** — `wuxi_culture_palace_faq.txt` 在 Windows 检出是 CRLF、CI 上是 LF，同一份语料算出两个哈希 → `sha256_of()` 改为**先按 LF 归一化再算**（正文改动仍然抓得到），清单里的哈希 / 字节数同步为归一键值
+- **清单引用了仓库不跟踪的文件** — `docs/INTERVIEW_GUIDE.md` 在 `.gitignore` 里，干净检出必然"语料文件不存在" → 清单新增 `optional: true` 语义，`load_corpus()` 对缺席的**可选**语料直接跳过（本机存在时仍按干扰项计入，评测口径不变）
+- **流式接口自带的 session 打到了真实库** — `/api/chat/stream`、`/api/knowledge/query/stream` 用的是 `async with async_session() as db:` 而不是 `Depends(get_db)`，只覆盖 `get_db` 时它们指向 CI 上的空库（`no such table: users`）；`conftest.client` 现在把每个 `app.*` 模块持有的 `async_sessionmaker` 一并重绑到临时库（按类型判断，兼容 `test_db_migration` 的 `importlib.reload`）
+- **限流配置被"世代"割裂** — `test_connection_pool` / `test_db_migration` / `test_provider_factory` 会 `importlib.reload(app.core.config)`，每 reload 一次就换一个 `Settings` 对象，而运行期才 import 的 `app.core.rate_limit` 绑的是旧对象、测试改的是本模块收集期那份 → 整包跑第二次请求不是 429（单跑该文件却是绿的）；`test_rate_limit_unified` 改为把补丁打到所有持有 `settings` 引用的模块
+- **检索缓存跨用例串味** — 缓存 fingerprint 不含重排器，进程级缓存（CI 上是 Redis）让"同一个查询、换一个重排器"的用例互相命中 → `test_reranker` 的链路用例显式 `RetrievalCache(enabled=False)`
+- **README 口径** — Agents / Workflows 补回"最小真实路径（已实现）"的措辞，与 `test_tools.py` 的前端契约断言一致
+
+验证：`cd backend && python -m pytest -q`（含 CI 的 `DATABASE_TYPE=sqlite` / `DATABASE_URL=sqlite+aiosqlite:///./test.db` 组合）**742 passed**；前端 `npm run build` 通过
+
 ## v1.0.1 (2026-09-22)
 
 ### LLM 模型升级：agnes-2.5-flash

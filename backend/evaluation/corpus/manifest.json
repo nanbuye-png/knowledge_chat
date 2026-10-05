@@ -19,8 +19,8 @@
       "path": "corpus/wuxi_culture_palace_faq.txt",
       "origin": "backend/uploads/f2737f76-5f03-4c47-932f-f588e69b03d5.txt",
       "origin_type": "uploaded_test_document",
-      "sha256": "fe6dc2b2d8ac72d535fc9b029dffeb3d0f98cd27fdcd92abd7fdb65de7b903c7",
-      "bytes": 5032,
+      "sha256": "8e2b134d3b5aed322dc3132ec590b10215694fadea4dd72624a1978cbbf5e667",
+      "bytes": 4993,
       "verify_hash": true,
       "role": "primary",
       "note": "事实型 FAQ（地址、电话、收费标准等数字事实），适合做精确事实评测"
@@ -74,11 +74,12 @@
       "path": "../../docs/INTERVIEW_GUIDE.md",
       "origin": "docs/INTERVIEW_GUIDE.md",
       "origin_type": "repo_document",
+      "optional": true,
       "sha256": "b857406ad8b6b2ac7c0feee015b0a38454a8d32bc814b8a01f15100868e71c6b",
       "bytes": 68168,
       "verify_hash": false,
       "role": "distractor",
-      "note": "面试题指南（68KB），大量 RAG/架构叙述，用于压低「只靠关键词相似度」的分数"
+      "note": "面试题指南（68KB），大量 RAG/架构叙述，用于压低「只靠关键词相似度」的分数。该文件在 .gitignore 中（不随仓库分发），因此标记 optional：本机存在时按干扰项计入，CI / 干净检出时缺席不判为数据集损坏"
     }
   ]
 }

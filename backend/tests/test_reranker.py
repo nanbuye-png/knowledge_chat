@@ -362,8 +362,17 @@ class _StubRetriever:
 
 
 def _stub_pipeline(monkeypatch, candidates, reranker_service):
-    """构造一个注入了替身的 RetrievalPipeline。"""
+    """构造一个注入了替身的 RetrievalPipeline。
+
+    这里显式关掉检索缓存：缓存 key 的 fingerprint 只含 top_k / 阈值 / 检索模式
+    （``RetrievalCache.build_fingerprint``），**不含重排器本身**，而缓存实例是进程级
+    共享的（CI 上有 Redis 时更明显）—— 于是"同一个查询、换一个重排器"的用例会互相
+    命中：后一个用例读到的是前一个用例写入的重排结果（实测
+    ``test_reranker_failure_*`` 拿到 ``status=reranked``、
+    ``test_disabled_reranker_*`` 拿到被逆转的顺序）。
+    """
     import app.services.retrieval_pipeline as pipeline_module
+    from app.services.cache.retrieval_cache import RetrievalCache
     from app.services.retrieval_pipeline import RetrievalPipeline
 
     async def fake_embed(text):
@@ -375,6 +384,7 @@ def _stub_pipeline(monkeypatch, candidates, reranker_service):
     pipeline._rewriter = _StubRewriter()
     pipeline._retriever = _StubRetriever(candidates)
     pipeline._reranker = reranker_service
+    pipeline._cache = RetrievalCache(enabled=False)
     return pipeline
 
 

@@ -114,6 +114,8 @@ class CorpusDoc:
     sha256: str = ""
     expected_sha256: str = ""
     verify_hash: bool = False
+    #: 可选语料：仓库不跟踪 / 只在某些环境存在的干扰项，缺席时跳过而不是判为损坏
+    optional: bool = False
 
     @property
     def exists(self) -> bool:
@@ -143,7 +145,16 @@ def _read_text(path: Path) -> str:
 
 
 def sha256_of(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """语料指纹（先按 LF 归一化，再算 sha256）。
+
+    为什么不是直接对字节做 sha256：文本语料在 Windows 上检出会带 CRLF
+    （``core.autocrlf=true``），CI 在 Linux 上是 LF —— 同一份语料会得出两个
+    哈希，校验和就退化成"和操作系统绑定"的假约束（实测 CI 上
+    ``wuxi_culture_palace_faq.txt`` 因此被报成"语料内容已变化"）。
+    归一化只忽略行尾风格，正文任何改动仍然会被抓到。
+    """
+    data = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(data).hexdigest()
 
 
 def load_dataset(path: Path | str | None = None) -> EvaluationDataset:
@@ -183,8 +194,11 @@ def load_manifest(path: Path | str | None = None) -> dict[str, Any]:
 def load_corpus(path: Path | str | None = None) -> list[CorpusDoc]:
     """Load every corpus document, reading text into memory.
 
-    Missing files are returned with ``text=""`` so that
+    Missing **required** files are returned with ``text=""`` so that
     :func:`validate_dataset` can report them as problems instead of raising.
+    Entries marked ``optional`` (e.g. a distractor that is ``.gitignore``-d and
+    only exists on some machines) are skipped instead of being reported as
+    "语料文件不存在" —— CI 上没有它就判数据集损坏，属于把本地文件当仓库文件。
     """
     manifest_path = Path(path) if path else DEFAULT_MANIFEST_PATH
     manifest = load_manifest(manifest_path)
@@ -193,6 +207,9 @@ def load_corpus(path: Path | str | None = None) -> list[CorpusDoc]:
     docs: list[CorpusDoc] = []
     for entry in manifest.get("docs", []):
         resolved = (base / entry["path"]).resolve()
+        optional = bool(entry.get("optional", False))
+        if optional and not resolved.is_file():
+            continue
         text = _read_text(resolved) if resolved.is_file() else ""
         actual = sha256_of(resolved) if resolved.is_file() else ""
         docs.append(
@@ -205,6 +222,7 @@ def load_corpus(path: Path | str | None = None) -> list[CorpusDoc]:
                 sha256=actual,
                 expected_sha256=entry.get("sha256", ""),
                 verify_hash=bool(entry.get("verify_hash", False)),
+                optional=optional,
             )
         )
     return docs

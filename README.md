@@ -93,14 +93,16 @@
 - **Tool Calling**：`kb_search`（复用生产检索链路 + 归属校验）、
   `calculator`（`ast.parse` + 白名单求值，**不使用 eval**）；
   端点 `GET /api/tools`、`POST /api/tools/run`（按序多次调用）、`POST /api/tools/{tool_name}/invoke`
-- **Agents**：`agents` 表 + `/api/agents` CRUD + `POST /api/agents/{id}/execute`；
-  确定性工具选择 → 复用工具层的超时 / 次数上限 / 失败即停 → 汇总回答；
-  未绑定模型时如实返回 `answer_mode=tools_only`（工具结果汇总，不冒充模型生成）
-- **Workflows**：`workflows` 表 + `/api/workflows` CRUD + `POST /api/workflows/{id}/execute`；
-  用户**显式声明**的有序步骤 + 条件分支 `when`（`always` / `previous_succeeded` /
-  `previous_failed` / `input_is_math`）+ 状态传递（`{{input}}` /
-  `{{steps.<步骤ID>.output.<字段>}}`）+ 逐步失败策略 `on_error`（abort / continue）；
-  跳过的步骤带 `skip_reason`、失败的步骤带 `error.code`，都不静默
+- **Agents：Agent 最小真实路径（已实现，不是 Planned）** —— `agents` 表 +
+  `/api/agents` CRUD + `POST /api/agents/{id}/execute`；确定性工具选择 →
+  复用工具层的超时 / 次数上限 / 失败即停 → 汇总回答；未绑定模型时如实返回
+  `answer_mode=tools_only`（工具结果汇总，不冒充模型生成）
+- **Workflows：Workflow 最小真实路径（已实现，不是 Planned）** —— `workflows` 表 +
+  `/api/workflows` CRUD + `POST /api/workflows/{id}/execute`；用户**显式声明**的有序
+  步骤 + 条件分支 `when`（`always` / `previous_succeeded` / `previous_failed` /
+  `input_is_math`）+ 状态传递（`{{input}}` / `{{steps.<步骤ID>.output.<字段>}}`）+
+  逐步失败策略 `on_error`（abort / continue）；跳过的步骤带 `skip_reason`、
+  失败的步骤带 `error.code`，都不静默
 
   > Agent 与 Workflow 的分工：Agent 是"动态规划 + 工具选择"，Workflow 是"显式编排"。
   > 两者共用同一份 `ToolRegistry`，**没有第二套工具执行**。

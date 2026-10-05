@@ -22,9 +22,33 @@ _backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
-from app.core.config import settings  # noqa: E402
 from app.core.net import client_ip  # noqa: E402
 from app.services.security.rate_limiter import check_rate_limit  # noqa: E402
+
+
+def _patch_settings(monkeypatch, **values) -> None:
+    """把配置写到"所有持有 settings 引用的 app 模块"上，而不只是本模块收集期拿到的那份。
+
+    为什么必须这样：``test_connection_pool`` / ``test_db_migration`` /
+    ``test_provider_factory`` 会 ``importlib.reload(app.core.config)``，而 config.py
+    在模块级执行 ``settings = Settings()`` —— 每 reload 一次就换一个新的 Settings 对象。
+    于是"收集期被 import 的模块"（如 ``app.core.net``、本测试模块）和"运行期才被
+    import 的模块"（如 ``app.core.rate_limit``：把 settings 绑成模块级引用、请求时才
+    ``getattr``）手里各是一份不同的对象。只改本模块那份，真正生效的那份还是默认
+    20 次/分钟 —— 表现为"整包跑第二次请求不是 429，单独跑这个文件却全绿"。
+    """
+    targets: dict[int, object] = {}
+    for module in list(sys.modules.values()):
+        if not getattr(module, "__name__", "").startswith("app."):
+            continue
+        candidate = getattr(module, "settings", None)
+        if candidate is not None:
+            targets.setdefault(id(candidate), candidate)
+
+    for target in targets.values():
+        for name, value in values.items():
+            if hasattr(target, name):
+                monkeypatch.setattr(target, name, value)
 
 
 class _FakeRequest:
@@ -109,7 +133,7 @@ class TestUnifiedLimiter:
 
 class TestClientIpResolution:
     def test_uses_rightmost_hop_for_single_trusted_proxy(self, monkeypatch):
-        monkeypatch.setattr(settings, "TRUSTED_PROXY_COUNT", 1)
+        _patch_settings(monkeypatch, TRUSTED_PROXY_COUNT=1)
         request = _FakeRequest(
             headers={"X-Forwarded-For": "6.6.6.6, 9.9.9.9"}, client_host="127.0.0.1"
         )
@@ -118,7 +142,7 @@ class TestClientIpResolution:
         print("[PASS] X-Forwarded-For 取最右侧（不可伪造）而非最左侧")
 
     def test_supports_multiple_trusted_proxies(self, monkeypatch):
-        monkeypatch.setattr(settings, "TRUSTED_PROXY_COUNT", 2)
+        _patch_settings(monkeypatch, TRUSTED_PROXY_COUNT=2)
         request = _FakeRequest(headers={"X-Forwarded-For": "1.1.1.1, 2.2.2.2, 3.3.3.3"})
         assert client_ip(request) == "2.2.2.2"
 
@@ -155,8 +179,7 @@ class TestStreamEndpointsAreLimited:
 
         self._override_user(monkeypatch)
         # 突发限额压到 1 次/窗口，并强制走进程内实现
-        monkeypatch.setattr(settings, "RATE_LIMIT_CHAT", 1)
-        monkeypatch.setattr(settings, "RATE_LIMIT_WINDOW", 60)
+        _patch_settings(monkeypatch, RATE_LIMIT_CHAT=1, RATE_LIMIT_WINDOW=60)
         self._force_memory_limiter(monkeypatch)
 
         async def fake_stream(*args, **kwargs):
@@ -176,8 +199,7 @@ class TestStreamEndpointsAreLimited:
         from app.api import knowledge_query as kq_api
 
         self._override_user(monkeypatch)
-        monkeypatch.setattr(settings, "RATE_LIMIT_CHAT", 1)
-        monkeypatch.setattr(settings, "RATE_LIMIT_WINDOW", 60)
+        _patch_settings(monkeypatch, RATE_LIMIT_CHAT=1, RATE_LIMIT_WINDOW=60)
         self._force_memory_limiter(monkeypatch)
 
         async def fake_stream(*args, **kwargs):

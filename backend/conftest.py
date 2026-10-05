@@ -113,7 +113,7 @@ def no_rate_limits(monkeypatch):
 
 
 @pytest.fixture
-def client(temp_db):
+def client(temp_db, monkeypatch):
     """HTTP client with ``get_db`` pointed at the temp DB.
 
     The lifespan is intentionally **not** executed: it would initialise the
@@ -131,6 +131,11 @@ def client(temp_db):
     (observed: ``backend/knowledge.db`` gained test users/documents).
     So we override the function object that each route module actually
     references, plus the current one for good measure.
+
+    It also rebinds every ``app.*`` module's ``async_session`` factory to the
+    temp DB: the streaming endpoints deliberately manage their own session
+    (``async with async_session() as db:``) instead of using ``Depends(get_db)``,
+    so overriding ``get_db`` alone leaves them talking to the real engine.
     """
     import importlib
     import pkgutil
@@ -157,6 +162,26 @@ def client(temp_db):
 
     for dependency in db_dependencies:
         app.dependency_overrides[dependency] = _override_get_db
+
+    # ---- 自带 session 的代码路径也必须进临时库 ----
+    # ``/api/chat/stream`` 与 ``/api/knowledge/query/stream`` 不用 Depends(get_db)，
+    # 而是 ``async with async_session() as db:``（services/retrieval_pipeline.py、
+    # services/knowledge/runtime_config.py 等同理）。只覆盖 get_db 时它们仍然打真实
+    # 引擎：CI 上 DATABASE_URL=sqlite+aiosqlite:///./test.db 是空库 →
+    # ``sqlite3.OperationalError: no such table: users``；本机因为默认指向开发库
+    # （已有表）而看不出来。
+    #
+    # 注意这里按**类型**判断而不是按对象身份：``test_db_migration`` /
+    # ``test_connection_pool`` 会 ``importlib.reload(app.storage.database)``，
+    # reload 后各 API 模块手里仍是 reload 前的旧工厂对象 —— 只认当前那一个的话，
+    # 这些模块会被静默漏掉（实测：单跑 test_rate_limit_unified 绿、整包跑红）。
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    for module in list(sys.modules.values()):
+        if not getattr(module, "__name__", "").startswith("app."):
+            continue
+        if isinstance(getattr(module, "async_session", None), async_sessionmaker):
+            monkeypatch.setattr(module, "async_session", temp_db.session)
 
     test_client = TestClient(app)
     try:

@@ -15,7 +15,7 @@ corpus（语料） ──真实入库──> 临时知识库 ──逐题提问�
 
 | 路径 | 作用 |
 |---|---|
-| `corpus/` | 评测语料（含清单 `manifest.json`，记录来源与 sha256） |
+| `corpus/` | 评测语料（含清单 `manifest.json`，记录来源与 sha256；`optional: true` 的条目在文件缺席时跳过，用于仓库不跟踪的干扰项） |
 | `datasets/rag_eval_v1.json` | 评测集：71 题（59 可答 + 12 不可答） |
 | `dataset.py` | 语料/数据集加载与**真实性校验** |
 | `metrics.py` | 检索/拒答/生成指标的纯函数（无 I/O，可单测） |
